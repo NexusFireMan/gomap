@@ -389,27 +389,9 @@ Created by [NexusFireMan](https://github.com/NexusFireMan)
 
 ## Changelog
 
-### v2.0.1 (Current)
-- ✅ **Colorized terminal output** (ANSI colors, emoji indicators)
-- ✅ **Improved installation** (install.sh, build.sh scripts)
-- ✅ **Better PATH handling** (automatic system installation)
-- ✅ **Repository cleanup** (documentation in Doc_MD/)
-- ✅ **Enhanced UX** (visual hierarchy, status indicators)
+See [CHANGELOG.md](CHANGELOG.md) for a detailed history of all releases and changes.
 
-### v2.0
-- ✅ Performance optimizations (4x faster)
-- ✅ SMB/Samba version detection
-- ✅ CIDR range scanning
-- ✅ Multiple IP targets
-- ✅ Automatic host discovery
-- ✅ No ICMP scanning
-- ✅ 50+ service detection
-
-### v1.0 (Initial Release)
-- Basic port scanning
-- Service detection
-- Ghost mode
-- Auto-update
+Current version: **v2.0.1** - Colorized output, improved installation, repository cleanup
 
 ---
 
