@@ -9,7 +9,7 @@ import (
 
 const (
 	repoURL = "https://github.com/NexusFireMan/gomap"
-	version = "1.0.0"
+	version = "2.0.1"
 )
 
 // CheckUpdate checks and updates the tool
@@ -75,10 +75,42 @@ func updateUsingGoInstall() error {
 
 	binaryPath := filepath.Join(gopath, "bin", "gomap")
 	if _, err := os.Stat(binaryPath); err == nil {
-		fmt.Printf("%s\n", StatusOK(fmt.Sprintf("gomap updated at: %s", Highlight(binaryPath))))
+		fmt.Printf("%s\n", StatusOK(fmt.Sprintf("gomap installed at: %s", Highlight(binaryPath))))
+
+		// Try to install to system path
+		installToSystemPath(binaryPath)
 	}
 
 	fmt.Println(StatusOK("gomap has been updated to the latest version"))
+	return nil
+}
+
+// installToSystemPath attempts to install the binary to a system PATH location
+func installToSystemPath(binaryPath string) {
+	systemPaths := []string{"/usr/local/bin", "/usr/bin"}
+
+	for _, sysPath := range systemPaths {
+		if err := copyFile(binaryPath, filepath.Join(sysPath, "gomap")); err == nil {
+			fmt.Printf("%s\n", StatusOK(fmt.Sprintf("Also installed to: %s/gomap", sysPath)))
+			return
+		}
+	}
+
+	// Fallback: inform user to add to PATH
+	fmt.Printf("%s\n", StatusWarn(fmt.Sprintf("To use 'gomap' command globally, add to PATH: export PATH=$PATH:%s/bin", filepath.Dir(binaryPath))))
+}
+
+// copyFile copies a file from src to dst
+func copyFile(src, dst string) error {
+	input, err := os.ReadFile(src)
+	if err != nil {
+		return err
+	}
+
+	if err := os.WriteFile(dst, input, 0755); err != nil {
+		return err
+	}
+
 	return nil
 }
 
