@@ -27,17 +27,17 @@ func (of *OutputFormatter) PrintResults(results []ScanResult) {
 
 // printBasic prints results without service information
 func (of *OutputFormatter) printBasic(results []ScanResult) {
-	fmt.Printf("% -7s %s\n", "PORT", "STATE")
+	fmt.Printf("%s % -7s %s%s\n", ColorBold, "PORT", "STATE", ColorReset)
 	for _, result := range results {
-		fmt.Printf("% -7d %s\n", result.Port, "open")
+		fmt.Printf("% -7s %s\n", Port(result.Port), State("open"))
 	}
 }
 
 // printWithServices prints results with service and version information
 func (of *OutputFormatter) printWithServices(results []ScanResult) {
-	fmt.Printf("% -7s % -6s % -12s %s\n", "PORT", "STATE", "SERVICE", "VERSION")
+	fmt.Printf("%s % -7s % -6s % -12s %s%s\n", ColorBold, "PORT", "STATE", "SERVICE", "VERSION", ColorReset)
 	for _, result := range results {
-		fmt.Printf("% -7d % -6s % -12s %s\n", result.Port, "open", result.ServiceName, result.Version)
+		fmt.Printf("% -7s % -6s % -12s %s\n", Port(result.Port), State("open"), Service(result.ServiceName), Version(result.Version))
 	}
 }
 
@@ -51,10 +51,10 @@ func PrintBanner() {
  ╚██████╔╝╚██████╔╝██║ ╚═╝ ██║██║  ██║██║     
   ╚═════╝  ╚═════╝ ╚═╝     ╚═╝╚═╝  ╚═╝╚═╝
 `
-	fmt.Println(banner)
+	fmt.Printf("%s%s%s\n", ColorBrightCyan, banner, ColorReset)
 }
 
 // PrintScanStart displays the initial scan information
 func PrintScanStart(host string, numPorts int) {
-	fmt.Printf("Scanning %s (%d ports)\n\n", host, numPorts)
+	fmt.Printf("Scanning %s (%s ports)\n\n", Host(host), Count(numPorts))
 }

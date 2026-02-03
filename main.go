@@ -60,7 +60,7 @@ func main() {
 	// Handle update flag
 	if updateFlag {
 		if err := CheckUpdate(); err != nil {
-			fmt.Printf("Update failed: %v\n", err)
+			fmt.Printf("%s\n", StatusError(fmt.Sprintf("Update failed: %v", err)))
 			PrintUpdateInfo()
 			os.Exit(1)
 		}
@@ -79,20 +79,20 @@ func main() {
 	portManager := NewPortManager()
 	portsToScan, err := portManager.GetPortsToScan(portsFlag)
 	if err != nil {
-		fmt.Printf("Invalid port specification: %s\n", err)
+		fmt.Printf("%s\n", StatusError(fmt.Sprintf("Invalid port specification: %s", err)))
 		os.Exit(1)
 	}
 
 	// Parse target(s) - can be single IP, CIDR, or comma-separated IPs
 	targets, err := ParseTargets(host)
 	if err != nil {
-		fmt.Printf("Invalid target specification: %s\n", err)
+		fmt.Printf("%s\n", StatusError(fmt.Sprintf("Invalid target specification: %s", err)))
 		os.Exit(1)
 	}
 
 	// If scanning CIDR/multiple hosts, perform host discovery first (unless disabled)
 	if !noDiscovery && IsCIDR(host) && len(targets) > 1 {
-		fmt.Printf("Discovering active hosts in %s...\n", host)
+		fmt.Printf("%s\n", Info(fmt.Sprintf("🔍 Discovering active hosts in %s...", Host(host))))
 
 		discoveryTimeout := 500 * time.Millisecond
 		discoveryWorkers := 50
@@ -100,25 +100,25 @@ func main() {
 		targets = DiscoverActiveHosts(targets, discoveryTimeout, discoveryWorkers)
 
 		if len(targets) == 0 {
-			fmt.Printf("No active hosts found in the specified range.\n")
+			fmt.Printf("%s\n", StatusWarn("No active hosts found in the specified range."))
 			os.Exit(0)
 		}
-		fmt.Printf("Found %d active hosts, starting port scan...\n\n", len(targets))
+		fmt.Printf("%s\n\n", Success(fmt.Sprintf("✓ Found %s active hosts, starting port scan...", Count(len(targets)))))
 	}
 
 	// Display scan info
 	if len(targets) == 1 {
 		if ghostFlag {
-			fmt.Printf("Scanning %s (%d ports) - Ghost mode (stealthy)\n\n", targets[0], len(portsToScan))
+			fmt.Printf("%s\n\n", Info(fmt.Sprintf("🎯 Scanning %s (%s ports) - %s (stealthy)", Host(targets[0]), Count(len(portsToScan)), Warning("Ghost mode"))))
 		} else {
-			fmt.Printf("Scanning %s (%d ports)\n\n", targets[0], len(portsToScan))
+			fmt.Printf("%s\n\n", Info(fmt.Sprintf("🎯 Scanning %s (%s ports)", Host(targets[0]), Count(len(portsToScan)))))
 		}
 	} else {
 		targetRange, _, _ := FormatCIDRInfo(host)
 		if ghostFlag {
-			fmt.Printf("Scanning %s (%d active hosts, %d ports) - Ghost mode (stealthy)\n\n", targetRange, len(targets), len(portsToScan))
+			fmt.Printf("%s\n\n", Info(fmt.Sprintf("🎯 Scanning %s (%s active hosts, %s ports) - %s (stealthy)", Highlight(targetRange), Count(len(targets)), Count(len(portsToScan)), Warning("Ghost mode"))))
 		} else {
-			fmt.Printf("Scanning %s (%d active hosts, %d ports)\n\n", targetRange, len(targets), len(portsToScan))
+			fmt.Printf("%s\n\n", Info(fmt.Sprintf("🎯 Scanning %s (%s active hosts, %s ports)", Highlight(targetRange), Count(len(targets)), Count(len(portsToScan)))))
 		}
 	}
 
@@ -139,7 +139,7 @@ func main() {
 	for _, targetIP := range targets {
 		if results, exists := allResults[targetIP]; exists {
 			if len(targets) > 1 {
-				fmt.Printf("\n=== %s ===\n", targetIP)
+				fmt.Printf("\n%s\n", Highlight(fmt.Sprintf("═══ %s ═══", Host(targetIP))))
 			}
 			formatter.PrintResults(results)
 		}
