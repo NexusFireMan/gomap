@@ -85,19 +85,29 @@ func updateUsingGoInstall() error {
 	return nil
 }
 
-// installToSystemPath attempts to install the binary to a system PATH location
+// installToSystemPath attempts to install the binary to /usr/local/bin for system-wide access
 func installToSystemPath(binaryPath string) {
-	systemPaths := []string{"/usr/local/bin", "/usr/bin"}
+	systemPath := "/usr/local/bin"
+	destPath := filepath.Join(systemPath, "gomap")
 
-	for _, sysPath := range systemPaths {
-		if err := copyFile(binaryPath, filepath.Join(sysPath, "gomap")); err == nil {
-			fmt.Printf("%s\n", StatusOK(fmt.Sprintf("Also installed to: %s/gomap", sysPath)))
-			return
-		}
+	// Try to copy with sudo
+	cmd := exec.Command("sudo", "cp", binaryPath, destPath)
+	if err := cmd.Run(); err == nil {
+		fmt.Printf("%s\n", StatusOK(fmt.Sprintf("Also installed to: %s (system-wide access)", destPath)))
+
+		// Make sure it's executable
+		exec.Command("sudo", "chmod", "+x", destPath).Run()
+		return
 	}
 
-	// Fallback: inform user to add to PATH
-	fmt.Printf("%s\n", StatusWarn(fmt.Sprintf("To use 'gomap' command globally, add to PATH: export PATH=$PATH:%s/bin", filepath.Dir(binaryPath))))
+	// Try without sudo if direct access works
+	if err := copyFile(binaryPath, destPath); err == nil {
+		fmt.Printf("%s\n", StatusOK(fmt.Sprintf("Also installed to: %s (system-wide access)", destPath)))
+		return
+	}
+
+	// Fallback: inform user
+	fmt.Printf("%s\n", StatusWarn(fmt.Sprintf("To install system-wide, run: sudo cp %s %s", binaryPath, destPath)))
 }
 
 // copyFile copies a file from src to dst

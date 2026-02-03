@@ -78,7 +78,7 @@ git clone https://github.com/NexusFireMan/gomap.git
 cd gomap
 ./install.sh
 ```
-The script will automatically install to `/usr/local/bin/` or `/usr/bin/`
+The script will automatically install to `/usr/local/bin/` for system-wide access (requires sudo for first-time installation)
 
 ### Option 2: Manual Build and Installation
 ```bash
@@ -91,12 +91,18 @@ sudo mv gomap /usr/local/bin/
 ### Option 3: Using Go Install
 ```bash
 go install github.com/NexusFireMan/gomap@latest
-# Add to PATH: export PATH=$PATH:$HOME/go/bin
-gomap -v
+# The binary is installed to $HOME/go/bin
+# To move to system-wide: sudo mv $HOME/go/bin/gomap /usr/local/bin/
 ```
 
 ### Option 4: From Pre-built Binary
-Download the latest release from the [Releases](https://github.com/NexusFireMan/gomap/releases) page.
+Download the latest release from the [Releases](https://github.com/NexusFireMan/gomap/releases) page and move to `/usr/local/bin/`:
+```bash
+sudo mv gomap /usr/local/bin/
+sudo chmod +x /usr/local/bin/gomap
+```
+
+**All users on the system can then use:** `gomap`
 
 ---
 

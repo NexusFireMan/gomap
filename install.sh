@@ -1,29 +1,44 @@
 #!/bin/bash
 # install.sh - Installation script for gomap
-# This script builds and installs gomap to a system-accessible location
+# This script builds and installs gomap to /usr/local/bin for system-wide access
 
 set -e
 
 echo "🔨 Building gomap..."
 go build -o gomap
 
-echo "📦 Installing to system..."
+echo "📦 Installing to /usr/local/bin..."
 
-# Try to install to /usr/local/bin (preferred)
-if [ -w /usr/local/bin ]; then
+# Primary: Install to /usr/local/bin (recommended for all users)
+if sudo -n true 2>/dev/null; then
+    # User has sudo without password
     sudo mv gomap /usr/local/bin/
     echo "✓ gomap installed to /usr/local/bin/gomap"
-# Try to install to /usr/bin
-elif [ -w /usr/bin ]; then
-    sudo mv gomap /usr/bin/
-    echo "✓ gomap installed to /usr/bin/gomap"
-# Fallback: install to home directory
+    echo "✓ Available for all system users"
+elif sudo -v; then
+    # User can use sudo (will prompt for password)
+    sudo mv gomap /usr/local/bin/
+    echo "✓ gomap installed to /usr/local/bin/gomap"
+    echo "✓ Available for all system users"
 else
-    mkdir -p "$HOME/bin"
-    mv gomap "$HOME/bin/"
-    echo "⚠ gomap installed to $HOME/bin/gomap"
-    echo "⚠ Add this to your ~/.bashrc or ~/.zshrc:"
-    echo "  export PATH=\"\$PATH:\$HOME/bin\""
+    # No sudo access - try alternative locations
+    if [ -w /usr/local/bin ]; then
+        mv gomap /usr/local/bin/
+        echo "✓ gomap installed to /usr/local/bin/gomap"
+        echo "✓ Available for all system users"
+    else
+        # Fallback: install to home directory
+        mkdir -p "$HOME/bin"
+        mv gomap "$HOME/bin/"
+        echo "⚠ Could not write to /usr/local/bin"
+        echo "⚠ gomap installed to $HOME/bin/gomap (user only)"
+        echo ""
+        echo "To make it available system-wide, add to PATH or reinstall with sudo:"
+        echo "  export PATH=\"\$PATH:\$HOME/bin\""
+        echo ""
+        echo "Or ask your system administrator to run:"
+        echo "  sudo mv $HOME/bin/gomap /usr/local/bin/"
+    fi
 fi
 
 echo ""
