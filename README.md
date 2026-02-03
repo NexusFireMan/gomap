@@ -23,7 +23,8 @@
 ### Key Highlights
 
 - ⚡ **4x faster** than before (optimized timeouts and parallel workers)
-- 🎯 **Precise SMB detection** (identifies Windows Server versions and Samba)
+- � **Colorized output** (ANSI colors for better visibility)
+- �🎯 **Precise SMB detection** (identifies Windows Server versions and Samba)
 - 🌐 **CIDR & network scanning** (scan ranges, not just single IPs)
 - 🔍 **Automatic host discovery** (85-90% faster on sparse networks)
 - 👻 **Ghost mode** (stealthy scanning to evade IDS/Firewall)
@@ -36,6 +37,7 @@
 
 ### Core Scanning
 - **Fast Concurrent Scanning**: 200 goroutines in normal mode, 10 in ghost mode
+- **Colorized Terminal Output**: ANSI colors for better readability and visual hierarchy
 - **Single IP Scanning**: Quick port scanning on individual hosts
 - **CIDR Range Scanning**: Scan entire networks (192.168.1.0/24, 10.0.0.0/25, etc.)
 - **Multiple IP Targets**: Scan specific hosts simultaneously (192.168.1.1,192.168.1.5)
@@ -70,22 +72,59 @@
 
 ## Installation
 
-### Option 1: From Source (Recommended)
+### Option 1: From Source with Automatic Installation (Recommended)
 ```bash
 git clone https://github.com/NexusFireMan/gomap.git
 cd gomap
-go build
-./gomap -v
+./install.sh
+```
+The script will automatically install to `/usr/local/bin/` or `/usr/bin/`
+
+### Option 2: Manual Build and Installation
+```bash
+git clone https://github.com/NexusFireMan/gomap.git
+cd gomap
+./build.sh              # Uses optimized build flags
+sudo mv gomap /usr/local/bin/
 ```
 
-### Option 2: Using Go Install
+### Option 3: Using Go Install
 ```bash
 go install github.com/NexusFireMan/gomap@latest
+# Add to PATH: export PATH=$PATH:$HOME/go/bin
 gomap -v
 ```
 
-### Option 3: Pre-built Binary
+### Option 4: From Pre-built Binary
 Download the latest release from the [Releases](https://github.com/NexusFireMan/gomap/releases) page.
+
+---
+
+## Colorized Terminal Output
+
+Gomap v2.0.1 features **ANSI color output** for better readability:
+
+### Output Colors
+- **Port Numbers**: Bright Magenta
+- **Service Names**: Green  
+- **Versions**: Bright Yellow
+- **Status Indicators**: 
+  - ✓ Success (Green)
+  - ✗ Error (Red)
+  - ⚠ Warning (Yellow)
+  - 🔍 Discovery (Blue)
+
+### Example Output
+```
+🔍 Discovering active hosts in 192.168.1.0/24...
+✓ Found 12 active hosts, starting port scan...
+
+═══ 192.168.1.100 ═══
+PORT    STATE SERVICE         VERSION
+445     open  microsoft-ds    Windows Server 2008 R2
+80      open  http            Apache/2.4.41
+22      open  ssh             SSH-2.0-OpenSSH_7.4
+```
 
 ---
 
@@ -350,7 +389,14 @@ Created by [NexusFireMan](https://github.com/NexusFireMan)
 
 ## Changelog
 
-### v2.0 (Current)
+### v2.0.1 (Current)
+- ✅ **Colorized terminal output** (ANSI colors, emoji indicators)
+- ✅ **Improved installation** (install.sh, build.sh scripts)
+- ✅ **Better PATH handling** (automatic system installation)
+- ✅ **Repository cleanup** (documentation in Doc_MD/)
+- ✅ **Enhanced UX** (visual hierarchy, status indicators)
+
+### v2.0
 - ✅ Performance optimizations (4x faster)
 - ✅ SMB/Samba version detection
 - ✅ CIDR range scanning
