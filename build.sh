@@ -1,7 +1,7 @@
 #!/bin/bash
 # build.sh - Build script for gomap with version information
 
-VERSION="2.0.1"
+VERSION="2.0.2"
 BINARY_NAME="gomap"
 
 echo "🔨 Building $BINARY_NAME v$VERSION..."

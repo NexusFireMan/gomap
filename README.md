@@ -108,7 +108,7 @@ sudo chmod +x /usr/local/bin/gomap
 
 ## Colorized Terminal Output
 
-Gomap v2.0.1 features **ANSI color output** for better readability:
+Gomap v2.0.2 features **ANSI color output** for better readability:
 
 ### Output Colors
 - **Port Numbers**: Bright Magenta
@@ -397,7 +397,7 @@ Created by [NexusFireMan](https://github.com/NexusFireMan)
 
 See [CHANGELOG.md](CHANGELOG.md) for a detailed history of all releases and changes.
 
-Current version: **v2.0.1** - Colorized output, improved installation, repository cleanup
+Current version: **v2.0.2** - Bug fixes: Corrected go.mod module path for go install compatibility
 
 ---
 

@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.0.2] - 2026-02-04
+
+### Fixed
+- **go.mod module path**: Corrected module declaration from `gomap` to `github.com/NexusFireMan/gomap` for proper go install compatibility
+- **Typo**: Fixed comment typo 'idirect' → 'indirect'
+
 ## [2.0.1] - 2026-02-03
 
 ### Added
@@ -106,4 +112,5 @@ This project follows [Semantic Versioning](https://semver.org/):
 ### Version History
 - **1.0.0** - Initial release with basic features
 - **2.0.0** - Major improvements (performance, CIDR, host discovery)
-- **2.0.1** - Current (colorized output, installation improvements)
+- **2.0.2** - Current (go.mod fix for go install)
+- **2.0.1** - Colorized output, installation improvements
