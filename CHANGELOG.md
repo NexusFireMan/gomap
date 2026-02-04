@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.0.4] - 2026-02-04
+
+### Fixed
+- **Compiler errors**: Resolved package declaration conflicts in reorganized structure
+- **Build cache**: Cleaned and rebuilt all packages to ensure consistency
+- **Import references**: Fixed all references to scanner and output packages
+
 ## [2.0.3] - 2026-02-04
 
 ### Changed

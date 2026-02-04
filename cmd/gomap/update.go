@@ -11,7 +11,7 @@ import (
 
 const (
 	repoURL = "https://github.com/NexusFireMan/gomap"
-	version = "2.0.3"
+	version = "2.0.4"
 )
 
 // CheckUpdate checks and updates the tool
