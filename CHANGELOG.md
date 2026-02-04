@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.0.5] - 2026-02-04
+
+### Fixed
+- **Import cycle**: Added missing scanner import to output.go
+- **Type references**: Updated output.go to use scanner.ScanResult from imported package
+- **Variable shadowing**: Fixed scanner variable shadowing in main.go loop
+- **Linter errors**: Resolved all remaining compiler warnings
+
 ## [2.0.4] - 2026-02-04
 
 ### Fixed

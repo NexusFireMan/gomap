@@ -134,8 +134,8 @@ func Run() {
 	// Scan each target
 	allResults := make(map[string][]scanner.ScanResult)
 	for _, targetIP := range targets {
-		scanner := scanner.NewScanner(targetIP, ghostFlag)
-		openPorts := scanner.Scan(portsToScan, serviceFlag)
+		s := scanner.NewScanner(targetIP, ghostFlag)
+		openPorts := s.Scan(portsToScan, serviceFlag)
 		if len(openPorts) > 0 {
 			allResults[targetIP] = openPorts
 		}

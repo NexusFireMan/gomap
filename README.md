@@ -397,7 +397,7 @@ Created by [NexusFireMan](https://github.com/NexusFireMan)
 
 See [CHANGELOG.md](CHANGELOG.md) for a detailed history of all releases and changes.
 
-Current version: **v2.0.4** - Fixed compilation issues after project restructuring
+Current version: **v2.0.5** - Fixed package imports and type references
 
 ---
 
