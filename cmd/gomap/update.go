@@ -1,20 +1,22 @@
-package main
+package gomap
 
 import (
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+
+	"github.com/NexusFireMan/gomap/pkg/output"
 )
 
 const (
 	repoURL = "https://github.com/NexusFireMan/gomap"
-	version = "2.0.2"
+	version = "2.0.3"
 )
 
 // CheckUpdate checks and updates the tool
 func CheckUpdate() error {
-	fmt.Println(Info("🔄 Checking for updates..."))
+	fmt.Println(output.Info("🔄 Checking for updates..."))
 
 	// Try to update using git pull if in a git repository
 	if isGitRepository() {
@@ -33,42 +35,42 @@ func isGitRepository() bool {
 
 // updateUsingGit updates the tool using git pull and rebuilds
 func updateUsingGit() error {
-	fmt.Println(Success("✓ Detected git repository. Updating via git..."))
+	fmt.Println(output.Success("✓ Detected git repository. Updating via git..."))
 
 	// Pull latest changes
 	pullCmd := exec.Command("git", "pull", "origin", "main")
-	if output, err := pullCmd.CombinedOutput(); err != nil {
-		fmt.Printf("%s\n", StatusError(fmt.Sprintf("Git pull failed: %s", string(output))))
+	if cmdOutput, err := pullCmd.CombinedOutput(); err != nil {
+		fmt.Printf("%s\n", output.StatusError(fmt.Sprintf("Git pull failed: %s", string(cmdOutput))))
 		return fmt.Errorf("failed to pull from git: %w", err)
 	}
 
-	fmt.Println(StatusOK("Repository updated"))
+	fmt.Println(output.StatusOK("Repository updated"))
 
 	// Clean Go cache to ensure fresh build from scratch
-	fmt.Println(Info("🧹 Cleaning Go build cache..."))
+	fmt.Println(output.Info("🧹 Cleaning Go build cache..."))
 	cleanCmd := exec.Command("go", "clean", "-cache")
 	_ = cleanCmd.Run() // Ignore errors, cache might already be clean
 
 	// Rebuild the project with -a flag to force full rebuild
-	fmt.Println(Info("🔨 Rebuilding gomap..."))
+	fmt.Println(output.Info("🔨 Rebuilding gomap..."))
 	buildCmd := exec.Command("go", "build", "-a", "-o", "gomap")
-	if output, err := buildCmd.CombinedOutput(); err != nil {
-		fmt.Printf("%s\n", StatusError(fmt.Sprintf("Build failed: %s", string(output))))
+	if cmdOutput, err := buildCmd.CombinedOutput(); err != nil {
+		fmt.Printf("%s\n", output.StatusError(fmt.Sprintf("Build failed: %s", string(cmdOutput))))
 		return fmt.Errorf("failed to rebuild: %w", err)
 	}
 
-	fmt.Println(StatusOK("Build successful"))
-	fmt.Println(StatusOK("gomap has been updated to the latest version"))
+	fmt.Println(output.StatusOK("Build successful"))
+	fmt.Println(output.StatusOK("gomap has been updated to the latest version"))
 	return nil
 }
 
 // updateUsingGoInstall updates the tool using go install
 func updateUsingGoInstall() error {
-	fmt.Println(Info("📦 Installing latest version using go install..."))
+	fmt.Println(output.Info("📦 Installing latest version using go install..."))
 
 	cmd := exec.Command("go", "install", repoURL+"@latest")
-	if output, err := cmd.CombinedOutput(); err != nil {
-		fmt.Printf("%s\n", StatusWarn(fmt.Sprintf("Installation output: %s", string(output))))
+	if cmdOutput, err := cmd.CombinedOutput(); err != nil {
+		fmt.Printf("%s\n", output.StatusWarn(fmt.Sprintf("Installation output: %s", string(cmdOutput))))
 		return fmt.Errorf("failed to install: %w", err)
 	}
 
@@ -80,13 +82,13 @@ func updateUsingGoInstall() error {
 
 	binaryPath := filepath.Join(gopath, "bin", "gomap")
 	if _, err := os.Stat(binaryPath); err == nil {
-		fmt.Printf("%s\n", StatusOK(fmt.Sprintf("gomap installed at: %s", Highlight(binaryPath))))
+		fmt.Printf("%s\n", output.StatusOK(fmt.Sprintf("gomap installed at: %s", output.Highlight(binaryPath))))
 
 		// Try to install to system path
 		installToSystemPath(binaryPath)
 	}
 
-	fmt.Println(StatusOK("gomap has been updated to the latest version"))
+	fmt.Println(output.StatusOK("gomap has been updated to the latest version"))
 	return nil
 }
 
@@ -98,7 +100,7 @@ func installToSystemPath(binaryPath string) {
 	// Try to copy with sudo
 	cmd := exec.Command("sudo", "cp", binaryPath, destPath)
 	if err := cmd.Run(); err == nil {
-		fmt.Printf("%s\n", StatusOK(fmt.Sprintf("Also installed to: %s (system-wide access)", destPath)))
+		fmt.Printf("%s\n", output.StatusOK(fmt.Sprintf("Also installed to: %s (system-wide access)", destPath)))
 
 		// Make sure it's executable
 		exec.Command("sudo", "chmod", "+x", destPath).Run()
@@ -107,12 +109,12 @@ func installToSystemPath(binaryPath string) {
 
 	// Try without sudo if direct access works
 	if err := copyFile(binaryPath, destPath); err == nil {
-		fmt.Printf("%s\n", StatusOK(fmt.Sprintf("Also installed to: %s (system-wide access)", destPath)))
+		fmt.Printf("%s\n", output.StatusOK(fmt.Sprintf("Also installed to: %s (system-wide access)", destPath)))
 		return
 	}
 
 	// Fallback: inform user
-	fmt.Printf("%s\n", StatusWarn(fmt.Sprintf("To install system-wide, run: sudo cp %s %s", binaryPath, destPath)))
+	fmt.Printf("%s\n", output.StatusWarn(fmt.Sprintf("To install system-wide, run: sudo cp %s %s", binaryPath, destPath)))
 }
 
 // copyFile copies a file from src to dst
@@ -131,17 +133,17 @@ func copyFile(src, dst string) error {
 
 // PrintVersion prints the version information
 func PrintVersion() {
-	fmt.Printf("%s\n", Highlight(fmt.Sprintf("gomap version %s", version)))
-	fmt.Printf("%s\n", Info(fmt.Sprintf("Repository: %s", repoURL)))
+	fmt.Printf("%s\n", output.Highlight(fmt.Sprintf("gomap version %s", version)))
+	fmt.Printf("%s\n", output.Info(fmt.Sprintf("Repository: %s", repoURL)))
 }
 
 // PrintUpdateInfo prints information about updating
 func PrintUpdateInfo() {
-	fmt.Println("\n" + Bold("Update methods:"))
+	fmt.Println("\n" + output.Bold("Update methods:"))
 	fmt.Println("1. Using git (if cloned from repository):")
-	fmt.Printf("   %s\n", Highlight("gomap -up"))
+	fmt.Printf("   %s\n", output.Highlight("gomap -up"))
 	fmt.Println("\n2. Using go install (from anywhere):")
-	fmt.Printf("   %s\n", Highlight("go install github.com/NexusFireMan/gomap@latest"))
+	fmt.Printf("   %s\n", output.Highlight("go install github.com/NexusFireMan/gomap@latest"))
 	fmt.Println("\n3. Manual update:")
-	fmt.Printf("   %s\n", Highlight("git pull origin main && go build"))
+	fmt.Printf("   %s\n", output.Highlight("git pull origin main && go build"))
 }

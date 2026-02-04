@@ -1,4 +1,4 @@
-package main
+package scanner
 
 import (
 	"fmt"
@@ -26,7 +26,7 @@ func (pm *PortManager) GetPortsToScan(portsStr string) ([]int, error) {
 	if portsStr != "" {
 		return pm.ParsePorts(portsStr)
 	}
-	return getTop1000Ports(), nil
+	return GetTop1000Ports(), nil
 }
 
 // ParsePorts parses a port specification string

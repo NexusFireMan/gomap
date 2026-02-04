@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.0.3] - 2026-02-04
+
+### Changed
+- **Repository structure**: Reorganized codebase with proper Go project layout
+  * `cmd/gomap/` - Application entry point and main logic
+  * `pkg/scanner/` - Core scanning functionality
+  * `pkg/output/` - Output formatting and colors
+  * `scripts/` - Build and installation scripts
+  * `docs/` - Documentation files
+- **Code organization**: Improved maintainability and separation of concerns
+
 ## [2.0.2] - 2026-02-04
 
 ### Fixed

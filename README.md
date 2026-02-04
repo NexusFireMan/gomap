@@ -397,7 +397,7 @@ Created by [NexusFireMan](https://github.com/NexusFireMan)
 
 See [CHANGELOG.md](CHANGELOG.md) for a detailed history of all releases and changes.
 
-Current version: **v2.0.2** - Bug fixes: Corrected go.mod module path for go install compatibility
+Current version: **v2.0.3** - Reorganized project structure for better maintainability
 
 ---
 

@@ -1,7 +1,9 @@
-package main
+package output
 
 import (
 	"fmt"
+
+	"github.com/NexusFireMan/gomap/pkg/scanner"
 )
 
 // OutputFormatter handles the formatting and display of scan results
@@ -17,7 +19,7 @@ func NewOutputFormatter(includeServices bool) *OutputFormatter {
 }
 
 // PrintResults displays the scan results in a formatted table
-func (of *OutputFormatter) PrintResults(results []ScanResult) {
+func (of *OutputFormatter) PrintResults(results []scanner.ScanResult) {
 	if of.IncludeServices {
 		of.printWithServices(results)
 	} else {
@@ -26,7 +28,7 @@ func (of *OutputFormatter) PrintResults(results []ScanResult) {
 }
 
 // printBasic prints results without service information
-func (of *OutputFormatter) printBasic(results []ScanResult) {
+func (of *OutputFormatter) printBasic(results []scanner.ScanResult) {
 	fmt.Printf("%s % -7s %s%s\n", ColorBold, "PORT", "STATE", ColorReset)
 	for _, result := range results {
 		fmt.Printf("% -7s %s\n", Port(result.Port), State("open"))
@@ -34,7 +36,7 @@ func (of *OutputFormatter) printBasic(results []ScanResult) {
 }
 
 // printWithServices prints results with service and version information
-func (of *OutputFormatter) printWithServices(results []ScanResult) {
+func (of *OutputFormatter) printWithServices(results []scanner.ScanResult) {
 	fmt.Printf("%s % -7s % -6s % -12s %s%s\n", ColorBold, "PORT", "STATE", "SERVICE", "VERSION", ColorReset)
 	for _, result := range results {
 		fmt.Printf("% -7s % -6s % -12s %s\n", Port(result.Port), State("open"), Service(result.ServiceName), Version(result.Version))
