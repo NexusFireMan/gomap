@@ -5,11 +5,19 @@ VERSION="2.0.2"
 BINARY_NAME="gomap"
 
 echo "🔨 Building $BINARY_NAME v$VERSION..."
+echo ""
 
-# Build with ldflags to embed version (optional)
-go build -ldflags="-s -w" -o "$BINARY_NAME" .
+# Clean Go cache to ensure fresh build
+echo "🧹 Cleaning Go build cache..."
+go clean -cache
+
+# Build with -a flag to rebuild all dependencies and proper version embed
+# -a: force rebuild of packages that are already up-to-date
+# -ldflags=\"-s -w\": strip symbols and DWARF debug info for smaller binary
+go build -a -ldflags="-s -w" -o "$BINARY_NAME" .
 
 if [ $? -eq 0 ]; then
+    echo ""
     echo "✓ Build successful!"
     echo "✓ Binary: $BINARY_NAME"
     ls -lh "$BINARY_NAME"

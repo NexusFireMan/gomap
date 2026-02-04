@@ -44,9 +44,14 @@ func updateUsingGit() error {
 
 	fmt.Println(StatusOK("Repository updated"))
 
-	// Rebuild the project
+	// Clean Go cache to ensure fresh build from scratch
+	fmt.Println(Info("🧹 Cleaning Go build cache..."))
+	cleanCmd := exec.Command("go", "clean", "-cache")
+	_ = cleanCmd.Run() // Ignore errors, cache might already be clean
+
+	// Rebuild the project with -a flag to force full rebuild
 	fmt.Println(Info("🔨 Rebuilding gomap..."))
-	buildCmd := exec.Command("go", "build", "-o", "gomap")
+	buildCmd := exec.Command("go", "build", "-a", "-o", "gomap")
 	if output, err := buildCmd.CombinedOutput(); err != nil {
 		fmt.Printf("%s\n", StatusError(fmt.Sprintf("Build failed: %s", string(output))))
 		return fmt.Errorf("failed to rebuild: %w", err)

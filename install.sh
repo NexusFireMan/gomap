@@ -5,10 +5,18 @@
 set -e
 
 echo "🔨 Building gomap..."
-go build -o gomap
+echo ""
 
+# Clean Go cache to ensure fresh build from scratch
+echo "🧹 Cleaning Go build cache..."
+go clean -cache
+
+# Build with -a flag to force rebuild of all packages
+# This ensures version constant is properly embedded
+go build -a -o gomap .
+
+echo ""
 echo "📦 Installing to /usr/local/bin..."
-
 # Primary: Install to /usr/local/bin (recommended for all users)
 if sudo -n true 2>/dev/null; then
     # User has sudo without password
