@@ -21,6 +21,7 @@ func main() {
 		serviceFlag bool
 		ghostFlag   bool
 		updateFlag  bool
+		removeFlag  bool
 		versionFlag bool
 		noDiscovery bool
 	)
@@ -30,6 +31,7 @@ func main() {
 	flag.BoolVar(&ghostFlag, "g", false, "ghost mode - slower, stealthy scan to evade IDS/Firewall detection")
 	flag.BoolVar(&noDiscovery, "nd", false, "disable host discovery (scan all hosts in CIDR even if inactive)")
 	flag.BoolVar(&updateFlag, "up", false, "update gomap to the latest version")
+	flag.BoolVar(&removeFlag, "remove", false, "remove gomap from the system (/usr/local/bin)")
 	flag.BoolVar(&versionFlag, "v", false, "show version information")
 
 	// Custom usage message
@@ -54,6 +56,15 @@ func main() {
 	// Handle version flag
 	if versionFlag {
 		PrintVersion()
+		os.Exit(0)
+	}
+
+	// Handle remove flag
+	if removeFlag {
+		if err := RemoveGomap(); err != nil {
+			fmt.Printf("%s\n", StatusError(fmt.Sprintf("Removal failed: %v", err)))
+			os.Exit(1)
+		}
 		os.Exit(0)
 	}
 
