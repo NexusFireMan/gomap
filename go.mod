@@ -2,7 +2,6 @@ module github.com/NexusFireMan/gomap
 
 go 1.24.9
 
-require (
-	github.com/stacktitan/smb v0.0.0-20190531122847-da9a425dceb8 // indirect
-	golang.org/x/crypto v0.47.0 // indirect
-)
+require github.com/stacktitan/smb v0.0.0-20190531122847-da9a425dceb8
+
+require golang.org/x/crypto v0.47.0 // indirect

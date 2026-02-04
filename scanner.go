@@ -122,7 +122,7 @@ func (s *Scanner) addJitter() {
 }
 
 // tryExternalSMBDetection attempts to use external tools (nmap, smbclient) for SMB detection
-func tryExternalSMBDetection(host string, _ int) string {
+func tryExternalSMBDetection(host string) string {
 	if nmapPath, err := exec.LookPath("nmap"); err == nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
@@ -240,7 +240,7 @@ func (s *Scanner) detectSMBVersion(port int) string {
 	address := net.JoinHostPort(s.Host, fmt.Sprintf("%d", port))
 
 	// Try external tools first (nmap) - it's very reliable
-	if external := tryExternalSMBDetection(s.Host, port); external != "" {
+	if external := tryExternalSMBDetection(s.Host); external != "" {
 		return external
 	}
 
@@ -397,24 +397,6 @@ func (s *Scanner) extractSMB2Dialect(data []byte) string {
 
 // attemptSMBLibrary tries to use SMB library for detection
 func (s *Scanner) attemptSMBLibrary(address string) string {
-	opts := smb.Options{
-		Host:     s.Host,
-		Port:     445,
-		User:     "",
-		Password: "",
-	}
-
-	session, err := smb.NewSession(opts, false)
-	if err == nil {
-		defer session.Close()
-		return "Microsoft Windows SMB"
-	}
-
-	return ""
-}
-
-// grabSMBBanner is kept for compatibility but not actively used
-func (s *Scanner) grabSMBBanner(conn net.Conn) string {
 	opts := smb.Options{
 		Host:     s.Host,
 		Port:     445,
