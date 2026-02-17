@@ -6,7 +6,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/NexusFireMan/gomap/pkg/scanner"
+	"github.com/NexusFireMan/gomap/v2/pkg/scanner"
 )
 
 // OutputFormatter handles the formatting and display of scan results

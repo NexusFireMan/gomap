@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/NexusFireMan/gomap/pkg/scanner"
+	"github.com/NexusFireMan/gomap/v2/pkg/scanner"
 )
 
 func sampleResults() ([]string, map[string][]scanner.ScanResult) {

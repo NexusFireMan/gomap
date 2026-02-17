@@ -30,6 +30,12 @@ go build -o gomap .
 ./scripts/install.sh
 ```
 
+### Install with Go
+
+```bash
+go install github.com/NexusFireMan/gomap/v2@latest
+```
+
 ## Quick start
 
 ```bash

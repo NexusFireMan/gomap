@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/NexusFireMan/gomap/pkg/output"
+	"github.com/NexusFireMan/gomap/v2/pkg/output"
 )
 
 // CheckUpdate checks and updates the tool
@@ -172,7 +172,7 @@ func PrintUpdateInfo() {
 	fmt.Println("1. Using git (if cloned from repository):")
 	fmt.Printf("   %s\n", output.Highlight("gomap -up"))
 	fmt.Println("\n2. Using go install (from anywhere):")
-	fmt.Printf("   %s\n", output.Highlight("go install github.com/NexusFireMan/gomap@latest"))
+	fmt.Printf("   %s\n", output.Highlight("go install github.com/NexusFireMan/gomap/v2@latest"))
 	fmt.Println("\n3. Manual update:")
 	fmt.Printf("   %s\n", output.Highlight("git pull origin main && go build"))
 }

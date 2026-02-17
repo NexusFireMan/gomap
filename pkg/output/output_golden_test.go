@@ -7,7 +7,7 @@ import (
 	"regexp"
 	"testing"
 
-	"github.com/NexusFireMan/gomap/pkg/scanner"
+	"github.com/NexusFireMan/gomap/v2/pkg/scanner"
 )
 
 var ansiStripRE = regexp.MustCompile(`\x1b\[[0-9;]*m`)

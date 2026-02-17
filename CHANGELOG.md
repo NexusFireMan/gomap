@@ -2,10 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.2.0] - 2026-02-17
+
+### Changed
+- **Go module path migrated to v2**: `go.mod` now declares `module github.com/NexusFireMan/gomap/v2`.
+- **Import paths updated** across the codebase to `/v2` to comply with Go Modules major versioning.
+- **Installer/update guidance updated** to use:
+  - `go install github.com/NexusFireMan/gomap/v2@latest`
+- **Release build ldflags updated** to inject version metadata using `/v2` package paths.
+
+### Why
+- Ensures `go install ...@latest` and semver `v2.x.y` tags behave correctly and predictably.
+
 ## [2.1.1] - 2026-02-17
 
 ### Fixed
-- **Updater install target**: `gomap -up` now uses the correct Go module path (`github.com/NexusFireMan/gomap@latest`) instead of a repository URL, fixing `argument must be a clean package path`.
+- **Updater install target**: `gomap -up` now uses the correct Go module path (`github.com/NexusFireMan/gomap/v2@latest`) instead of a repository URL, fixing `argument must be a clean package path`.
 - **Active binary synchronization**: after `go install`, updater now attempts to replace the binary currently resolved in `PATH` so `gomap -v` reflects the new version immediately.
 - **Go bin path resolution**: updater now resolves installation path using `go env GOBIN` / `go env GOPATH` with fallback, improving reliability across environments.
 

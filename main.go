@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/NexusFireMan/gomap/cmd/gomap"
+	"github.com/NexusFireMan/gomap/v2/cmd/gomap"
 )
 
 func main() {

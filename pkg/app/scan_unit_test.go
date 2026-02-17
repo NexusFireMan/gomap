@@ -3,7 +3,7 @@ package app
 import (
 	"testing"
 
-	"github.com/NexusFireMan/gomap/pkg/scanner"
+	"github.com/NexusFireMan/gomap/v2/pkg/scanner"
 )
 
 func TestFilterExcludedPorts(t *testing.T) {

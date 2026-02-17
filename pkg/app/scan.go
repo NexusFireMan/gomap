@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/NexusFireMan/gomap/pkg/output"
-	"github.com/NexusFireMan/gomap/pkg/scanner"
+	"github.com/NexusFireMan/gomap/v2/pkg/output"
+	"github.com/NexusFireMan/gomap/v2/pkg/scanner"
 )
 
 // ScanRequest contains normalized scan options coming from CLI.

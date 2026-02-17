@@ -6,7 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 
-	"github.com/NexusFireMan/gomap/pkg/output"
+	"github.com/NexusFireMan/gomap/v2/pkg/output"
 )
 
 // RemoveGomap removes gomap from the system

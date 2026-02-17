@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/NexusFireMan/gomap/pkg/app"
-	"github.com/NexusFireMan/gomap/pkg/output"
+	"github.com/NexusFireMan/gomap/v2/pkg/app"
+	"github.com/NexusFireMan/gomap/v2/pkg/output"
 )
 
 func Run() {

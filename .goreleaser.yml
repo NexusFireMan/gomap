@@ -17,9 +17,9 @@ builds:
       - -trimpath
     ldflags:
       - -s -w -buildid=
-      - -X github.com/NexusFireMan/gomap/cmd/gomap.Version={{.Version}}
-      - -X github.com/NexusFireMan/gomap/cmd/gomap.Commit={{.Commit}}
-      - -X github.com/NexusFireMan/gomap/cmd/gomap.Date={{.Date}}
+      - -X github.com/NexusFireMan/gomap/v2/cmd/gomap.Version={{.Version}}
+      - -X github.com/NexusFireMan/gomap/v2/cmd/gomap.Commit={{.Commit}}
+      - -X github.com/NexusFireMan/gomap/v2/cmd/gomap.Date={{.Date}}
     goos:
       - linux
       - darwin

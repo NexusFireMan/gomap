@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/NexusFireMan/gomap/pkg/scanner"
+	"github.com/NexusFireMan/gomap/v2/pkg/scanner"
 )
 
 type hostReport struct {
