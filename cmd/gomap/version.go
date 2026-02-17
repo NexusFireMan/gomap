@@ -2,7 +2,7 @@ package gomap
 
 var (
 	// Version is injected at build time with -ldflags.
-	Version = "2.2.1"
+	Version = "2.2.2"
 	// Commit is injected at build time with -ldflags.
 	Commit = "dev"
 	// Date is injected at build time with -ldflags.

@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.2.2] - 2026-02-17
+
+### Fixed
+- **Reliable `-up` flow**: updater now returns a real error if it cannot replace the active binary, avoiding false “updated successfully” messages.
+- **Proxy lag fallback**: if `go install @latest` still resolves to the current version, updater retries once with `GOPROXY=direct`.
+- **Interactive sudo**: updater now runs sudo replacement steps with terminal stdin/stdout/stderr, preventing non-TTY password prompt failures.
+- **Post-install visibility**: updater now prints detected installed version from the new binary to make update state explicit.
+
 ## [2.2.1] - 2026-02-17
 
 ### Fixed

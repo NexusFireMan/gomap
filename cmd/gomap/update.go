@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/NexusFireMan/gomap/v2/pkg/output"
@@ -64,24 +65,56 @@ func updateUsingGit() error {
 func updateUsingGoInstall() error {
 	fmt.Println(output.Info("📦 Installing latest version using go install..."))
 
-	cmd := exec.Command("go", "install", ModulePath+"@latest")
-	if cmdOutput, err := cmd.CombinedOutput(); err != nil {
-		fmt.Printf("%s\n", output.StatusWarn(fmt.Sprintf("Installation output: %s", string(cmdOutput))))
-		return fmt.Errorf("failed to install: %w", err)
+	if err := runGoInstallLatest(false); err != nil {
+		return err
 	}
 
 	binaryPath, err := resolveGoInstalledBinaryPath()
 	if err != nil {
 		return err
 	}
-	if _, err := os.Stat(binaryPath); err == nil {
-		fmt.Printf("%s\n", output.StatusOK(fmt.Sprintf("gomap installed at: %s", output.Highlight(binaryPath))))
+	if _, err := os.Stat(binaryPath); err != nil {
+		return fmt.Errorf("go install completed but binary was not found at %s", binaryPath)
+	}
 
-		// Try to keep the command used by the user updated (PATH can point to /usr/local/bin first).
-		tryUpdateActiveBinary(binaryPath)
+	installedVersion, _ := readBinaryVersion(binaryPath)
+	if installedVersion == Version {
+		// Go proxy can lag behind fresh tags. Retry once with direct mode.
+		fmt.Printf("%s\n", output.StatusWarn("Installed version still matches current binary. Retrying with GOPROXY=direct..."))
+		if err := runGoInstallLatest(true); err != nil {
+			return err
+		}
+		installedVersion, _ = readBinaryVersion(binaryPath)
+	}
+
+	fmt.Printf("%s\n", output.StatusOK(fmt.Sprintf("gomap installed at: %s", output.Highlight(binaryPath))))
+	if installedVersion != "" {
+		fmt.Printf("%s\n", output.Info(fmt.Sprintf("Installed version: %s", output.Highlight(installedVersion))))
+	}
+
+	// Keep the command used by the user updated (PATH can point to /usr/local/bin first).
+	if err := tryUpdateActiveBinary(binaryPath); err != nil {
+		return err
 	}
 
 	fmt.Println(output.StatusOK("gomap has been updated to the latest version"))
+	return nil
+}
+
+func runGoInstallLatest(useDirectProxy bool) error {
+	cmd := exec.Command("go", "install", ModulePath+"@latest")
+	if useDirectProxy {
+		cmd.Env = append(os.Environ(), "GOPROXY=direct")
+	}
+	if cmdOutput, err := cmd.CombinedOutput(); err != nil {
+		if strings.TrimSpace(string(cmdOutput)) != "" {
+			fmt.Printf("%s\n", output.StatusWarn(fmt.Sprintf("Installation output: %s", strings.TrimSpace(string(cmdOutput)))))
+		}
+		if useDirectProxy {
+			return fmt.Errorf("failed to install with GOPROXY=direct: %w", err)
+		}
+		return fmt.Errorf("failed to install: %w", err)
+	}
 	return nil
 }
 
@@ -112,33 +145,35 @@ func resolveGoInstalledBinaryPath() (string, error) {
 	return filepath.Join(home, "go", "bin", "gomap"), nil
 }
 
-func tryUpdateActiveBinary(binaryPath string) {
+func tryUpdateActiveBinary(binaryPath string) error {
 	activePath, err := exec.LookPath("gomap")
 	if err != nil {
-		fmt.Printf("%s\n", output.StatusWarn("Could not resolve active gomap path from PATH."))
-		return
+		// No active binary in PATH; install in Go bin is still useful.
+		fmt.Printf("%s\n", output.StatusWarn("Could not resolve active gomap path from PATH; keeping Go bin installation only."))
+		return nil
 	}
 
 	activePath, _ = filepath.EvalSymlinks(activePath)
 	binaryPath, _ = filepath.EvalSymlinks(binaryPath)
 
 	if activePath == binaryPath {
-		return
+		return nil
 	}
 
 	if err := replaceBinaryAtomically(binaryPath, activePath); err == nil {
 		fmt.Printf("%s\n", output.StatusOK(fmt.Sprintf("Updated active binary: %s", output.Highlight(activePath))))
-		return
+		return nil
 	}
 
 	if err := replaceBinaryAtomicallyWithSudo(binaryPath, activePath); err == nil {
 		fmt.Printf("%s\n", output.StatusOK(fmt.Sprintf("Updated active binary with sudo: %s", output.Highlight(activePath))))
-		return
+		return nil
 	}
 
 	// Common case: PATH prioritizes /usr/local/bin but go install writes into ~/go/bin.
 	fmt.Printf("%s\n", output.StatusWarn(fmt.Sprintf("Active command still points to %s", output.Highlight(activePath))))
 	fmt.Printf("%s\n", output.StatusWarn(fmt.Sprintf("Run manually: sudo install -m 0755 %s %s.new && sudo mv -f %s.new %s", binaryPath, activePath, activePath, activePath)))
+	return fmt.Errorf("could not replace active gomap binary at %s", activePath)
 }
 
 // copyFile copies a file from src to dst
@@ -175,21 +210,36 @@ func replaceBinaryAtomicallyWithSudo(src, dst string) error {
 	tmp := dst + ".new"
 
 	installCmd := exec.Command("sudo", "install", "-m", "0755", src, tmp)
-	if cmdOutput, err := installCmd.CombinedOutput(); err != nil {
-		if strings.TrimSpace(string(cmdOutput)) != "" {
-			fmt.Printf("%s\n", output.StatusWarn(fmt.Sprintf("sudo output: %s", strings.TrimSpace(string(cmdOutput)))))
-		}
+	installCmd.Stdin = os.Stdin
+	installCmd.Stdout = os.Stdout
+	installCmd.Stderr = os.Stderr
+	if err := installCmd.Run(); err != nil {
 		return err
 	}
 
 	renameCmd := exec.Command("sudo", "mv", "-f", tmp, dst)
-	if cmdOutput, err := renameCmd.CombinedOutput(); err != nil {
-		if strings.TrimSpace(string(cmdOutput)) != "" {
-			fmt.Printf("%s\n", output.StatusWarn(fmt.Sprintf("sudo output: %s", strings.TrimSpace(string(cmdOutput)))))
-		}
+	renameCmd.Stdin = os.Stdin
+	renameCmd.Stdout = os.Stdout
+	renameCmd.Stderr = os.Stderr
+	if err := renameCmd.Run(); err != nil {
 		return err
 	}
 	return nil
+}
+
+var versionRegex = regexp.MustCompile(`(?m)^gomap version ([^ \n\r\t]+)`)
+
+func readBinaryVersion(path string) (string, error) {
+	cmd := exec.Command(path, "-v")
+	out, err := cmd.Output()
+	if err != nil {
+		return "", err
+	}
+	matches := versionRegex.FindStringSubmatch(string(out))
+	if len(matches) != 2 {
+		return "", fmt.Errorf("could not parse version output from %s", path)
+	}
+	return strings.TrimSpace(matches[1]), nil
 }
 
 // PrintVersion prints the version information
