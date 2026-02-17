@@ -9,11 +9,6 @@ import (
 	"github.com/NexusFireMan/gomap/pkg/output"
 )
 
-const (
-	repoURL = "https://github.com/NexusFireMan/gomap"
-	version = "2.0.5"
-)
-
 // CheckUpdate checks and updates the tool
 func CheckUpdate() error {
 	fmt.Println(output.Info("🔄 Checking for updates..."))
@@ -68,7 +63,7 @@ func updateUsingGit() error {
 func updateUsingGoInstall() error {
 	fmt.Println(output.Info("📦 Installing latest version using go install..."))
 
-	cmd := exec.Command("go", "install", repoURL+"@latest")
+	cmd := exec.Command("go", "install", RepoURL+"@latest")
 	if cmdOutput, err := cmd.CombinedOutput(); err != nil {
 		fmt.Printf("%s\n", output.StatusWarn(fmt.Sprintf("Installation output: %s", string(cmdOutput))))
 		return fmt.Errorf("failed to install: %w", err)
@@ -103,7 +98,7 @@ func installToSystemPath(binaryPath string) {
 		fmt.Printf("%s\n", output.StatusOK(fmt.Sprintf("Also installed to: %s (system-wide access)", destPath)))
 
 		// Make sure it's executable
-		exec.Command("sudo", "chmod", "+x", destPath).Run()
+		_ = exec.Command("sudo", "chmod", "+x", destPath).Run()
 		return
 	}
 
@@ -133,8 +128,10 @@ func copyFile(src, dst string) error {
 
 // PrintVersion prints the version information
 func PrintVersion() {
-	fmt.Printf("%s\n", output.Highlight(fmt.Sprintf("gomap version %s", version)))
-	fmt.Printf("%s\n", output.Info(fmt.Sprintf("Repository: %s", repoURL)))
+	fmt.Printf("%s\n", output.Highlight(fmt.Sprintf("gomap version %s", Version)))
+	fmt.Printf("%s\n", output.Info(fmt.Sprintf("Repository: %s", RepoURL)))
+	fmt.Printf("%s\n", output.Info(fmt.Sprintf("Commit: %s", Commit)))
+	fmt.Printf("%s\n", output.Info(fmt.Sprintf("Build date: %s", Date)))
 }
 
 // PrintUpdateInfo prints information about updating

@@ -36,6 +36,18 @@ func parseBanner(banner string) (service, version string) {
 		return service, version
 	}
 
+	if service, version := parseSMTP(banner); service != "" {
+		return service, version
+	}
+
+	if service, version := parsePOP3(banner); service != "" {
+		return service, version
+	}
+
+	if service, version := parseIMAP(banner); service != "" {
+		return service, version
+	}
+
 	if service, version := parseMySQL(banner); service != "" {
 		return service, version
 	}
@@ -106,7 +118,7 @@ func parseSSH(banner string) (string, string) {
 		protocol := match[1]
 		implementation := match[2]
 		implementation = strings.TrimSpace(implementation)
-		implementation = strings.Replace(implementation, "_", " ", -1)
+		implementation = strings.ReplaceAll(implementation, "_", " ")
 
 		// Add protocol version info
 		var protocolInfo string
@@ -124,14 +136,24 @@ func parseSSH(banner string) (string, string) {
 		// Try to extract specific implementation
 		if strings.Contains(implementation, "OpenSSH") {
 			// Extract version details
-			opensshRegex := regexp.MustCompile(`OpenSSH[\s_]+([\d\.]+)(?:p(\d+))?`)
+			opensshRegex := regexp.MustCompile(`OpenSSH[\s_]+([\d\.]+)(?:p(\d+))?([^\r\n]*)`)
 			if match := opensshRegex.FindStringSubmatch(implementation); match != nil {
 				version := match[1]
 				patch := match[2]
+				extra := strings.TrimSpace(match[3])
+				extra = strings.TrimPrefix(extra, " ")
 				if patch != "" {
-					return "ssh", fmt.Sprintf("%s - OpenSSH %sp%s", protocolInfo, version, patch)
+					base := fmt.Sprintf("%s - OpenSSH %sp%s", protocolInfo, version, patch)
+					if extra != "" {
+						return "ssh", fmt.Sprintf("%s %s", base, extra)
+					}
+					return "ssh", base
 				}
-				return "ssh", fmt.Sprintf("%s - OpenSSH %s", protocolInfo, version)
+				base := fmt.Sprintf("%s - OpenSSH %s", protocolInfo, version)
+				if extra != "" {
+					return "ssh", fmt.Sprintf("%s %s", base, extra)
+				}
+				return "ssh", base
 			}
 		} else if strings.Contains(implementation, "libssh") {
 			return "ssh", fmt.Sprintf("%s - libssh", protocolInfo)
@@ -142,6 +164,69 @@ func parseSSH(banner string) (string, string) {
 		return "ssh", fmt.Sprintf("%s - %s", protocolInfo, implementation)
 	}
 	return "", ""
+}
+
+// parseSMTP extracts SMTP server information
+func parseSMTP(banner string) (string, string) {
+	if !strings.HasPrefix(banner, "220") && !strings.Contains(strings.ToUpper(banner), "ESMTP") {
+		return "", ""
+	}
+
+	postfixRegex := regexp.MustCompile(`(?i)\bESMTP\s+Postfix\b`)
+	if postfixRegex.MatchString(banner) {
+		return "smtp", "Postfix SMTP"
+	}
+
+	eximRegex := regexp.MustCompile(`(?i)\bESMTP\s+Exim\s+([\d\.]+)\b`)
+	if match := eximRegex.FindStringSubmatch(banner); match != nil {
+		return "smtp", fmt.Sprintf("Exim %s", match[1])
+	}
+
+	sendmailRegex := regexp.MustCompile(`(?i)\bSendmail\s+([\d\.]+)\b`)
+	if match := sendmailRegex.FindStringSubmatch(banner); match != nil {
+		return "smtp", fmt.Sprintf("Sendmail %s", match[1])
+	}
+
+	return "smtp", ""
+}
+
+// parsePOP3 extracts POP3 server information
+func parsePOP3(banner string) (string, string) {
+	if !strings.HasPrefix(strings.TrimSpace(banner), "+OK") {
+		return "", ""
+	}
+
+	if strings.Contains(strings.ToLower(banner), "dovecot") {
+		dovecotRegex := regexp.MustCompile(`(?i)dovecot(?:\s+ready)?(?:\s*\(([^)]+)\))?`)
+		if match := dovecotRegex.FindStringSubmatch(banner); match != nil && strings.TrimSpace(match[1]) != "" {
+			return "pop3", fmt.Sprintf("Dovecot (%s)", strings.TrimSpace(match[1]))
+		}
+		return "pop3", "Dovecot"
+	}
+
+	if strings.Contains(strings.ToLower(banner), "courier") {
+		return "pop3", "Courier POP3"
+	}
+
+	return "pop3", ""
+}
+
+// parseIMAP extracts IMAP server information
+func parseIMAP(banner string) (string, string) {
+	upper := strings.ToUpper(strings.TrimSpace(banner))
+	if !strings.HasPrefix(upper, "* OK") && !strings.Contains(upper, "IMAP4") && !strings.Contains(upper, "CAPABILITY IMAP4") {
+		return "", ""
+	}
+
+	if strings.Contains(strings.ToLower(banner), "dovecot") {
+		return "imap", "Dovecot IMAP"
+	}
+
+	if strings.Contains(strings.ToLower(banner), "courier") {
+		return "imap", "Courier IMAP"
+	}
+
+	return "imap", ""
 }
 
 // parseFTP extracts FTP server information
@@ -234,7 +319,7 @@ func parseHTTP(banner string) (string, string) {
 				serverHeader = strings.TrimPrefix(line, "server:")
 			}
 			serverHeader = strings.TrimSpace(serverHeader)
-			serverHeader = strings.Replace(serverHeader, "\r", "", -1)
+			serverHeader = strings.ReplaceAll(serverHeader, "\r", "")
 			break
 		}
 	}
@@ -243,6 +328,11 @@ func parseHTTP(banner string) (string, string) {
 	if serverHeader != "" {
 		// Clean up common variations
 		serverHeader = strings.TrimSpace(serverHeader)
+
+		// CUPS/IPP service is better represented as ipp than generic http
+		if strings.Contains(serverHeader, "CUPS") || strings.Contains(serverHeader, "IPP/") {
+			return "ipp", serverHeader
+		}
 
 		// Detect specific servers with version parsing
 		if v := parseApacheVersion(serverHeader); v != "" {
@@ -399,7 +489,7 @@ func parseMySQL(banner string) (string, string) {
 			service := match[1]
 			version := match[2]
 			// Clean up service name
-			service = strings.TrimSpace(strings.Replace(service, "-", "", -1))
+			service = strings.TrimSpace(strings.ReplaceAll(service, "-", ""))
 			return "mysql", fmt.Sprintf("%s %s", service, version)
 		}
 		return "mysql", ""
@@ -483,6 +573,15 @@ func parseGlassFish(banner string) (string, string) {
 func parseSMB(banner string) (string, string) {
 	// Check for various SMB detection patterns
 	lowerBanner := strings.ToLower(banner)
+	hasSMBToken := regexp.MustCompile(`(?i)\bsmb\b`).MatchString(banner)
+
+	// If there is no SMB token and no Samba indicator, this is not SMB.
+	if !hasSMBToken && !strings.Contains(lowerBanner, "samba") {
+		return "", ""
+	}
+	if strings.Contains(lowerBanner, "not smb") {
+		return "", ""
+	}
 
 	// Check for Samba
 	if strings.Contains(lowerBanner, "samba") {
@@ -497,6 +596,22 @@ func parseSMB(banner string) (string, string) {
 			return "microsoft-ds", "Samba 4.X"
 		}
 		return "microsoft-ds", "Samba"
+	}
+
+	// Parse explicit SMB version first (before generic Windows checks)
+	smbLegacyRegex := regexp.MustCompile(`(?i)\bSMBv?1(?:\.0)?\s*\(Legacy\)`)
+	if smbLegacyRegex.MatchString(banner) {
+		return "microsoft-ds", "SMBv1 (Legacy)"
+	}
+
+	smbVRegex := regexp.MustCompile(`(?i)\bSMBv(\d+(?:\.\d+){0,2})\b`)
+	if match := smbVRegex.FindStringSubmatch(banner); match != nil {
+		return "microsoft-ds", "SMBv" + match[1]
+	}
+
+	smbRegex := regexp.MustCompile(`(?i)\bSMB\s+(\d+(?:\.\d+){0,2})\b`)
+	if match := smbRegex.FindStringSubmatch(banner); match != nil {
+		return "microsoft-ds", "SMB " + match[1]
 	}
 
 	// Check for Windows Server versions
@@ -520,26 +635,11 @@ func parseSMB(banner string) (string, string) {
 		} else if strings.Contains(banner, "Windows 7") {
 			return "microsoft-ds", "Windows 7"
 		}
-		return "microsoft-ds", "Microsoft Windows SMB"
+		return "microsoft-ds", "Windows SMB"
 	}
 
 	// Check for explicit SMB version
 	if strings.Contains(banner, "SMB") {
-		smb311Regex := regexp.MustCompile(`SMB\s+(\d+\.\d+\.\d+)`)
-		if match := smb311Regex.FindStringSubmatch(banner); match != nil {
-			return "microsoft-ds", fmt.Sprintf("SMB %s", match[1])
-		}
-
-		smbVersionRegex := regexp.MustCompile(`SMB\s+(\d+\.\d+)`)
-		if match := smbVersionRegex.FindStringSubmatch(banner); match != nil {
-			return "microsoft-ds", fmt.Sprintf("SMB %s", match[1])
-		}
-
-		smbvRegex := regexp.MustCompile(`SMBv([\d\.]+)`)
-		if match := smbvRegex.FindStringSubmatch(banner); match != nil {
-			return "microsoft-ds", fmt.Sprintf("SMB %s", match[1])
-		}
-
 		if strings.Contains(banner, "SMB 1") {
 			return "microsoft-ds", "SMB 1.0 (legacy)"
 		}

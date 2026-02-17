@@ -12,12 +12,23 @@ import (
 func ExpandCIDR(cidr string) ([]string, error) {
 	// Check if it's a single IP address
 	if !strings.Contains(cidr, "/") {
+		// If literal IP is provided, keep it as-is (avoid DNS lookup side-effects).
+		if ip := net.ParseIP(cidr); ip != nil {
+			return []string{ip.String()}, nil
+		}
+
 		// Try to resolve as hostname/IP
 		ips, err := net.LookupIP(cidr)
 		if err != nil || len(ips) == 0 {
 			return nil, fmt.Errorf("invalid IP address or hostname: %s", cidr)
 		}
-		// Return the first IP if multiple results
+		// Prefer IPv4 for consistency with many local lab/network setups.
+		for _, ip := range ips {
+			if v4 := ip.To4(); v4 != nil {
+				return []string{v4.String()}, nil
+			}
+		}
+		// Fall back to first resolved address (likely IPv6-only host).
 		return []string{ips[0].String()}, nil
 	}
 
@@ -173,7 +184,7 @@ func isHostActive(host string, ports []int, timeout time.Duration) bool {
 		address := net.JoinHostPort(host, fmt.Sprintf("%d", port))
 		conn, err := net.DialTimeout("tcp", address, timeout)
 		if err == nil {
-			conn.Close()
+			_ = conn.Close()
 			return true
 		}
 	}

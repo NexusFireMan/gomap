@@ -1,0 +1,47 @@
+# Binaries and build artifacts
+/gomap
+/bin/
+/build/
+/dist/
+*.exe
+*.dll
+*.so
+*.dylib
+*.o
+*.a
+*.test
+
+# Go workspace/local files
+go.work
+
+# Coverage and local QA artifacts
+coverage.out
+*.coverprofile
+
+# Runtime/log/temp artifacts
+logs/
+*.log
+tmp/
+temp/
+*.tmp
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+*.sublime-project
+*.sublime-workspace
+
+# Local environment files
+.env
+.env.local
+
+# Optional local dependencies
+vendor/
+
+# Local/legacy notes (do not publish)
+Doc_MD/
+docs/

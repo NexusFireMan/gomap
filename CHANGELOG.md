@@ -2,6 +2,27 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.1.0] - 2026-02-17
+
+### Added
+- **Professional outputs**: native `text`, `json`, `jsonl`, and `csv` reporting paths with stable schemas.
+- **Golden tests for output formatting**: guardrails to prevent regressions in table layout/tabulation.
+- **Lab integration tests**: optional end-to-end checks for Metasploitable3 Windows/Linux environments.
+- **Advanced scan flags**: `--top-ports`, `--exclude-ports`, `--rate`, and `--max-hosts`.
+- **Robust scan controls**: `--retries`, `--backoff-ms`, `--adaptive-timeout`, and `--max-timeout`.
+- **Host exposure summary**: per-host risk summary after text-mode scans.
+- **Quality pipeline**: CI with lint, unit tests, race tests, and minimum coverage enforcement.
+- **Release pipeline**: automated release management with Release Please and GoReleaser.
+
+### Changed
+- **Architecture**: separated CLI parsing, scan orchestration, scanner engine, and output/reporting into clearer packages.
+- **Service detection realism**: expanded banner parsing and confidence/evidence tracking for more realistic version fingerprints.
+- **README**: fully rewritten and aligned with the current codebase, flags, testing flow, and release process.
+
+### Fixed
+- **Output alignment**: corrected table spacing so result columns match headers consistently.
+- **CLI validation consistency**: improved validation and conflict handling for output and port-selection flags.
+
 ## [2.0.5] - 2026-02-04
 
 ### Fixed

@@ -1,404 +1,168 @@
+# gomap
 
-<div align="center">
+A fast TCP port scanner written in Go, with optional service/version detection, CIDR host discovery, adaptive timeout tuning, and multi-format output.
 
-```
-  ██████╗  ██████╗ ███╗   ███╗ █████╗ ██████╗ 
- ██╔════╝ ██╔═══██╗████╗ ████║██╔══██╗██╔══██╗
- ██║  ███╗██║   ██║██╔████╔██║███████║██████╔╝
- ██║   ██║██║   ██║██║╚██╔╝██║██╔══██║██╔═══╝ 
- ╚██████╔╝╚██████╔╝██║ ╚═╝ ██║██║  ██║██║     
-  ╚═════╝  ╚═════╝ ╚═╝     ╚═╝╚═╝  ╚═╝╚═╝     
-```
+## Current scope
 
-**A fast, stealthy, and intelligent port scanner written in Go.**
-
-</div>
-
----
-
-## Overview
-
-**GOMAP** is a lightweight, fast, and versatile port scanner designed for quick network reconnaissance. It offers multiple scanning modes with advanced features like automatic host discovery, CIDR support, precise service detection, and stealthy scanning to evade IDS/firewall detection.
-
-### Key Highlights
-
-- ⚡ **4x faster** than before (optimized timeouts and parallel workers)
-- � **Colorized output** (ANSI colors for better visibility)
-- �🎯 **Precise SMB detection** (identifies Windows Server versions and Samba)
-- 🌐 **CIDR & network scanning** (scan ranges, not just single IPs)
-- 🔍 **Automatic host discovery** (85-90% faster on sparse networks)
-- 👻 **Ghost mode** (stealthy scanning to evade IDS/Firewall)
-- 🔒 **No ping/ICMP** (doesn't reveal you're scanning)
-- 🚀 **Concurrent scanning** (200 parallel workers in normal mode)
-
----
-
-## Features
-
-### Core Scanning
-- **Fast Concurrent Scanning**: 200 goroutines in normal mode, 10 in ghost mode
-- **Colorized Terminal Output**: ANSI colors for better readability and visual hierarchy
-- **Single IP Scanning**: Quick port scanning on individual hosts
-- **CIDR Range Scanning**: Scan entire networks (192.168.1.0/24, 10.0.0.0/25, etc.)
-- **Multiple IP Targets**: Scan specific hosts simultaneously (192.168.1.1,192.168.1.5)
-- **Flexible Port Selection**: Specific ports, ranges, or all 65535 ports
-- **DNS Resolution**: Scan by hostname (localhost, example.com, etc.)
-
-### Service & Version Detection
-- **Smart Banner Grabbing**: Identifies 50+ services with precise version detection
-- **Windows Server Detection**: Identifies specific versions (2008 R2, 2012, 2016, 2019)
-- **Samba Detection**: Differentiates between Samba versions (3.X, 4.X)
-- **HTTP Server Fingerprinting**: Apache, Nginx, IIS, Tomcat, Node.js, GlassFish, etc.
-- **SSH/FTP/MySQL Detection**: Protocol version and implementation detection
-- **Database Detection**: PostgreSQL, Redis, MongoDB, Elasticsearch, etc.
-
-### Network Discovery
-- **Automatic Host Discovery**: Scans CIDR ranges and skips inactive hosts (85-90% faster)
-- **Intelligent Port Probing**: Tests 7 common ports (443, 80, 22, 445, 3306, 8080, 3389)
-- **Optional Manual Scanning**: Disable auto-discovery with `-nd` flag if needed
-- **Network Filtering**: Automatically excludes network and broadcast addresses
-
-### Stealth & Performance
-- **Ghost Mode** (`-g`): Slower, randomized, with jitter to evade detection
-- **No ICMP/Ping**: Doesn't use ICMP (pure TCP scanning)
-- **500ms Default Timeout**: 4x faster than previous versions
-- **Configurable Workers**: 200 normal / 10 ghost mode for automatic optimization
-
-### Auto-Update & Info
-- **Auto-Update**: `-up` flag updates to latest version from GitHub
-- **Version Info**: `-v` flag shows version and repository details
-
----
+- Fast concurrent TCP connect scanning.
+- Optional service and version detection (`-s`).
+- Single host, hostname, comma-separated targets, and CIDR ranges.
+- CIDR active-host discovery by TCP probes (no ICMP ping).
+- Robust scan controls for unstable networks: retries, backoff, adaptive timeout.
+- Professional outputs: `text`, `json`, `jsonl`, `csv`.
+- Per-host exposure summary in text mode.
 
 ## Installation
 
-### Option 1: From Source with Automatic Installation (Recommended)
+### Build from source
+
 ```bash
 git clone https://github.com/NexusFireMan/gomap.git
 cd gomap
-./install.sh
-```
-The script will automatically install to `/usr/local/bin/` for system-wide access (requires sudo for first-time installation)
-
-### Option 2: Manual Build and Installation
-```bash
-git clone https://github.com/NexusFireMan/gomap.git
-cd gomap
-./build.sh              # Uses optimized build flags
-sudo mv gomap /usr/local/bin/
-```
-
-### Option 3: Using Go Install
-```bash
-go install github.com/NexusFireMan/gomap@latest
-# The binary is installed to $HOME/go/bin
-# To move to system-wide: sudo mv $HOME/go/bin/gomap /usr/local/bin/
-```
-
-### Option 4: From Pre-built Binary
-Download the latest release from the [Releases](https://github.com/NexusFireMan/gomap/releases) page and move to `/usr/local/bin/`:
-```bash
-sudo mv gomap /usr/local/bin/
-sudo chmod +x /usr/local/bin/gomap
-```
-
-**All users on the system can then use:** `gomap`
-
----
-
-## Colorized Terminal Output
-
-Gomap v2.0.2 features **ANSI color output** for better readability:
-
-### Output Colors
-- **Port Numbers**: Bright Magenta
-- **Service Names**: Green  
-- **Versions**: Bright Yellow
-- **Status Indicators**: 
-  - ✓ Success (Green)
-  - ✗ Error (Red)
-  - ⚠ Warning (Yellow)
-  - 🔍 Discovery (Blue)
-
-### Example Output
-```
-🔍 Discovering active hosts in 192.168.1.0/24...
-✓ Found 12 active hosts, starting port scan...
-
-═══ 192.168.1.100 ═══
-PORT    STATE SERVICE         VERSION
-445     open  microsoft-ds    Windows Server 2008 R2
-80      open  http            Apache/2.4.41
-22      open  ssh             SSH-2.0-OpenSSH_7.4
-```
-
----
-
-## Quick Start
-
-### Scan a Single Host
-```bash
-# Top 997 ports with service detection
-./gomap -s 192.168.1.100
-
-# Specific ports
-./gomap -s -p 22,80,443 192.168.1.100
-```
-
-### Scan a CIDR Range (Auto Host Discovery)
-```bash
-# Automatically discovers active hosts first
-./gomap -s -p 22,80,443 192.168.1.0/24
-
-# Output:
-# Discovering active hosts in 192.168.1.0/24...
-# Found 45 active hosts, starting port scan...
-```
-
-### Scan Multiple IPs
-```bash
-./gomap -s -p 22,445 192.168.1.1,192.168.1.5,192.168.1.10
-```
-
-### Stealthy Ghost Mode
-```bash
-# Slower, randomized, with jitter
-./gomap -g -s -p 1-1024 192.168.1.0/25
-```
-
-### Skip Host Discovery (Full CIDR Scan)
-```bash
-# Scans all hosts, even inactive ones
-./gomap -s -nd -p 22 192.168.1.0/24
-```
-
----
-
-## Usage
-
-```
-Gomap: A fast and simple port scanner written in Go.
-
-Usage:
-  gomap <host|CIDR> [options]
-
-Options:
-  -g       ghost mode (slower, stealthy to evade IDS/Firewall)
-  -nd      disable host discovery (scan all hosts in CIDR)
-  -p       ports to scan (e.g., 80,443 or 1-1024 or - for all)
-  -s       detect services and versions
-  -up      update to the latest version
-  -v       show version information
-
-Notes:
-  - CIDR scans automatically discover active hosts first (disable with -nd)
-  - Host discovery probes ports: 443, 80, 22, 445, 3306, 8080, 3389
-  - No ICMP/ping used - only TCP connections
-
-Examples:
-  gomap 127.0.0.1                              (Scan localhost)
-  gomap -p 80,443,8080 192.168.1.1           (Scan specific ports)
-  gomap -p 1-1024 -s 192.168.1.0/24          (Scan CIDR with service detection)
-  gomap -g -p 1-1024 10.0.0.0/25             (Stealthy ghost mode on CIDR)
-  gomap -s -nd -p 22 192.168.1.0/24          (Scan all hosts, no discovery)
-```
-
----
-
-## Performance Comparison
-
-### Single Host Scan (Top 997 Ports)
-| Mode | Timeout | Workers | Speed |
-|------|---------|---------|-------|
-| Normal | 500ms | 200 | ~5 seconds |
-| Ghost | 2s | 10 | ~30 seconds |
-
-### CIDR /24 Scan (254 hosts, 22 ports)
-| Method | Time | Hosts Scanned | Improvement |
-|--------|------|--------------|-------------|
-| Without Discovery (-nd) | 30-40 min | 254 | Baseline |
-| With Discovery (default) | 3-5 min | ~45-60 | **85-90% faster** |
-
----
-
-## Service Detection Examples
-
-### Windows Server
-```
-PORT    STATE  SERVICE      VERSION
- 445    open   microsoft-ds Windows Server 2008 R2
- 3389   open   ms-wbt-server
- 5985   open   http         Microsoft-HTTPAPI/2.0
-```
-
-### Linux with Samba
-```
-PORT    STATE  SERVICE      VERSION
- 22     open   ssh          SSH-2.0 - OpenSSH 6.6.1p1
- 80     open   http         Apache 2.4.7 (Ubuntu)
- 445    open   microsoft-ds Samba smbd 3.X
-```
-
-### Web Server
-```
-PORT    STATE  SERVICE      VERSION
- 80     open   http         Apache 2.4.6
- 443    open   https        Nginx 1.14.0
- 8080   open   http         Jetty 8.1.7
-```
-
----
-
-## Advanced Features
-
-### CIDR Scanning with Auto-Discovery
-```bash
-# Scans /24 network, automatically finds active hosts
-./gomap -s -p 22,80,443,445 192.168.1.0/24
-
-# Takes ~3-5 minutes instead of 30-40 minutes
-```
-
-### DNS Hostname Resolution
-```bash
-# Resolves hostname to IP and scans
-./gomap -s localhost
-./gomap -s example.com
-```
-
-### Batch Multiple Targets
-```bash
-# Combine IPs, CIDR, and comma-separated targets
-./gomap -s 192.168.1.1,192.168.1.0/25,10.0.0.1
-```
-
-### All 65535 Ports
-```bash
-# Use "-" to scan all ports (slow!)
-./gomap -s -p - 192.168.1.100
-```
-
----
-
-## Architecture & Improvements
-
-### v2.0 Enhancements (Current)
-
-#### Performance
-- ✅ 4x faster (500ms timeout vs 2s before)
-- ✅ 2x more parallel workers (200 vs 100)
-- ✅ Eliminated retry delays
-- ✅ Optimized HTTP banner grabbing
-
-#### Detection
-- ✅ SMB version detection (Windows Server specific versions)
-- ✅ Samba identification and version detection
-- ✅ 50+ services with precise version info
-- ✅ SSH protocol version detection
-
-#### Networking
-- ✅ CIDR range support
-- ✅ Multiple IP targets
-- ✅ Automatic host discovery (85-90% faster)
-- ✅ DNS hostname resolution
-- ✅ Network filtering (excl. network/broadcast addresses)
-
-#### Stealth
-- ✅ No ICMP/Ping (no host discovery)
-- ✅ TCP-only scanning
-- ✅ Ghost mode randomization
-- ✅ Jitter implementation
-
----
-
-## Updating
-
-### Method 1: Using the -up Flag
-```bash
-./gomap -up
-```
-Automatically pulls latest changes and rebuilds.
-
-### Method 2: Using go install
-```bash
-go install github.com/NexusFireMan/gomap@latest
-```
-
-### Method 3: Manual Update
-```bash
-cd /path/to/gomap
-git pull origin main
-go build
-```
-
-### Check Version
-```bash
+go build -o gomap .
 ./gomap -v
 ```
 
----
+### Optional helper scripts
 
-## Security Considerations
+```bash
+./scripts/build.sh
+./scripts/install.sh
+```
 
-- ✅ **No Root Required**: Pure TCP scanning, no raw sockets
-- ✅ **No ICMP**: Doesn't send ping packets
-- ✅ **Firewall Compatible**: Works behind restrictive firewalls
-- ✅ **IDS Evasion**: Ghost mode with jitter and randomization
-- ✅ **Stealthy**: Can be run continuously without triggering alerts
+## Quick start
 
----
+```bash
+# Default scan (top common ports)
+./gomap 10.0.11.6
 
-## Technical Specifications
+# Service/version detection on selected ports
+./gomap -s -p 21,22,80,135,139,445,5985 10.0.11.6
 
-### Supported Platforms
-- Linux (primary)
-- macOS
-- Windows
-- Any OS with Go runtime
+# CIDR scan with automatic active-host discovery
+./gomap -s --top-ports 300 10.0.11.0/24
 
-### Language & Dependencies
-- **Language**: Go 1.13+
-- **Dependencies**: Minimal (standard library + SMB protocol library)
-- **Size**: ~5MB executable
+# More robust scan profile for unstable networks
+./gomap -s --retries 2 --adaptive-timeout --backoff-ms 40 --max-timeout 4500 10.0.11.9
 
-### Port Scanning
-- **Method**: TCP Connect Scan
-- **Max Hosts/CIDR**: 65,536 (2^16)
-- **Ports**: 1-65535 (all ports)
-- **Timeout**: Configurable (default 500ms)
+# Machine output for automation
+./gomap -s --format json --out scan.json 10.0.11.6
+```
 
----
+## CLI reference
 
-## License
+```text
+Usage:
+  gomap <host|CIDR> [options]
 
-GOMAP is open source and available under the [MIT License](LICENSE).
+Main options:
+  -p                ports to scan (example: 80,443 or 1-1024 or - for all)
+  --top, --top-ports scan top N ports from curated top-1000 list
+  --exclude-ports   remove ports from final scan set
+  -s                enable service/version detection
+  -g                ghost mode (slower, stealthier)
+  -nd               disable host discovery for CIDR targets
 
----
+Performance/robustness:
+  --workers         concurrent workers (default: auto by mode)
+  --rate            max scan rate in ports/second per host (0 = unlimited)
+  --timeout         per-attempt dial timeout in ms (default: auto by mode)
+  --retries         retries per port on timeout/error
+  --backoff-ms      base exponential backoff between retries
+  --adaptive-timeout enable dynamic timeout tuning (default: true)
+  --max-timeout     adaptive timeout ceiling in ms
+  --max-hosts       cap number of discovered hosts scanned
 
-## Contributing
+Output:
+  --format          text|json|jsonl|csv
+  --json            shortcut for --format json
+  --csv             shortcut for --format csv
+  --out             output file path
+  --details         add latency/confidence/evidence columns (text only)
 
-Contributions are welcome! Please feel free to:
-- Report bugs
-- Suggest features
-- Submit pull requests
+Maintenance:
+  -v                show version/build info
+  -up               update to latest version
+  --remove          remove gomap from /usr/local/bin
+```
 
----
+## Detection realism (`-s`)
 
-## Author
+When `-s` is enabled, gomap combines port-based hints and protocol/banner parsing to infer:
 
-Created by [NexusFireMan](https://github.com/NexusFireMan)
+- HTTP/HTTPS server family/version where available.
+- SSH/FTP/PostgreSQL/Redis/MySQL and other protocol banners.
+- SMB-oriented identification for `microsoft-ds` targets.
 
-### Repository
-[github.com/NexusFireMan/gomap](https://github.com/NexusFireMan/gomap)
+Important: banner-based detection is heuristic. Always validate critical findings with a second tool (`nmap -sV`, native service queries, or manual protocol checks).
 
----
+## Output formats
 
-## Changelog
+### Text (`--format text`, default)
 
-See [CHANGELOG.md](CHANGELOG.md) for a detailed history of all releases and changes.
+- Aligned table per host.
+- Optional `--details` adds `LAT(ms)`, `CONF`, `EVIDENCE`.
+- Final `Host Exposure Summary` with open ports, critical services, and exposure level.
 
-Current version: **v2.0.5** - Fixed package imports and type references
+### JSON (`--format json`)
 
----
+Single report document with metadata:
 
-**Made with ❤️ for security professionals and network administrators.**
+- `schema_version`, `generated_at`, `target`, `duration_ms`
+- `hosts_scanned`, `ports_requested`, `total_open_ports`
+- `hosts[]` with per-port results
+
+### JSONL (`--format jsonl`)
+
+One JSON record per open port, suitable for streaming pipelines.
+
+### CSV (`--format csv`)
+
+One row per open port with columns:
+
+`host,port,state,service,version,latency_ms,confidence,evidence,detection_path`
+
+## Testing and quality
+
+### Local checks
+
+```bash
+make lint
+make test
+make test-race
+make coverage
+make ci
+```
+
+`make ci` runs lint + tests + race + coverage gate.
+
+### Lab integration tests (Metasploitable3)
+
+Integration tests are opt-in and target live lab hosts.
+
+```bash
+export GOMAP_RUN_LAB_TESTS=1
+export GOMAP_LAB_WINDOWS_IP=10.0.11.6
+export GOMAP_LAB_LINUX_IP=10.0.11.9
+go test ./pkg/app -run LabIntegration -v
+```
+
+## Project layout
+
+```text
+cmd/gomap/      CLI parsing, version/update/remove commands
+pkg/app/        Orchestration: target expansion, discovery, scan workflow
+pkg/scanner/    Scan engine + service/banner detection
+pkg/output/     Table renderer + json/jsonl/csv report generation
+.github/        CI and release workflows
+```
+
+## Release process
+
+- CI: `.github/workflows/ci.yml` (lint, tests, race, coverage).
+- Release PR automation: `release-please` workflow.
+- Tagged releases: GoReleaser workflow builds reproducible artifacts and checksums.
+
+## Responsible use
+
+Use this tool only on systems and networks you are authorized to test.

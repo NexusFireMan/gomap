@@ -70,11 +70,17 @@ func Port(port int) string {
 
 // Service returns a bright green colored service name
 func Service(name string) string {
+	if name == "" {
+		return ""
+	}
 	return fmt.Sprintf("%s%s%s", ColorGreen, name, ColorReset)
 }
 
 // Version returns a bright yellow colored version
 func Version(version string) string {
+	if version == "" {
+		return ""
+	}
 	return fmt.Sprintf("%s%s%s", ColorBrightYellow, version, ColorReset)
 }
 

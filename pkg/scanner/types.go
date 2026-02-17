@@ -1,11 +1,18 @@
 package scanner
 
+import "time"
+
 // ScanResult holds the result of a single port scan
 type ScanResult struct {
-	Port        int
-	IsOpen      bool
-	ServiceName string
-	Version     string
+	Port          int           `json:"port"`
+	IsOpen        bool          `json:"open"`
+	ServiceName   string        `json:"service,omitempty"`
+	Version       string        `json:"version,omitempty"`
+	Latency       time.Duration `json:"-"`
+	LatencyMs     int64         `json:"latency_ms,omitempty"`
+	Confidence    string        `json:"confidence,omitempty"`
+	Evidence      string        `json:"evidence,omitempty"`
+	DetectionPath string        `json:"detection_path,omitempty"`
 }
 
 // GetTop1000Ports returns the top 1000 most commonly used ports
