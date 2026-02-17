@@ -126,22 +126,19 @@ func tryUpdateActiveBinary(binaryPath string) {
 		return
 	}
 
-	if err := copyFile(binaryPath, activePath); err == nil {
+	if err := replaceBinaryAtomically(binaryPath, activePath); err == nil {
 		fmt.Printf("%s\n", output.StatusOK(fmt.Sprintf("Updated active binary: %s", output.Highlight(activePath))))
 		return
 	}
 
-	cmd := exec.Command("sudo", "cp", binaryPath, activePath)
-	if cmdOutput, err := cmd.CombinedOutput(); err == nil {
+	if err := replaceBinaryAtomicallyWithSudo(binaryPath, activePath); err == nil {
 		fmt.Printf("%s\n", output.StatusOK(fmt.Sprintf("Updated active binary with sudo: %s", output.Highlight(activePath))))
 		return
-	} else if strings.TrimSpace(string(cmdOutput)) != "" {
-		fmt.Printf("%s\n", output.StatusWarn(fmt.Sprintf("sudo output: %s", strings.TrimSpace(string(cmdOutput)))))
 	}
 
 	// Common case: PATH prioritizes /usr/local/bin but go install writes into ~/go/bin.
 	fmt.Printf("%s\n", output.StatusWarn(fmt.Sprintf("Active command still points to %s", output.Highlight(activePath))))
-	fmt.Printf("%s\n", output.StatusWarn(fmt.Sprintf("Run manually: sudo cp %s %s", binaryPath, activePath)))
+	fmt.Printf("%s\n", output.StatusWarn(fmt.Sprintf("Run manually: sudo install -m 0755 %s %s.new && sudo mv -f %s.new %s", binaryPath, activePath, activePath, activePath)))
 }
 
 // copyFile copies a file from src to dst
@@ -155,6 +152,43 @@ func copyFile(src, dst string) error {
 		return err
 	}
 
+	return nil
+}
+
+func replaceBinaryAtomically(src, dst string) error {
+	tmp := dst + ".new"
+	if err := copyFile(src, tmp); err != nil {
+		return err
+	}
+	if err := os.Chmod(tmp, 0755); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	if err := os.Rename(tmp, dst); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	return nil
+}
+
+func replaceBinaryAtomicallyWithSudo(src, dst string) error {
+	tmp := dst + ".new"
+
+	installCmd := exec.Command("sudo", "install", "-m", "0755", src, tmp)
+	if cmdOutput, err := installCmd.CombinedOutput(); err != nil {
+		if strings.TrimSpace(string(cmdOutput)) != "" {
+			fmt.Printf("%s\n", output.StatusWarn(fmt.Sprintf("sudo output: %s", strings.TrimSpace(string(cmdOutput)))))
+		}
+		return err
+	}
+
+	renameCmd := exec.Command("sudo", "mv", "-f", tmp, dst)
+	if cmdOutput, err := renameCmd.CombinedOutput(); err != nil {
+		if strings.TrimSpace(string(cmdOutput)) != "" {
+			fmt.Printf("%s\n", output.StatusWarn(fmt.Sprintf("sudo output: %s", strings.TrimSpace(string(cmdOutput)))))
+		}
+		return err
+	}
 	return nil
 }
 

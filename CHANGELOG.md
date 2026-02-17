@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.2.1] - 2026-02-17
+
+### Fixed
+- **Updater binary replacement**: `gomap -up` now updates the active binary using atomic replacement (`*.new` + `mv`) to avoid `text file busy` errors when `/usr/local/bin/gomap` is currently executing.
+- **Manual fallback command** updated to the same atomic pattern for reliable system-wide updates.
+
 ## [2.2.0] - 2026-02-17
 
 ### Changed
