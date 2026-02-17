@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"github.com/NexusFireMan/gomap/pkg/output"
 )
@@ -63,53 +64,84 @@ func updateUsingGit() error {
 func updateUsingGoInstall() error {
 	fmt.Println(output.Info("📦 Installing latest version using go install..."))
 
-	cmd := exec.Command("go", "install", RepoURL+"@latest")
+	cmd := exec.Command("go", "install", ModulePath+"@latest")
 	if cmdOutput, err := cmd.CombinedOutput(); err != nil {
 		fmt.Printf("%s\n", output.StatusWarn(fmt.Sprintf("Installation output: %s", string(cmdOutput))))
 		return fmt.Errorf("failed to install: %w", err)
 	}
 
-	// Find where go installed the binary
-	gopath := os.Getenv("GOPATH")
-	if gopath == "" {
-		gopath = filepath.Join(os.Getenv("HOME"), "go")
+	binaryPath, err := resolveGoInstalledBinaryPath()
+	if err != nil {
+		return err
 	}
-
-	binaryPath := filepath.Join(gopath, "bin", "gomap")
 	if _, err := os.Stat(binaryPath); err == nil {
 		fmt.Printf("%s\n", output.StatusOK(fmt.Sprintf("gomap installed at: %s", output.Highlight(binaryPath))))
 
-		// Try to install to system path
-		installToSystemPath(binaryPath)
+		// Try to keep the command used by the user updated (PATH can point to /usr/local/bin first).
+		tryUpdateActiveBinary(binaryPath)
 	}
 
 	fmt.Println(output.StatusOK("gomap has been updated to the latest version"))
 	return nil
 }
 
-// installToSystemPath attempts to install the binary to /usr/local/bin for system-wide access
-func installToSystemPath(binaryPath string) {
-	systemPath := "/usr/local/bin"
-	destPath := filepath.Join(systemPath, "gomap")
+func resolveGoInstalledBinaryPath() (string, error) {
+	gobinCmd := exec.Command("go", "env", "GOBIN")
+	if out, err := gobinCmd.Output(); err == nil {
+		gobin := strings.TrimSpace(string(out))
+		if gobin != "" {
+			return filepath.Join(gobin, "gomap"), nil
+		}
+	}
 
-	// Try to copy with sudo
-	cmd := exec.Command("sudo", "cp", binaryPath, destPath)
-	if err := cmd.Run(); err == nil {
-		fmt.Printf("%s\n", output.StatusOK(fmt.Sprintf("Also installed to: %s (system-wide access)", destPath)))
+	gopathCmd := exec.Command("go", "env", "GOPATH")
+	if out, err := gopathCmd.Output(); err == nil {
+		gopath := strings.TrimSpace(string(out))
+		if gopath != "" {
+			parts := filepath.SplitList(gopath)
+			if len(parts) > 0 && parts[0] != "" {
+				return filepath.Join(parts[0], "bin", "gomap"), nil
+			}
+		}
+	}
 
-		// Make sure it's executable
-		_ = exec.Command("sudo", "chmod", "+x", destPath).Run()
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("could not determine Go bin path")
+	}
+	return filepath.Join(home, "go", "bin", "gomap"), nil
+}
+
+func tryUpdateActiveBinary(binaryPath string) {
+	activePath, err := exec.LookPath("gomap")
+	if err != nil {
+		fmt.Printf("%s\n", output.StatusWarn("Could not resolve active gomap path from PATH."))
 		return
 	}
 
-	// Try without sudo if direct access works
-	if err := copyFile(binaryPath, destPath); err == nil {
-		fmt.Printf("%s\n", output.StatusOK(fmt.Sprintf("Also installed to: %s (system-wide access)", destPath)))
+	activePath, _ = filepath.EvalSymlinks(activePath)
+	binaryPath, _ = filepath.EvalSymlinks(binaryPath)
+
+	if activePath == binaryPath {
 		return
 	}
 
-	// Fallback: inform user
-	fmt.Printf("%s\n", output.StatusWarn(fmt.Sprintf("To install system-wide, run: sudo cp %s %s", binaryPath, destPath)))
+	if err := copyFile(binaryPath, activePath); err == nil {
+		fmt.Printf("%s\n", output.StatusOK(fmt.Sprintf("Updated active binary: %s", output.Highlight(activePath))))
+		return
+	}
+
+	cmd := exec.Command("sudo", "cp", binaryPath, activePath)
+	if cmdOutput, err := cmd.CombinedOutput(); err == nil {
+		fmt.Printf("%s\n", output.StatusOK(fmt.Sprintf("Updated active binary with sudo: %s", output.Highlight(activePath))))
+		return
+	} else if strings.TrimSpace(string(cmdOutput)) != "" {
+		fmt.Printf("%s\n", output.StatusWarn(fmt.Sprintf("sudo output: %s", strings.TrimSpace(string(cmdOutput)))))
+	}
+
+	// Common case: PATH prioritizes /usr/local/bin but go install writes into ~/go/bin.
+	fmt.Printf("%s\n", output.StatusWarn(fmt.Sprintf("Active command still points to %s", output.Highlight(activePath))))
+	fmt.Printf("%s\n", output.StatusWarn(fmt.Sprintf("Run manually: sudo cp %s %s", binaryPath, activePath)))
 }
 
 // copyFile copies a file from src to dst

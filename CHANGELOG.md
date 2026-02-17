@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.1.1] - 2026-02-17
+
+### Fixed
+- **Updater install target**: `gomap -up` now uses the correct Go module path (`github.com/NexusFireMan/gomap@latest`) instead of a repository URL, fixing `argument must be a clean package path`.
+- **Active binary synchronization**: after `go install`, updater now attempts to replace the binary currently resolved in `PATH` so `gomap -v` reflects the new version immediately.
+- **Go bin path resolution**: updater now resolves installation path using `go env GOBIN` / `go env GOPATH` with fallback, improving reliability across environments.
+
 ## [2.1.0] - 2026-02-17
 
 ### Added
