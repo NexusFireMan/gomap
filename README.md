@@ -172,3 +172,7 @@ pkg/output/     Table renderer + json/jsonl/csv report generation
 ## Responsible use
 
 Use this tool only on systems and networks you are authorized to test.
+
+---
+If you liked me, you can invite me for a coffee.
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/C0C61UHTB1)
