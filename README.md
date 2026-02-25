@@ -42,6 +42,7 @@ go install github.com/NexusFireMan/gomap/v2@latest
 ### Version Metadata
 
 - Release binaries and local script builds embed `Version`, `Commit`, and `Date`.
+- `gomap -up` now prefers release binaries to preserve embedded build metadata in final installations.
 - Plain `go install` builds may not include ldflags, so `gomap -v` also uses Go build info fallback when available.
 
 ## Quick start

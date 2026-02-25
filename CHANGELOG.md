@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.3.1] - 2026-02-25
+
+### Fixed
+- **Updater reliability on end-user installs**: `gomap -up` now prefers downloading the latest GitHub release binary (with checksum verification) instead of relying only on `go install`.
+- **Version metadata after update**: release-binary update path preserves embedded `Version`, `Commit`, and `Date`, avoiding ambiguous `dev/unknown` outputs in `gomap -v`.
+- **Cross-platform asset handling**: updater now resolves the correct release archive per `GOOS/GOARCH` and extracts the binary automatically.
+- **Safe fallback path**: if release-binary update fails, updater falls back to previous `go install` method.
+
 ## [2.3.0] - 2026-02-25
 
 ### Added

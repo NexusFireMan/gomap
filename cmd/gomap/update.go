@@ -1,11 +1,20 @@
 package gomap
 
 import (
+	"archive/tar"
+	"archive/zip"
+	"compress/gzip"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"time"
 
@@ -21,7 +30,13 @@ func CheckUpdate() error {
 		return updateUsingGit()
 	}
 
-	// Otherwise, try using go install
+	// Prefer release asset update (includes embedded metadata), fallback to go install.
+	if err := updateUsingReleaseAsset(); err == nil {
+		return nil
+	} else {
+		fmt.Printf("%s\n", output.StatusWarn(fmt.Sprintf("Release binary update failed: %v", err)))
+		fmt.Printf("%s\n", output.StatusWarn("Falling back to go install..."))
+	}
 	return updateUsingGoInstall()
 }
 
@@ -108,6 +123,257 @@ func updateUsingGoInstall() error {
 
 	fmt.Println(output.StatusOK("gomap has been updated to the latest version"))
 	return nil
+}
+
+type githubRelease struct {
+	TagName string `json:"tag_name"`
+	Assets  []struct {
+		Name               string `json:"name"`
+		BrowserDownloadURL string `json:"browser_download_url"`
+	} `json:"assets"`
+}
+
+func updateUsingReleaseAsset() error {
+	fmt.Println(output.Info("📦 Installing latest release binary..."))
+
+	rel, err := fetchLatestRelease()
+	if err != nil {
+		return err
+	}
+
+	archiveName, archiveURL, checksumURL := pickReleaseAssets(rel)
+	if archiveURL == "" {
+		return fmt.Errorf("no compatible release asset found for %s/%s", runtime.GOOS, runtime.GOARCH)
+	}
+
+	tmpDir, err := os.MkdirTemp("", "gomap-update-*")
+	if err != nil {
+		return fmt.Errorf("failed to create temp dir: %w", err)
+	}
+	defer func() { _ = os.RemoveAll(tmpDir) }()
+
+	archivePath := filepath.Join(tmpDir, archiveName)
+	if err := downloadFile(archiveURL, archivePath); err != nil {
+		return fmt.Errorf("failed to download release asset: %w", err)
+	}
+
+	if checksumURL != "" {
+		checksumPath := filepath.Join(tmpDir, "checksums.txt")
+		if err := downloadFile(checksumURL, checksumPath); err == nil {
+			if err := verifyChecksum(archivePath, archiveName, checksumPath); err != nil {
+				return fmt.Errorf("checksum verification failed: %w", err)
+			}
+		}
+	}
+
+	binPath := filepath.Join(tmpDir, "gomap")
+	if runtime.GOOS == "windows" {
+		binPath += ".exe"
+	}
+	if err := extractBinaryFromArchive(archivePath, binPath); err != nil {
+		return fmt.Errorf("failed to extract binary: %w", err)
+	}
+	_ = os.Chmod(binPath, 0o755)
+
+	installedVersion, _ := readBinaryVersion(binPath)
+	fmt.Printf("%s\n", output.StatusOK(fmt.Sprintf("Downloaded release %s asset: %s", rel.TagName, archiveName)))
+	if installedVersion != "" {
+		fmt.Printf("%s\n", output.Info(fmt.Sprintf("Release binary version: %s", output.Highlight(installedVersion))))
+	}
+
+	if err := tryUpdateActiveBinary(binPath); err != nil {
+		return err
+	}
+
+	fmt.Println(output.StatusOK("gomap has been updated to the latest release binary"))
+	return nil
+}
+
+func fetchLatestRelease() (githubRelease, error) {
+	var rel githubRelease
+	req, err := http.NewRequest(http.MethodGet, "https://api.github.com/repos/NexusFireMan/gomap/releases/latest", nil)
+	if err != nil {
+		return rel, err
+	}
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("User-Agent", "gomap-updater")
+
+	client := &http.Client{Timeout: 20 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return rel, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		return rel, fmt.Errorf("github api responded %s: %s", resp.Status, strings.TrimSpace(string(body)))
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&rel); err != nil {
+		return rel, err
+	}
+	return rel, nil
+}
+
+func pickReleaseAssets(rel githubRelease) (archiveName, archiveURL, checksumURL string) {
+	expectedCore := "_" + runtime.GOOS + "_" + runtime.GOARCH
+	expectedExt := ".tar.gz"
+	if runtime.GOOS == "windows" {
+		expectedExt = ".zip"
+	}
+
+	for _, a := range rel.Assets {
+		switch {
+		case a.Name == "checksums.txt":
+			checksumURL = a.BrowserDownloadURL
+		case strings.Contains(a.Name, expectedCore) && strings.HasSuffix(a.Name, expectedExt):
+			archiveName = a.Name
+			archiveURL = a.BrowserDownloadURL
+		}
+	}
+	return archiveName, archiveURL, checksumURL
+}
+
+func downloadFile(url, dst string) error {
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("User-Agent", "gomap-updater")
+
+	client := &http.Client{Timeout: 60 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("download failed: %s", resp.Status)
+	}
+
+	f, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = f.Close() }()
+	if _, err := io.Copy(f, resp.Body); err != nil {
+		return err
+	}
+	return nil
+}
+
+func verifyChecksum(archivePath, archiveName, checksumsPath string) error {
+	data, err := os.ReadFile(checksumsPath)
+	if err != nil {
+		return err
+	}
+
+	var expected string
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		parts := strings.Fields(line)
+		if len(parts) >= 2 && parts[len(parts)-1] == archiveName {
+			expected = parts[0]
+			break
+		}
+	}
+	if expected == "" {
+		return fmt.Errorf("checksum not found for %s", archiveName)
+	}
+
+	f, err := os.Open(archivePath)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = f.Close() }()
+	sum := sha256.New()
+	if _, err := io.Copy(sum, f); err != nil {
+		return err
+	}
+	actual := hex.EncodeToString(sum.Sum(nil))
+	if !strings.EqualFold(actual, expected) {
+		return fmt.Errorf("checksum mismatch: expected %s, got %s", expected, actual)
+	}
+	return nil
+}
+
+func extractBinaryFromArchive(archivePath, dstBinary string) error {
+	if strings.HasSuffix(archivePath, ".zip") {
+		return extractBinaryFromZip(archivePath, dstBinary)
+	}
+	if strings.HasSuffix(archivePath, ".tar.gz") {
+		return extractBinaryFromTarGz(archivePath, dstBinary)
+	}
+	return fmt.Errorf("unsupported archive format: %s", archivePath)
+}
+
+func extractBinaryFromTarGz(archivePath, dstBinary string) error {
+	f, err := os.Open(archivePath)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = f.Close() }()
+	gz, err := gzip.NewReader(f)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = gz.Close() }()
+
+	tr := tar.NewReader(gz)
+	for {
+		hdr, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return err
+		}
+		name := filepath.Base(hdr.Name)
+		if name == "gomap" || name == "gomap.exe" {
+			outFile, err := os.Create(dstBinary)
+			if err != nil {
+				return err
+			}
+			defer func() { _ = outFile.Close() }()
+			if _, err := io.Copy(outFile, tr); err != nil {
+				return err
+			}
+			return nil
+		}
+	}
+	return fmt.Errorf("gomap binary not found in tar.gz")
+}
+
+func extractBinaryFromZip(archivePath, dstBinary string) error {
+	zr, err := zip.OpenReader(archivePath)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = zr.Close() }()
+
+	for _, f := range zr.File {
+		name := filepath.Base(f.Name)
+		if name == "gomap" || name == "gomap.exe" {
+			rc, err := f.Open()
+			if err != nil {
+				return err
+			}
+			defer func() { _ = rc.Close() }()
+
+			outFile, err := os.Create(dstBinary)
+			if err != nil {
+				return err
+			}
+			defer func() { _ = outFile.Close() }()
+			if _, err := io.Copy(outFile, rc); err != nil {
+				return err
+			}
+			return nil
+		}
+	}
+	return fmt.Errorf("gomap binary not found in zip")
 }
 
 func runGoInstallLatest(useDirectProxy bool) error {
@@ -267,10 +533,13 @@ func PrintVersion() {
 // PrintUpdateInfo prints information about updating
 func PrintUpdateInfo() {
 	fmt.Println("\n" + output.Bold("Update methods:"))
-	fmt.Println("1. Using git (if cloned from repository):")
+	fmt.Println("1. Built-in updater (recommended):")
 	fmt.Printf("   %s\n", output.Highlight("gomap -up"))
-	fmt.Println("\n2. Using go install (from anywhere):")
+	fmt.Println("   (downloads latest release binary with checksum verification)")
+	fmt.Println("\n2. Using git (if cloned from repository):")
+	fmt.Printf("   %s\n", output.Highlight("gomap -up"))
+	fmt.Println("\n3. Using go install (from anywhere):")
 	fmt.Printf("   %s\n", output.Highlight("go install github.com/NexusFireMan/gomap/v2@latest"))
-	fmt.Println("\n3. Manual update:")
+	fmt.Println("\n4. Manual update:")
 	fmt.Printf("   %s\n", output.Highlight("git pull origin main && go build"))
 }
