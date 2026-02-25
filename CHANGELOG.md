@@ -2,6 +2,28 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.3.0] - 2026-02-25
+
+### Added
+- **Professional CLI help UX**: `gomap -h` now uses a sectioned layout with banner, grouped flags, and clearer examples.
+- **Consistent CLI visuals**: banner is now shown both in help and in text-mode scan runs.
+- **Version output upgrade**: `gomap -v` now renders structured version/build sections.
+
+### Changed
+- **Ghost mode defaults hardened** for ultra-stealth:
+  - lower default rate
+  - lower worker cap
+  - reduced CIDR discovery probes (`443,80,22`) with explicit messaging
+- **Flag naming consistency**:
+  - canonical flags are `--random-agent` and `--random-ip`
+  - legacy aliases (`--ramdom-agent`, `--ip-ram`, `--ip-random`) are still accepted
+
+### Fixed
+- **Build metadata reliability**:
+  - runtime fallback in `-v` now uses Go build info (`vcs.revision`, `vcs.time`) and pseudo-version parsing when ldflags are absent
+  - scripts now embed `Version`, `Commit`, and `Date` via ldflags
+  - git-based self-update rebuild now embeds commit/date metadata
+
 ## [2.2.2] - 2026-02-17
 
 ### Fixed

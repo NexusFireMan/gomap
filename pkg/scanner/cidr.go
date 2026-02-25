@@ -8,6 +8,13 @@ import (
 	"time"
 )
 
+// DiscoveryOptions controls CIDR host discovery behavior.
+type DiscoveryOptions struct {
+	Ports      []int
+	Timeout    time.Duration
+	NumWorkers int
+}
+
 // ExpandCIDR expands a CIDR notation to a list of IPs
 func ExpandCIDR(cidr string) ([]string, error) {
 	// Check if it's a single IP address
@@ -142,12 +149,32 @@ func IsCIDR(target string) bool {
 // DiscoverActiveHosts performs a quick host discovery on a CIDR range
 // It attempts to connect to common ports (443, 80, 22, 445, 3306) to determine if hosts are active
 func DiscoverActiveHosts(hosts []string, timeout time.Duration, numWorkers int) []string {
+	return DiscoverActiveHostsWithOptions(hosts, DiscoveryOptions{
+		Ports:      []int{443, 80, 22, 445, 3306, 8080, 3389},
+		Timeout:    timeout,
+		NumWorkers: numWorkers,
+	})
+}
+
+// DiscoverActiveHostsWithOptions performs host discovery using configurable probe ports and concurrency.
+func DiscoverActiveHostsWithOptions(hosts []string, opts DiscoveryOptions) []string {
 	if len(hosts) <= 1 {
 		// Skip discovery for single IPs or empty lists
 		return hosts
 	}
 
-	commonPorts := []int{443, 80, 22, 445, 3306, 8080, 3389}
+	commonPorts := opts.Ports
+	if len(commonPorts) == 0 {
+		commonPorts = []int{443, 80, 22}
+	}
+	timeout := opts.Timeout
+	if timeout <= 0 {
+		timeout = 500 * time.Millisecond
+	}
+	numWorkers := opts.NumWorkers
+	if numWorkers <= 0 {
+		numWorkers = 25
+	}
 	activeChan := make(chan string, len(hosts))
 	var wg sync.WaitGroup
 	semaphore := make(chan struct{}, numWorkers)

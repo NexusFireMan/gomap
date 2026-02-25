@@ -11,6 +11,9 @@ A fast TCP port scanner written in Go, with optional service/version detection, 
 - Robust scan controls for unstable networks: retries, backoff, adaptive timeout.
 - Professional outputs: `text`, `json`, `jsonl`, `csv`.
 - Per-host exposure summary in text mode.
+- Ghost mode hardening: lower burst rate, heavier jitter, and fewer active probes.
+- Ultra-stealth ghost defaults: low rate, low worker count, and reduced CIDR discovery probes.
+- Optional HTTP identity randomization: `--random-agent` and `--random-ip`.
 
 ## Installation
 
@@ -36,6 +39,11 @@ go build -o gomap .
 go install github.com/NexusFireMan/gomap/v2@latest
 ```
 
+### Version Metadata
+
+- Release binaries and local script builds embed `Version`, `Commit`, and `Date`.
+- Plain `go install` builds may not include ldflags, so `gomap -v` also uses Go build info fallback when available.
+
 ## Quick start
 
 ```bash
@@ -53,6 +61,12 @@ go install github.com/NexusFireMan/gomap/v2@latest
 
 # Machine output for automation
 ./gomap -s --format json --out scan.json 10.0.11.6
+
+# Stealthier service detection profile
+./gomap -g -s --random-agent --random-ip 10.0.11.0/24
+
+# Maximum stealth for CIDR (skip discovery entirely)
+./gomap -g -nd -s --random-agent --random-ip -p 22,80,443 10.0.11.0/24
 ```
 
 ## CLI reference
@@ -86,6 +100,19 @@ Output:
   --out             output file path
   --details         add latency/confidence/evidence columns (text only)
 
+Stealth/identity (HTTP probes):
+  --random-agent    randomize HTTP User-Agent on each request
+  --random-ip       randomize HTTP X-Forwarded-For/X-Real-IP from target CIDR
+
+Compatibility note:
+  legacy aliases (`--ramdom-agent`, `--ip-ram`, `--ip-random`) are still accepted for backward compatibility.
+
+Ghost defaults:
+  - lower default rate and worker count
+  - reduced host-discovery probes on CIDR (443,80,22)
+  - use `-nd` to disable host discovery completely on CIDR
+  - tradeoff: discovery may miss hosts that only expose non-probed ports (for example 139/445 only)
+
 Maintenance:
   -v                show version/build info
   -up               update to latest version
@@ -101,6 +128,39 @@ When `-s` is enabled, gomap combines port-based hints and protocol/banner parsin
 - SMB-oriented identification for `microsoft-ds` targets.
 
 Important: banner-based detection is heuristic. Always validate critical findings with a second tool (`nmap -sV`, native service queries, or manual protocol checks).
+
+Note: `--random-ip` randomizes HTTP headers only; it does not spoof the real TCP source IP.
+
+## Stealth benchmark (lab)
+
+Benchmark executed on **February 25, 2026** with:
+
+- Scanner host: `10.0.11.11`
+- Targets: `10.0.11.0/24` (Metasploitable3 Windows `10.0.11.6`, Linux `10.0.11.9`, Snort `10.0.11.8`)
+- IDS: Snort `2.9.20` (`10.0.11.8`)
+- Ports: `22,80,139,445,3389,5985`
+
+Commands compared:
+
+```bash
+# Normal
+gomap -s -p 22,80,139,445,3389,5985 10.0.11.0/24
+
+# Ghost ultra-stealth
+gomap -g -s --random-agent --random-ip -p 22,80,139,445,3389,5985 10.0.11.0/24
+```
+
+Observed results (Snort `snort.alert.fast`, TCP alerts with source `10.0.11.11`):
+
+| Mode | New alerts (all) | New TCP alerts from scanner | Scan duration |
+|------|-------------------|-----------------------------|---------------|
+| Normal | 104 | 89 | ~6.2s |
+| Ghost ultra-stealth | 41 | 20 | ~11.5s |
+
+Takeaway:
+
+- Ghost ultra-stealth reduced scanner-attributed TCP alerts by about **77.5%** (`89 -> 20`).
+- Tradeoff is slower execution and less aggressive service/version fingerprinting.
 
 ## Output formats
 

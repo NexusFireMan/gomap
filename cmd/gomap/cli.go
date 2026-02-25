@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	out "github.com/NexusFireMan/gomap/v2/pkg/output"
 )
 
 // CLIOptions holds all parsed/validated CLI arguments.
@@ -33,14 +35,18 @@ type CLIOptions struct {
 	MaxTimeoutMS    int
 	AdaptiveTimeout bool
 	DetailsFlag     bool
+	RandomAgent     bool
+	RandomIP        bool
 	Host            string
 }
 
 var errUsage = errors.New("usage")
+var errHelp = errors.New("help")
 
 // ParseCLIOptions parses and validates all command-line arguments.
 func ParseCLIOptions(args []string) (CLIOptions, error) {
 	var opts CLIOptions
+	args = normalizeLegacyFlagAliases(args)
 
 	fs := flag.NewFlagSet("gomap", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
@@ -67,29 +73,17 @@ func ParseCLIOptions(args []string) (CLIOptions, error) {
 	fs.IntVar(&opts.MaxTimeoutMS, "max-timeout", 0, "maximum adaptive timeout in milliseconds (0 = automatic)")
 	fs.BoolVar(&opts.AdaptiveTimeout, "adaptive-timeout", true, "enable adaptive timeout tuning during scan")
 	fs.BoolVar(&opts.DetailsFlag, "details", false, "include latency/confidence/evidence columns in table output")
+	fs.BoolVar(&opts.RandomAgent, "random-agent", false, "randomize HTTP User-Agent on each request (service detection)")
+	fs.BoolVar(&opts.RandomIP, "random-ip", false, "send randomized X-Forwarded-For/X-Real-IP headers from target CIDR (HTTP probes)")
 
 	fs.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Gomap: A fast and simple port scanner written in Go.\n\n")
-		fmt.Fprintf(os.Stderr, "Usage:\n  gomap <host|CIDR> [options]\n\n")
-		fmt.Fprintf(os.Stderr, "Options:\n")
-		fs.PrintDefaults()
-		fmt.Fprintf(os.Stderr, "\nNotes:\n")
-		fmt.Fprintf(os.Stderr, "  - CIDR scans automatically discover active hosts first (can be disabled with -nd)\n")
-		fmt.Fprintf(os.Stderr, "  - Host discovery probes ports: 443, 80, 22, 445, 3306, 8080, 3389\n")
-		fmt.Fprintf(os.Stderr, "\nExamples:\n")
-		fmt.Fprintf(os.Stderr, "  gomap 127.0.0.1                              (Scan top ports on localhost)\n")
-		fmt.Fprintf(os.Stderr, "  gomap -p 80,443,8080 192.168.1.1           (Scan specific ports on single IP)\n")
-		fmt.Fprintf(os.Stderr, "  gomap -p 1-1024 -s 192.168.1.0/24          (Scan CIDR with auto host discovery)\n")
-		fmt.Fprintf(os.Stderr, "  gomap -g -p 1-1024 10.0.0.0/25             (Stealthy ghost mode scan on CIDR)\n")
-		fmt.Fprintf(os.Stderr, "  gomap -s -nd -p 22 192.168.1.0/24          (Scan all hosts, no discovery)\n")
-		fmt.Fprintf(os.Stderr, "  gomap -s --top 200 --json 10.0.0.5         (Top 200 ports in JSON)\n")
-		fmt.Fprintf(os.Stderr, "  gomap --csv -p 1-1024 10.0.0.0/24          (CSV output for automation)\n")
-		fmt.Fprintf(os.Stderr, "  gomap -s --format jsonl --out scan.jsonl 10.0.11.6\n")
-		fmt.Fprintf(os.Stderr, "  gomap -s --retries 2 --adaptive-timeout --backoff-ms 40 10.0.11.6\n")
-		fmt.Fprintf(os.Stderr, "  gomap -s --top-ports 200 --exclude-ports 139,445 --rate 300 --max-hosts 50 10.0.11.0/24\n")
+		printHelp(os.Stderr)
 	}
 
 	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return opts, errHelp
+		}
 		return opts, errUsage
 	}
 
@@ -174,6 +168,108 @@ func normalizeOptions(opts CLIOptions) (CLIOptions, error) {
 	if opts.DetailsFlag && opts.FormatFlag != "text" {
 		return opts, errors.New("--details is only valid with text output")
 	}
+	if opts.RandomIP && !opts.ServiceFlag {
+		return opts, errors.New("--random-ip requires -s (service detection)")
+	}
 
 	return opts, nil
+}
+
+func normalizeLegacyFlagAliases(args []string) []string {
+	out := make([]string, 0, len(args))
+	for _, arg := range args {
+		switch {
+		case arg == "--ramdom-agent":
+			out = append(out, "--random-agent")
+		case strings.HasPrefix(arg, "--ramdom-agent="):
+			out = append(out, strings.Replace(arg, "--ramdom-agent=", "--random-agent=", 1))
+		case arg == "--ip-ram":
+			out = append(out, "--random-ip")
+		case strings.HasPrefix(arg, "--ip-ram="):
+			out = append(out, strings.Replace(arg, "--ip-ram=", "--random-ip=", 1))
+		case arg == "--ip-random":
+			out = append(out, "--random-ip")
+		case strings.HasPrefix(arg, "--ip-random="):
+			out = append(out, strings.Replace(arg, "--ip-random=", "--random-ip=", 1))
+		default:
+			out = append(out, arg)
+		}
+	}
+	return out
+}
+
+func printHelp(w *os.File) {
+	help := fmt.Sprintf(`%s  ██████╗  ██████╗ ███╗   ███╗ █████╗ ██████╗
+ ██╔════╝ ██╔═══██╗████╗ ████║██╔══██╗██╔══██╗
+ ██║  ███╗██║   ██║██╔████╔██║███████║██████╔╝
+ ██║   ██║██║   ██║██║╚██╔╝██║██╔══██║██╔═══╝
+ ╚██████╔╝╚██████╔╝██║ ╚═╝ ██║██║  ██║██║
+  ╚═════╝  ╚═════╝ ╚═╝     ╚═╝╚═╝  ╚═╝╚═╝%s
+
+%sGomap%s - fast TCP scanner with service detection and stealth profiles.
+
+%sUsage:%s
+  gomap <host|CIDR> [options]
+  gomap -h
+
+%sTarget & Scan:%s
+  -p <ports>                 ports to scan (80,443 | 1-1024 | -)
+  --top <N>                  scan top N ports from curated top-1000 list
+  --top-ports <N>            alias of --top
+  --exclude-ports <ports>    remove ports from final scan set
+  -s                         enable service/version detection
+  -g                         ghost mode (slower, stealthier)
+  -nd                        disable CIDR host discovery
+
+%sPerformance & Robustness:%s
+  --workers <N>              concurrent workers (auto by mode if 0)
+  --rate <N>                 max ports/second per host (0 = unlimited)
+  --timeout <ms>             dial timeout per attempt
+  --retries <N>              retries per port
+  --backoff-ms <ms>          exponential backoff base between retries
+  --adaptive-timeout         dynamic timeout tuning (default: true)
+  --max-timeout <ms>         adaptive timeout upper bound
+  --max-hosts <N>            cap discovered hosts to scan
+
+%sOutput:%s
+  --format <text|json|jsonl|csv>
+  --json                     shortcut for --format json
+  --csv                      shortcut for --format csv
+  --out <path>               write output to file
+  --details                  add latency/confidence/evidence columns (text only)
+
+%sStealth Identity (HTTP probes):%s
+  --random-agent             random User-Agent per request
+  --random-ip                random X-Forwarded-For/X-Real-IP from target CIDR
+
+%sMaintenance:%s
+  -up                        self-update to latest version
+  --remove                   uninstall from /usr/local/bin
+  -v                         show version/build information
+  -h                         show this help
+
+%sExamples:%s
+  gomap 10.0.11.6
+  gomap -s -p 21,22,80,445 10.0.11.9
+  gomap -s --top-ports 300 10.0.11.0/24
+  gomap -g -s --random-agent --random-ip 10.0.11.0/24
+  gomap -g -nd -s -p 22,80,443 10.0.11.0/24
+  gomap -s --format json --out scan.json 10.0.11.6
+
+%sNotes:%s
+  - CIDR discovery is enabled by default; ghost mode uses a low-noise profile.
+  - --random-ip changes HTTP headers only, not the real TCP source IP.
+  - Legacy aliases kept for compatibility: --ramdom-agent, --ip-ram, --ip-random.
+`, out.ColorBrightCyan, out.ColorReset,
+		out.ColorBold, out.ColorReset,
+		out.ColorBrightBlue, out.ColorReset,
+		out.ColorBrightBlue, out.ColorReset,
+		out.ColorBrightBlue, out.ColorReset,
+		out.ColorBrightBlue, out.ColorReset,
+		out.ColorBrightBlue, out.ColorReset,
+		out.ColorBrightBlue, out.ColorReset,
+		out.ColorBrightBlue, out.ColorReset,
+		out.ColorBrightBlue, out.ColorReset,
+	)
+	_, _ = fmt.Fprint(w, help)
 }

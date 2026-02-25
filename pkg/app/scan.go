@@ -31,6 +31,8 @@ type ScanRequest struct {
 	MaxTimeoutMS    int
 	AdaptiveTimeout bool
 	Details         bool
+	RandomAgent     bool
+	RandomIP        bool
 }
 
 // ExecuteScan runs the complete scan workflow: target expansion, host discovery, scan, and rendering.
@@ -81,13 +83,31 @@ func ExecuteScan(req ScanRequest) error {
 	if err != nil {
 		return fmt.Errorf("invalid target specification: %w", err)
 	}
+	if req.RandomIP && !scanner.IsCIDR(req.Target) && !machineOutput {
+		fmt.Printf("%s\n", output.StatusWarn("--random-ip is most useful with CIDR targets; using local /24 approximation per host."))
+	}
 
 	if !req.NoDiscovery && scanner.IsCIDR(req.Target) && len(targets) > 1 {
 		if !machineOutput {
 			fmt.Printf("%s\n", output.Info(fmt.Sprintf("🔍 Discovering active hosts in %s...", output.Host(req.Target))))
 		}
-
-		targets = scanner.DiscoverActiveHosts(targets, 500*time.Millisecond, 50)
+		discoveryOpts := scanner.DiscoveryOptions{
+			Ports:      []int{443, 80, 22, 445, 3306, 8080, 3389},
+			Timeout:    500 * time.Millisecond,
+			NumWorkers: 50,
+		}
+		if req.GhostMode {
+			// Ultra-stealth profile for CIDR discovery: fewer probe ports and lower concurrency.
+			discoveryOpts = scanner.DiscoveryOptions{
+				Ports:      []int{443, 80, 22},
+				Timeout:    900 * time.Millisecond,
+				NumWorkers: 12,
+			}
+			if !machineOutput {
+				fmt.Printf("%s\n", output.StatusWarn("Ghost discovery profile active: low-noise probes on 443,80,22. Use -nd to skip discovery completely."))
+			}
+		}
+		targets = scanner.DiscoverActiveHostsWithOptions(targets, discoveryOpts)
 		if len(targets) == 0 {
 			if machineOutput {
 				empty := map[string][]scanner.ScanResult{}
@@ -150,6 +170,10 @@ func ExecuteScan(req ScanRequest) error {
 	}
 	for _, targetIP := range targets {
 		s := scanner.NewScanner(targetIP, req.GhostMode)
+		cidrForHeaders := ""
+		if req.RandomIP && scanner.IsCIDR(req.Target) {
+			cidrForHeaders = req.Target
+		}
 		s.Configure(scanner.ScanConfig{
 			NumWorkers:      req.Workers,
 			Timeout:         timeoutDuration,
@@ -158,6 +182,9 @@ func ExecuteScan(req ScanRequest) error {
 			AdaptiveTimeout: req.AdaptiveTimeout,
 			BackoffBase:     time.Duration(req.BackoffMS) * time.Millisecond,
 			MaxTimeout:      maxTimeoutDuration,
+			RandomAgent:     req.RandomAgent,
+			RandomIP:        req.RandomIP,
+			TargetCIDR:      cidrForHeaders,
 		})
 		openPorts := s.Scan(portsToScan, req.ServiceDetect)
 		if len(openPorts) > 0 {

@@ -12,6 +12,9 @@ import (
 func Run() {
 	opts, err := ParseCLIOptions(os.Args[1:])
 	if err != nil {
+		if errors.Is(err, errHelp) {
+			os.Exit(0)
+		}
 		if errors.Is(err, errUsage) {
 			os.Exit(1)
 		}
@@ -60,6 +63,11 @@ func Run() {
 		MaxTimeoutMS:    opts.MaxTimeoutMS,
 		AdaptiveTimeout: opts.AdaptiveTimeout,
 		Details:         opts.DetailsFlag,
+		RandomAgent:     opts.RandomAgent,
+		RandomIP:        opts.RandomIP,
+	}
+	if req.Format == "text" {
+		output.PrintBanner()
 	}
 
 	if err := app.ExecuteScan(req); err != nil {

@@ -4,6 +4,11 @@
 
 set -e
 
+VERSION="$(sed -n 's/.*Version = "\(.*\)".*/\1/p' cmd/gomap/version.go | head -n1)"
+COMMIT="$(git rev-parse --short=12 HEAD 2>/dev/null || echo unknown)"
+BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+LDFLAGS="-s -w -X github.com/NexusFireMan/gomap/v2/cmd/gomap.Version=${VERSION} -X github.com/NexusFireMan/gomap/v2/cmd/gomap.Commit=${COMMIT} -X github.com/NexusFireMan/gomap/v2/cmd/gomap.Date=${BUILD_DATE}"
+
 echo "🔨 Building gomap..."
 echo ""
 
@@ -16,8 +21,8 @@ echo "📥 Downloading dependencies..."
 go mod download
 go mod tidy
 
-# Build with -a flag to force rebuild of all packages
-go build -a -o gomap .
+# Build with embedded version metadata
+go build -a -ldflags="$LDFLAGS" -o gomap .
 
 echo ""
 echo "📦 Installing to /usr/local/bin..."

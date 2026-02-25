@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math/rand/v2"
 	"net"
+	"net/netip"
 	"os/exec"
 	"regexp"
 	"sort"
@@ -30,6 +31,9 @@ type Scanner struct {
 	MaxAdaptiveTimeout time.Duration
 	PortManager        *PortManager
 	GhostMode          bool
+	RandomAgent        bool
+	RandomIP           bool
+	targetPrefix       netip.Prefix
 
 	adaptiveMu    sync.Mutex
 	ewmaLatency   time.Duration
@@ -47,6 +51,9 @@ type ScanConfig struct {
 	AdaptiveTimeout bool
 	BackoffBase     time.Duration
 	MaxTimeout      time.Duration
+	RandomAgent     bool
+	RandomIP        bool
+	TargetCIDR      string
 }
 
 // NewScanner creates a new Scanner instance
@@ -72,6 +79,8 @@ func NewScanner(host string, ghostMode bool) *Scanner {
 		MaxAdaptiveTimeout: 4 * time.Second,
 		PortManager:        NewPortManager(),
 		GhostMode:          ghostMode,
+		RandomAgent:        false,
+		RandomIP:           false,
 	}
 }
 
@@ -94,6 +103,11 @@ func (s *Scanner) Configure(cfg ScanConfig) {
 	if cfg.BackoffBase > 0 {
 		s.BackoffBase = cfg.BackoffBase
 	}
+	s.RandomAgent = cfg.RandomAgent
+	s.RandomIP = cfg.RandomIP
+	if s.RandomIP {
+		s.targetPrefix = parseTargetPrefix(cfg.TargetCIDR, s.Host)
+	}
 	if cfg.MaxTimeout > 0 {
 		s.MaxAdaptiveTimeout = cfg.MaxTimeout
 	} else if s.GhostMode {
@@ -103,6 +117,15 @@ func (s *Scanner) Configure(cfg ScanConfig) {
 	}
 	if s.BackoffMax < s.BackoffBase*4 {
 		s.BackoffMax = s.BackoffBase * 4
+	}
+	if s.GhostMode {
+		// Conservative defaults in ghost mode reduce traffic spikes.
+		if s.Rate == 0 {
+			s.Rate = 8
+		}
+		if s.NumWorkers > 4 {
+			s.NumWorkers = 4
+		}
 	}
 }
 
@@ -304,8 +327,8 @@ func (s *Scanner) retryBackoff(attempt int) time.Duration {
 
 // addJitter adds random delay to make scanning less detectable
 func (s *Scanner) addJitter() {
-	minDelay := 100 * time.Millisecond
-	maxDelay := 500 * time.Millisecond
+	minDelay := 220 * time.Millisecond
+	maxDelay := 900 * time.Millisecond
 	delayMs := rand.Float64() * float64(maxDelay-minDelay) / float64(time.Millisecond)
 	delay := time.Duration(delayMs) * time.Millisecond
 	time.Sleep(minDelay + delay)
@@ -355,7 +378,7 @@ func (s *Scanner) grabBanner(conn net.Conn, port int, result *ScanResult) {
 	var banner string
 
 	// For HTTP ports, send active request first
-	if shouldParseAsHTTP(port) {
+	if shouldParseAsHTTP(port) && !s.GhostMode {
 		banner = s.grabHTTPBanner(port)
 	}
 
@@ -364,13 +387,13 @@ func (s *Scanner) grabBanner(conn net.Conn, port int, result *ScanResult) {
 		banner = s.tryPassiveBanner(conn)
 	}
 
-	// If still no banner, use protocol-aware active probes on common services
-	if banner == "" {
+	// If still no banner, use active probes only outside ghost mode.
+	if banner == "" && !s.GhostMode {
 		banner = s.tryServiceProbe(port)
 	}
 
 	// Special handling for SMB (port 445)
-	if banner == "" && port == 445 {
+	if banner == "" && port == 445 && !s.GhostMode {
 		smbInfo, method := s.detectSMBVersion(port)
 		if smbInfo != "" {
 			result.ServiceName = "microsoft-ds"
@@ -425,19 +448,21 @@ func (s *Scanner) grabBanner(conn net.Conn, port int, result *ScanResult) {
 		}
 		result.DetectionPath = "banner-parser"
 	} else {
-		if service, ver, confidence, evidence, path, ok := s.tryProtocolFingerprint(port); ok {
-			result.ServiceName = service
-			result.Version = ver
-			result.Confidence = confidence
-			result.Evidence = evidence
-			result.DetectionPath = path
-		} else {
-			result.ServiceName = s.PortManager.GetServiceName(port, "")
-			if result.ServiceName != "" {
-				result.Confidence = "low"
-				result.Evidence = "port map (unparsed banner)"
-				result.DetectionPath = "portmap-fallback"
+		if !s.GhostMode {
+			if service, ver, confidence, evidence, path, ok := s.tryProtocolFingerprint(port); ok {
+				result.ServiceName = service
+				result.Version = ver
+				result.Confidence = confidence
+				result.Evidence = evidence
+				result.DetectionPath = path
+				return
 			}
+		}
+		result.ServiceName = s.PortManager.GetServiceName(port, "")
+		if result.ServiceName != "" {
+			result.Confidence = "low"
+			result.Evidence = "port map (unparsed banner)"
+			result.DetectionPath = "portmap-fallback"
 		}
 	}
 }
@@ -488,7 +513,7 @@ func (s *Scanner) grabHTTPBanner(port int) string {
 	}
 	defer func() { _ = conn.Close() }()
 
-	_, _ = conn.Write([]byte("GET / HTTP/1.1\r\nHost: " + s.Host + "\r\nUser-Agent: gomap/2.x\r\nConnection: close\r\n\r\n"))
+	_, _ = conn.Write([]byte(s.buildHTTPRequest("GET", "/")))
 	_ = conn.SetReadDeadline(time.Now().Add(timeout))
 
 	var allData strings.Builder
@@ -800,7 +825,7 @@ func (s *Scanner) detectWinRM(port int) string {
 	defer func() { _ = conn.Close() }()
 
 	_ = conn.SetDeadline(time.Now().Add(timeout))
-	_, _ = conn.Write([]byte("OPTIONS /wsman HTTP/1.1\r\nHost: " + s.Host + "\r\nConnection: close\r\n\r\n"))
+	_, _ = conn.Write([]byte(s.buildHTTPRequest("OPTIONS", "/wsman")))
 
 	buf := make([]byte, 4096)
 	n, err := conn.Read(buf)
@@ -1000,4 +1025,76 @@ func (s *Scanner) attemptSMBLibrary(address string) string {
 	}
 
 	return ""
+}
+
+func (s *Scanner) buildHTTPRequest(method, path string) string {
+	headers := []string{
+		fmt.Sprintf("%s %s HTTP/1.1", method, path),
+		"Host: " + s.Host,
+		"Connection: close",
+		"Accept: */*",
+		"User-Agent: " + s.httpUserAgent(),
+	}
+	if spoofIP := s.randomHeaderIP(); spoofIP != "" {
+		headers = append(headers, "X-Forwarded-For: "+spoofIP, "X-Real-IP: "+spoofIP)
+	}
+	return strings.Join(headers, "\r\n") + "\r\n\r\n"
+}
+
+func (s *Scanner) httpUserAgent() string {
+	if !s.RandomAgent {
+		return "gomap/2.x"
+	}
+	agents := []string{
+		"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
+		"Mozilla/5.0 (X11; Linux x86_64; rv:134.0) Gecko/20100101 Firefox/134.0",
+		"Mozilla/5.0 (Macintosh; Intel Mac OS X 14_2) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15",
+		"curl/8.10.1",
+		"Wget/1.24.5",
+	}
+	return agents[rand.IntN(len(agents))]
+}
+
+func (s *Scanner) randomHeaderIP() string {
+	if !s.RandomIP || !s.targetPrefix.IsValid() || !s.targetPrefix.Addr().Is4() {
+		return ""
+	}
+	p := s.targetPrefix.Masked()
+	addr := p.Addr()
+	prefixBits := p.Bits()
+	if prefixBits >= 31 {
+		return ""
+	}
+	base := ip4ToUint(addr)
+	hostBits := 32 - prefixBits
+	hostCount := uint32(1) << hostBits
+	if hostCount <= 2 {
+		return ""
+	}
+	hostOffset := uint32(rand.IntN(int(hostCount-2))) + 1
+	ip := uintToIP4(base + hostOffset)
+	return ip.String()
+}
+
+func parseTargetPrefix(cidr, host string) netip.Prefix {
+	if cidr != "" {
+		if p, err := netip.ParsePrefix(cidr); err == nil {
+			return p.Masked()
+		}
+	}
+	ip, err := netip.ParseAddr(host)
+	if err != nil || !ip.Is4() {
+		return netip.Prefix{}
+	}
+	// Fallback approximation when scanning a single host.
+	return netip.PrefixFrom(ip, 24).Masked()
+}
+
+func ip4ToUint(ip netip.Addr) uint32 {
+	b := ip.As4()
+	return uint32(b[0])<<24 | uint32(b[1])<<16 | uint32(b[2])<<8 | uint32(b[3])
+}
+
+func uintToIP4(v uint32) netip.Addr {
+	return netip.AddrFrom4([4]byte{byte(v >> 24), byte(v >> 16), byte(v >> 8), byte(v)})
 }

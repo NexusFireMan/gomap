@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/NexusFireMan/gomap/v2/pkg/output"
 )
@@ -50,7 +51,15 @@ func updateUsingGit() error {
 
 	// Rebuild the project with -a flag to force full rebuild
 	fmt.Println(output.Info("🔨 Rebuilding gomap..."))
-	buildCmd := exec.Command("go", "build", "-a", "-o", "gomap")
+	commitOut, _ := exec.Command("git", "rev-parse", "--short=12", "HEAD").Output()
+	buildCommit := strings.TrimSpace(string(commitOut))
+	if buildCommit == "" {
+		buildCommit = "unknown"
+	}
+	buildDate := time.Now().UTC().Format(time.RFC3339)
+	ldflags := fmt.Sprintf("-s -w -X %s/cmd/gomap.Version=%s -X %s/cmd/gomap.Commit=%s -X %s/cmd/gomap.Date=%s",
+		ModulePath, Version, ModulePath, buildCommit, ModulePath, buildDate)
+	buildCmd := exec.Command("go", "build", "-a", "-ldflags", ldflags, "-o", "gomap")
 	if cmdOutput, err := buildCmd.CombinedOutput(); err != nil {
 		fmt.Printf("%s\n", output.StatusError(fmt.Sprintf("Build failed: %s", string(cmdOutput))))
 		return fmt.Errorf("failed to rebuild: %w", err)
@@ -244,10 +253,15 @@ func readBinaryVersion(path string) (string, error) {
 
 // PrintVersion prints the version information
 func PrintVersion() {
-	fmt.Printf("%s\n", output.Highlight(fmt.Sprintf("gomap version %s", Version)))
-	fmt.Printf("%s\n", output.Info(fmt.Sprintf("Repository: %s", RepoURL)))
-	fmt.Printf("%s\n", output.Info(fmt.Sprintf("Commit: %s", Commit)))
-	fmt.Printf("%s\n", output.Info(fmt.Sprintf("Build date: %s", Date)))
+	output.PrintBanner()
+	version, commit, date := EffectiveBuildInfo()
+	fmt.Printf("%s\n", output.Bold("Version"))
+	fmt.Printf("  gomap:      %s\n", output.Highlight(version))
+	fmt.Printf("  repository: %s\n", output.Info(RepoURL))
+	fmt.Printf("  module:     %s\n", output.Info(ModulePath))
+	fmt.Printf("%s\n", output.Bold("Build"))
+	fmt.Printf("  commit:     %s\n", output.Info(commit))
+	fmt.Printf("  date:       %s\n", output.Info(date))
 }
 
 // PrintUpdateInfo prints information about updating

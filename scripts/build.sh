@@ -3,8 +3,11 @@
 
 set -e
 
-VERSION="2.0.5"
 BINARY_NAME="gomap"
+VERSION="$(sed -n 's/.*Version = "\(.*\)".*/\1/p' cmd/gomap/version.go | head -n1)"
+COMMIT="$(git rev-parse --short=12 HEAD 2>/dev/null || echo unknown)"
+BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+LDFLAGS="-s -w -X github.com/NexusFireMan/gomap/v2/cmd/gomap.Version=${VERSION} -X github.com/NexusFireMan/gomap/v2/cmd/gomap.Commit=${COMMIT} -X github.com/NexusFireMan/gomap/v2/cmd/gomap.Date=${BUILD_DATE}"
 
 echo "🔨 Building $BINARY_NAME v$VERSION..."
 echo ""
@@ -18,10 +21,8 @@ echo "📥 Downloading dependencies..."
 go mod download
 go mod tidy
 
-# Build with -a flag to rebuild all dependencies and proper version embed
-# -a: force rebuild of packages that are already up-to-date
-# -ldflags="-s -w": strip symbols and DWARF debug info for smaller binary
-go build -a -ldflags="-s -w" -o "$BINARY_NAME" .
+# Build with embedded version metadata.
+go build -a -ldflags="$LDFLAGS" -o "$BINARY_NAME" .
 
 echo ""
 echo "✓ Build successful!"
