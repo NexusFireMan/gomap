@@ -430,7 +430,10 @@ func (s *Scanner) grabBanner(conn net.Conn, port int, result *ScanResult) {
 	if serviceName != "" {
 		result.ServiceName = serviceName
 		result.Version = version
-		if (port == 5985 || port == 5986) && serviceName == "http" {
+		if result.ServiceName == "http" && isLikelyHTTPProxyPort(port) {
+			result.ServiceName = "http-proxy"
+		}
+		if (port == 5985 || port == 5986 || port == 47001) && serviceName == "http" {
 			lowerBanner := strings.ToLower(banner)
 			if strings.Contains(lowerBanner, "wsman") || strings.Contains(lowerBanner, "microsoft-httpapi") {
 				result.ServiceName = "winrm"
@@ -464,6 +467,15 @@ func (s *Scanner) grabBanner(conn net.Conn, port int, result *ScanResult) {
 			result.Evidence = "port map (unparsed banner)"
 			result.DetectionPath = "portmap-fallback"
 		}
+	}
+}
+
+func isLikelyHTTPProxyPort(port int) bool {
+	switch port {
+	case 8080, 3128, 8000, 8008, 8888:
+		return true
+	default:
+		return false
 	}
 }
 
@@ -545,6 +557,8 @@ func (s *Scanner) tryServiceProbe(port int) string {
 		return s.probeTextService(port, "a001 CAPABILITY\r\n")
 	case 6379:
 		return s.probeTextService(port, "INFO\r\n")
+	case 8009:
+		return s.probeAJP(port)
 	default:
 		return ""
 	}
@@ -644,8 +658,51 @@ func (s *Scanner) tryProtocolFingerprint(port int) (service, version, confidence
 		if version = s.detectWinRM(port); version != "" {
 			return "winrm", version, "high", "wsman/httpapi response", "protocol-fingerprint", true
 		}
+	case 47001:
+		if version = s.detectWinRM(port); version != "" {
+			return "winrm", version, "high", "wsman/httpapi response", "protocol-fingerprint", true
+		}
+	case 8009:
+		if s.detectAJP(port) {
+			return "ajp13", "Apache JServ Protocol (AJP/1.3)", "high", "ajp cping/cpong", "protocol-fingerprint", true
+		}
 	}
 	return "", "", "", "", "", false
+}
+
+func (s *Scanner) detectAJP(port int) bool {
+	address := net.JoinHostPort(s.Host, fmt.Sprintf("%d", port))
+	timeout := s.ioTimeout(1200 * time.Millisecond)
+	if timeout < 1200*time.Millisecond {
+		timeout = 1200 * time.Millisecond
+	}
+
+	conn, err := net.DialTimeout("tcp", address, timeout)
+	if err != nil {
+		return false
+	}
+	defer func() { _ = conn.Close() }()
+
+	// AJP13 CPING packet: 0x1234 + len=1 + payload=0x0a
+	cping := []byte{0x12, 0x34, 0x00, 0x01, 0x0a}
+	_ = conn.SetDeadline(time.Now().Add(timeout))
+	_, _ = conn.Write(cping)
+
+	buf := make([]byte, 32)
+	n, err := conn.Read(buf)
+	if err != nil || n < 5 {
+		return false
+	}
+
+	// Expected CPONG response payload 0x09 with AJP magic.
+	return buf[0] == 0x12 && buf[1] == 0x34 && buf[4] == 0x09
+}
+
+func (s *Scanner) probeAJP(port int) string {
+	if s.detectAJP(port) {
+		return "AJP/1.3"
+	}
+	return ""
 }
 
 func (s *Scanner) detectMySQLHandshake(port int) string {

@@ -354,12 +354,40 @@ func parseHTTP(banner string) (string, string) {
 		return "http", serverHeader
 	}
 
+	// Fallback: infer product/version from HTML title when Server header is absent.
+	if title := extractHTTPTitle(banner); title != "" {
+		if v := parseTomcatFromTitle(title); v != "" {
+			return "http", v
+		}
+		return "http", title
+	}
+
 	// If no Server header found but HTTP response exists, it's still HTTP
 	if statusLine != "" {
 		return "http", ""
 	}
 
 	return "", ""
+}
+
+func extractHTTPTitle(banner string) string {
+	titleRegex := regexp.MustCompile(`(?is)<title>\s*([^<]+?)\s*</title>`)
+	match := titleRegex.FindStringSubmatch(banner)
+	if len(match) < 2 {
+		return ""
+	}
+	return strings.TrimSpace(match[1])
+}
+
+func parseTomcatFromTitle(title string) string {
+	if !strings.Contains(strings.ToLower(title), "tomcat") {
+		return ""
+	}
+	tomcatRegex := regexp.MustCompile(`(?i)tomcat[/\s-]*([\d]+(?:\.[\d]+){1,3})`)
+	if match := tomcatRegex.FindStringSubmatch(title); match != nil {
+		return fmt.Sprintf("Apache Tomcat %s", match[1])
+	}
+	return "Apache Tomcat"
 }
 
 // parseApacheVersion extracts Apache version from Server header
