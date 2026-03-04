@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.3.2](https://github.com/NexusFireMan/gomap/compare/v2.3.1...v2.3.2) (2026-03-04)
+
+
+### Bug Fixes
+
+* **scanner:** improve service and version detection accuracy ([4ced963](https://github.com/NexusFireMan/gomap/commit/4ced963ebbb974718da2ca1f4e1aec9d87723960))
+
 ## [2.3.1] - 2026-02-25
 
 ### Fixed
