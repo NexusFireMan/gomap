@@ -4,7 +4,7 @@ A fast TCP port scanner written in Go, with optional service/version detection, 
 
 ## Current scope
 
-- Fast concurrent TCP connect scanning.
+- Fast concurrent TCP scanning with selectable engine (`connect` or `syn`).
 - Optional service and version detection (`-s`).
 - Single host, hostname, comma-separated targets, and CIDR ranges.
 - CIDR active-host discovery by TCP probes (no ICMP ping).
@@ -51,6 +51,9 @@ go install github.com/NexusFireMan/gomap/v2@latest
 # Default scan (top common ports)
 ./gomap 10.0.11.6
 
+# Native SYN scan discovery (requires root/CAP_NET_RAW)
+./gomap --scan-type syn 10.0.11.6
+
 # Service/version detection on selected ports
 ./gomap -s -p 21,22,80,135,139,445,5985 10.0.11.6
 
@@ -78,6 +81,7 @@ Usage:
 
 Main options:
   -p                ports to scan (example: 80,443 or 1-1024 or - for all)
+  --scan-type       connect|syn (default: connect)
   --top, --top-ports scan top N ports from curated top-1000 list
   --exclude-ports   remove ports from final scan set
   -s                enable service/version detection
@@ -128,40 +132,58 @@ When `-s` is enabled, gomap combines port-based hints and protocol/banner parsin
 - SSH/FTP/PostgreSQL/Redis/MySQL and other protocol banners.
 - SMB-oriented identification for `microsoft-ds` targets.
 
-Important: banner-based detection is heuristic. Always validate critical findings with a second tool (`nmap -sV`, native service queries, or manual protocol checks).
+Important: banner-based detection is heuristic. Always validate critical findings with a second tool.
+
+`--scan-type syn` notes:
+- Uses GoMap native raw TCP SYN probes for port discovery, then optional service detection on open ports.
+- If SYN scan cannot run (insufficient privileges or unsupported OS), GoMap falls back to `connect` scan automatically.
+- For noisy links, tune reliability explicitly with `--retries` and `--rate`.
 
 Note: `--random-ip` randomizes HTTP headers only; it does not spoof the real TCP source IP.
 
 ## Stealth benchmark (lab)
 
-Benchmark executed on **February 25, 2026** with:
+Benchmark executed on **March 9, 2026** with:
 
 - Scanner host: `10.0.11.11`
-- Targets: `10.0.11.0/24` (Metasploitable3 Windows `10.0.11.6`, Linux `10.0.11.9`, Snort `10.0.11.8`)
+- Targets: `10.0.11.0/24` (Windows `10.0.11.6`, Linux `10.0.11.9`, Snort `10.0.11.8`)
 - IDS: Snort `2.9.20` (`10.0.11.8`)
-- Ports: `22,80,139,445,3389,5985`
+- Port set: `22,80,139,445,3389,5985`
+- Log analyzed: `/var/log/snort/snort.alert.fast`
+- Attribution filter: source `10.0.11.11`
 
 Commands compared:
 
 ```bash
-# Normal
+# CONNECT normal
 gomap -s -p 22,80,139,445,3389,5985 10.0.11.0/24
 
-# Ghost ultra-stealth
+# CONNECT ghost
 gomap -g -s --random-agent --random-ip -p 22,80,139,445,3389,5985 10.0.11.0/24
+
+# SYN normal (native, requires root/CAP_NET_RAW)
+sudo gomap --scan-type syn -s -p 22,80,139,445,3389,5985 10.0.11.0/24
+
+# SYN ghost
+sudo gomap -g -s --scan-type syn --random-agent --random-ip -p 22,80,139,445,3389,5985 10.0.11.0/24
 ```
 
-Observed results (Snort `snort.alert.fast`, TCP alerts with source `10.0.11.11`):
+Observed results (single run per profile):
 
-| Mode | New alerts (all) | New TCP alerts from scanner | Scan duration |
-|------|-------------------|-----------------------------|---------------|
-| Normal | 104 | 89 | ~6.2s |
-| Ghost ultra-stealth | 41 | 20 | ~11.5s |
+| Profile | Duration | Hosts scanned | Open ports found | New alerts (all) | New alerts from scanner IP | New TCP alerts from scanner IP |
+|---|---:|---:|---:|---:|---:|---:|
+| CONNECT normal | 6.801s | 4 | 10 | 97 | 97 | 96 |
+| CONNECT ghost | 10.893s | 3 | 9 | 64 | 64 | 62 |
+| SYN normal | 9.26s | 4 | 10 | 104 | 104 | 103 |
+| SYN ghost | 11.793s | 3 | 9 | 48 | 48 | 47 |
 
-Takeaway:
+Takeaways:
 
-- Ghost ultra-stealth reduced scanner-attributed TCP alerts by about **77.5%** (`89 -> 20`).
-- Tradeoff is slower execution and less aggressive service/version fingerprinting.
+- `ghost` mode reduced scanner-attributed TCP alerts in both engines:
+  - CONNECT: `96 -> 62` (about `-35.4%`)
+  - SYN: `103 -> 47` (about `-54.4%`)
+- In this Snort rule set, SYN generated more alerts than CONNECT for the same target/ports.
+- Ghost CIDR discovery is intentionally conservative and may scan fewer active hosts (`3` vs `4` in this run).
 
 ## Output formats
 

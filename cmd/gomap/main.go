@@ -47,6 +47,7 @@ func Run() {
 	req := app.ScanRequest{
 		Target:          opts.Host,
 		PortsFlag:       opts.PortsFlag,
+		ScanType:        opts.ScanType,
 		ExcludePorts:    opts.ExcludePorts,
 		TopPorts:        opts.TopPorts,
 		Rate:            opts.Rate,

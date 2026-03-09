@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.4.0] - 2026-03-09
+
+### Added
+- **Selectable scan engine**: new `--scan-type connect|syn` flag.
+- **Native SYN discovery mode**: `syn` mode uses GoMap raw TCP SYN probes to discover open ports before optional service detection.
+
+### Changed
+- **Scan headers**: text output now indicates which scan type is being used.
+- **README benchmark section**: expanded with detailed CONNECT vs SYN vs GHOST lab measurements against Snort.
+
+### Fixed
+- **Resilience**: automatic fallback to `connect` scan when SYN requirements are not met (unsupported OS or insufficient privileges).
+- **Native SYN response parsing**: improved packet decoding and batched response collection to reduce false negatives under heavier scans.
+
 ## [2.3.1] - 2026-02-25
 
 ### Fixed

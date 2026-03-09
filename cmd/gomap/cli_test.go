@@ -64,3 +64,20 @@ func TestParseCLIOptionsHelpFlag(t *testing.T) {
 		t.Fatalf("expected errHelp, got: %v", err)
 	}
 }
+
+func TestParseCLIOptionsScanType(t *testing.T) {
+	opts, err := ParseCLIOptions([]string{"--scan-type", "syn", "10.0.11.6"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if opts.ScanType != "syn" {
+		t.Fatalf("expected scan type syn, got %q", opts.ScanType)
+	}
+}
+
+func TestParseCLIOptionsScanTypeInvalid(t *testing.T) {
+	_, err := ParseCLIOptions([]string{"--scan-type", "udp", "10.0.11.6"})
+	if err == nil {
+		t.Fatal("expected error for invalid scan type")
+	}
+}

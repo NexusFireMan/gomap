@@ -15,6 +15,7 @@ import (
 type ScanRequest struct {
 	Target          string
 	PortsFlag       string
+	ScanType        string
 	ExcludePorts    string
 	TopPorts        int
 	Rate            int
@@ -38,6 +39,10 @@ type ScanRequest struct {
 // ExecuteScan runs the complete scan workflow: target expansion, host discovery, scan, and rendering.
 func ExecuteScan(req ScanRequest) error {
 	machineOutput := req.Format != "text"
+	if req.ScanType == "" {
+		req.ScanType = "connect"
+	}
+	scanLabel := strings.ToUpper(req.ScanType)
 
 	destWriter := output.DefaultWriter()
 	var outFile *os.File
@@ -142,16 +147,16 @@ func ExecuteScan(req ScanRequest) error {
 	if !machineOutput {
 		if len(targets) == 1 {
 			if req.GhostMode {
-				fmt.Printf("%s\n\n", output.Info(fmt.Sprintf("🎯 Scanning %s (%s ports) - %s (stealthy)", output.Host(targets[0]), output.Count(len(portsToScan)), output.Warning("Ghost mode"))))
+				fmt.Printf("%s\n\n", output.Info(fmt.Sprintf("🎯 Scanning %s (%s ports, %s scan) - %s (stealthy)", output.Host(targets[0]), output.Count(len(portsToScan)), output.Highlight(scanLabel), output.Warning("Ghost mode"))))
 			} else {
-				fmt.Printf("%s\n\n", output.Info(fmt.Sprintf("🎯 Scanning %s (%s ports)", output.Host(targets[0]), output.Count(len(portsToScan)))))
+				fmt.Printf("%s\n\n", output.Info(fmt.Sprintf("🎯 Scanning %s (%s ports, %s scan)", output.Host(targets[0]), output.Count(len(portsToScan)), output.Highlight(scanLabel))))
 			}
 		} else {
 			targetRange, _, _ := scanner.FormatCIDRInfo(req.Target)
 			if req.GhostMode {
-				fmt.Printf("%s\n\n", output.Info(fmt.Sprintf("🎯 Scanning %s (%s active hosts, %s ports) - %s (stealthy)", output.Highlight(targetRange), output.Count(len(targets)), output.Count(len(portsToScan)), output.Warning("Ghost mode"))))
+				fmt.Printf("%s\n\n", output.Info(fmt.Sprintf("🎯 Scanning %s (%s active hosts, %s ports, %s scan) - %s (stealthy)", output.Highlight(targetRange), output.Count(len(targets)), output.Count(len(portsToScan)), output.Highlight(scanLabel), output.Warning("Ghost mode"))))
 			} else {
-				fmt.Printf("%s\n\n", output.Info(fmt.Sprintf("🎯 Scanning %s (%s active hosts, %s ports)", output.Highlight(targetRange), output.Count(len(targets)), output.Count(len(portsToScan)))))
+				fmt.Printf("%s\n\n", output.Info(fmt.Sprintf("🎯 Scanning %s (%s active hosts, %s ports, %s scan)", output.Highlight(targetRange), output.Count(len(targets)), output.Count(len(portsToScan)), output.Highlight(scanLabel))))
 			}
 		}
 	}
@@ -186,9 +191,26 @@ func ExecuteScan(req ScanRequest) error {
 			RandomIP:        req.RandomIP,
 			TargetCIDR:      cidrForHeaders,
 		})
-		openPorts := s.Scan(portsToScan, req.ServiceDetect)
-		if len(openPorts) > 0 {
-			allResults[targetIP] = openPorts
+		var openResults []scanner.ScanResult
+		if req.ScanType == "syn" {
+			synOpenPorts, synErr := scanner.DiscoverOpenPortsSYN(targetIP, portsToScan, scanner.SYNConfig{
+				Rate:      req.Rate,
+				Retries:   req.Retries,
+				GhostMode: req.GhostMode,
+			})
+			if synErr != nil {
+				if !machineOutput {
+					fmt.Printf("%s\n", output.StatusWarn(fmt.Sprintf("SYN scan unavailable on %s (%v). Falling back to connect scan.", targetIP, synErr)))
+				}
+				openResults = s.Scan(portsToScan, req.ServiceDetect)
+			} else {
+				openResults = scanner.BuildResultsFromKnownOpenPorts(s, synOpenPorts, req.ServiceDetect)
+			}
+		} else {
+			openResults = s.Scan(portsToScan, req.ServiceDetect)
+		}
+		if len(openResults) > 0 {
+			allResults[targetIP] = openResults
 		}
 	}
 	scanDuration := time.Since(scanStart)

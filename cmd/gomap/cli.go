@@ -13,6 +13,7 @@ import (
 // CLIOptions holds all parsed/validated CLI arguments.
 type CLIOptions struct {
 	PortsFlag       string
+	ScanType        string
 	ExcludePorts    string
 	ServiceFlag     bool
 	GhostFlag       bool
@@ -51,6 +52,7 @@ func ParseCLIOptions(args []string) (CLIOptions, error) {
 	fs := flag.NewFlagSet("gomap", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	fs.StringVar(&opts.PortsFlag, "p", "", "ports to scan (e.g., 80,443 or 1-1024 or - for all ports)")
+	fs.StringVar(&opts.ScanType, "scan-type", "connect", "scan technique: connect|syn")
 	fs.StringVar(&opts.ExcludePorts, "exclude-ports", "", "exclude ports (e.g., 80,443 or 1-1024)")
 	fs.BoolVar(&opts.ServiceFlag, "s", false, "detect services and versions")
 	fs.BoolVar(&opts.GhostFlag, "g", false, "ghost mode - slower, stealthy scan to evade IDS/Firewall detection")
@@ -138,6 +140,10 @@ func normalizeOptions(opts CLIOptions) (CLIOptions, error) {
 	if opts.TopPortsAlias > 0 {
 		opts.TopPorts = opts.TopPortsAlias
 	}
+	opts.ScanType = strings.ToLower(strings.TrimSpace(opts.ScanType))
+	if opts.ScanType != "connect" && opts.ScanType != "syn" {
+		return opts, errors.New("invalid --scan-type. Allowed: connect, syn")
+	}
 	if opts.TopPorts < 0 {
 		return opts, errors.New("--top must be a positive number")
 	}
@@ -214,6 +220,7 @@ func printHelp(w *os.File) {
 
 %sTarget & Scan:%s
   -p <ports>                 ports to scan (80,443 | 1-1024 | -)
+  --scan-type <type>         connect|syn (syn requires root/CAP_NET_RAW)
   --top <N>                  scan top N ports from curated top-1000 list
   --top-ports <N>            alias of --top
   --exclude-ports <ports>    remove ports from final scan set
@@ -250,6 +257,7 @@ func printHelp(w *os.File) {
 
 %sExamples:%s
   gomap 10.0.11.6
+  gomap --scan-type syn 10.0.11.6
   gomap -s -p 21,22,80,445 10.0.11.9
   gomap -s --top-ports 300 10.0.11.0/24
   gomap -g -s --random-agent --random-ip 10.0.11.0/24
