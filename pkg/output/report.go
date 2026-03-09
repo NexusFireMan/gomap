@@ -38,6 +38,12 @@ type jsonlRecord struct {
 	State         string `json:"state"`
 	Service       string `json:"service,omitempty"`
 	Version       string `json:"version,omitempty"`
+	TLS           bool   `json:"tls,omitempty"`
+	TLSVersion    string `json:"tls_version,omitempty"`
+	TLSCipher     string `json:"tls_cipher,omitempty"`
+	TLSALPN       string `json:"tls_alpn,omitempty"`
+	TLSServerName string `json:"tls_server_name,omitempty"`
+	TLSIssuer     string `json:"tls_issuer,omitempty"`
 	LatencyMs     int64  `json:"latency_ms,omitempty"`
 	Confidence    string `json:"confidence,omitempty"`
 	Evidence      string `json:"evidence,omitempty"`
@@ -79,7 +85,7 @@ func PrintCSVReport(writer io.Writer, allResults map[string][]scanner.ScanResult
 	w := csv.NewWriter(writer)
 	defer w.Flush()
 
-	header := []string{"host", "port", "state", "service", "version", "latency_ms", "confidence", "evidence", "detection_path"}
+	header := []string{"host", "port", "state", "service", "version", "tls", "tls_version", "tls_cipher", "tls_alpn", "tls_server_name", "tls_issuer", "latency_ms", "confidence", "evidence", "detection_path"}
 	if err := w.Write(header); err != nil {
 		return err
 	}
@@ -93,6 +99,12 @@ func PrintCSVReport(writer io.Writer, allResults map[string][]scanner.ScanResult
 				"open",
 				r.ServiceName,
 				r.Version,
+				strconv.FormatBool(r.TLS),
+				r.TLSVersion,
+				r.TLSCipher,
+				r.TLSALPN,
+				r.TLSServerName,
+				r.TLSIssuer,
 				strconv.FormatInt(r.LatencyMs, 10),
 				r.Confidence,
 				r.Evidence,
@@ -122,6 +134,12 @@ func PrintJSONLReport(w io.Writer, target string, targets []string, allResults m
 				State:         "open",
 				Service:       r.ServiceName,
 				Version:       r.Version,
+				TLS:           r.TLS,
+				TLSVersion:    r.TLSVersion,
+				TLSCipher:     r.TLSCipher,
+				TLSALPN:       r.TLSALPN,
+				TLSServerName: r.TLSServerName,
+				TLSIssuer:     r.TLSIssuer,
 				LatencyMs:     r.LatencyMs,
 				Confidence:    r.Confidence,
 				Evidence:      r.Evidence,

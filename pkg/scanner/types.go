@@ -8,6 +8,12 @@ type ScanResult struct {
 	IsOpen        bool          `json:"open"`
 	ServiceName   string        `json:"service,omitempty"`
 	Version       string        `json:"version,omitempty"`
+	TLS           bool          `json:"tls,omitempty"`
+	TLSVersion    string        `json:"tls_version,omitempty"`
+	TLSCipher     string        `json:"tls_cipher,omitempty"`
+	TLSALPN       string        `json:"tls_alpn,omitempty"`
+	TLSServerName string        `json:"tls_server_name,omitempty"`
+	TLSIssuer     string        `json:"tls_issuer,omitempty"`
 	Latency       time.Duration `json:"-"`
 	LatencyMs     int64         `json:"latency_ms,omitempty"`
 	Confidence    string        `json:"confidence,omitempty"`
@@ -23,7 +29,7 @@ func GetTop1000Ports() []int {
 	}
 
 	// Add high-signal management ports commonly exposed on modern Windows hosts.
-	return appendMissingPorts(ports, 47001)
+	return appendMissingPorts(uniquePortsOrdered(ports), 47001)
 }
 
 func appendMissingPorts(ports []int, extras ...int) []int {
@@ -39,4 +45,17 @@ func appendMissingPorts(ports []int, extras ...int) []int {
 		seen[p] = struct{}{}
 	}
 	return ports
+}
+
+func uniquePortsOrdered(ports []int) []int {
+	out := make([]int, 0, len(ports))
+	seen := make(map[int]struct{}, len(ports))
+	for _, p := range ports {
+		if _, ok := seen[p]; ok {
+			continue
+		}
+		seen[p] = struct{}{}
+		out = append(out, p)
+	}
+	return out
 }

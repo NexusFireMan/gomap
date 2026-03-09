@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.4.1] - 2026-03-09
+
+### Added
+- **TLS fingerprint metadata in service detection** (`-s`): scanner now captures TLS handshake details when applicable (`tls_version`, `tls_cipher`, `tls_alpn`, `tls_server_name`, `tls_issuer`).
+- **Machine-output schema expansion**: JSON/JSONL/CSV now expose TLS metadata fields for automation and reporting.
+
+### Changed
+- **Detection flow tuning**: TLS fingerprint attempts are restricted to likely TLS ports/services to avoid unnecessary probe overhead.
+- **Top port set normalization**: duplicate ports are removed from the default top-port list, resulting in a stable effective set.
+
+### Fixed
+- **Performance regression in adaptive timeout**: timeout escalation now reacts primarily to real timeout conditions and is bounded, improving scan speed on hosts with many closed ports.
+- **Duplicate open-port rows**: final open-port results are deduplicated by port with best-available metadata retained.
+
 ## [2.4.0] - 2026-03-09
 
 ### Added

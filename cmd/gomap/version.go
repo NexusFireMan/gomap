@@ -9,7 +9,7 @@ import (
 
 var (
 	// Version is injected at build time with -ldflags.
-	Version = "2.4.0"
+	Version = "2.4.1"
 	// Commit is injected at build time with -ldflags.
 	Commit = "dev"
 	// Date is injected at build time with -ldflags.

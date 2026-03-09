@@ -18,6 +18,12 @@ func sampleResults() ([]string, map[string][]scanner.ScanResult) {
 				IsOpen:        true,
 				ServiceName:   "http",
 				Version:       "IIS 7.5",
+				TLS:           true,
+				TLSVersion:    "TLS1.2",
+				TLSCipher:     "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256",
+				TLSALPN:       "http/1.1",
+				TLSServerName: "10.0.11.6",
+				TLSIssuer:     "Test CA",
 				LatencyMs:     2,
 				Confidence:    "high",
 				Evidence:      "protocol banner",
@@ -68,6 +74,9 @@ func TestPrintCSVReport(t *testing.T) {
 	if !strings.Contains(lines[0], "detection_path") {
 		t.Fatalf("missing csv header fields: %s", lines[0])
 	}
+	if !strings.Contains(lines[0], "tls_version") {
+		t.Fatalf("missing tls csv fields: %s", lines[0])
+	}
 }
 
 func TestPrintJSONLReport(t *testing.T) {
@@ -83,5 +92,8 @@ func TestPrintJSONLReport(t *testing.T) {
 	}
 	if !strings.Contains(lines[0], `"state":"open"`) {
 		t.Fatalf("invalid jsonl state field: %s", lines[0])
+	}
+	if !strings.Contains(lines[0], `"tls":true`) {
+		t.Fatalf("missing tls jsonl field: %s", lines[0])
 	}
 }

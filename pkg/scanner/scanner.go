@@ -3,6 +3,7 @@ package scanner
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"math/rand/v2"
 	"net"
@@ -12,6 +13,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/stacktitan/smb/smb"
@@ -186,7 +188,7 @@ func (s *Scanner) Scan(ports []int, detectServices bool) []ScanResult {
 		return openPorts[i].Port < openPorts[j].Port
 	})
 
-	return openPorts
+	return dedupeOpenResults(openPorts)
 }
 
 // scanPort scans a single port
@@ -202,7 +204,7 @@ func (s *Scanner) scanPort(port int, detectServices bool) ScanResult {
 	for attempt := 0; attempt <= s.Retries; attempt++ {
 		attemptStart := time.Now()
 		conn, err = net.DialTimeout("tcp", address, s.currentTimeout())
-		s.recordDialOutcome(err == nil, time.Since(attemptStart))
+		s.recordDialOutcome(err, time.Since(attemptStart))
 		if err == nil {
 			break
 		}
@@ -266,7 +268,10 @@ func (s *Scanner) currentTimeout() time.Duration {
 		timeout = s.MinAdaptiveTimeout
 	}
 	if streak > 0 {
-		timeout += time.Duration(streak) * 75 * time.Millisecond
+		if streak > 6 {
+			streak = 6
+		}
+		timeout += time.Duration(streak) * 50 * time.Millisecond
 	}
 	if timeout > s.MaxAdaptiveTimeout {
 		timeout = s.MaxAdaptiveTimeout
@@ -282,11 +287,11 @@ func (s *Scanner) ioTimeout(min time.Duration) time.Duration {
 	return timeout
 }
 
-func (s *Scanner) recordDialOutcome(success bool, latency time.Duration) {
+func (s *Scanner) recordDialOutcome(dialErr error, latency time.Duration) {
 	s.adaptiveMu.Lock()
 	defer s.adaptiveMu.Unlock()
 
-	if success {
+	if dialErr == nil {
 		s.successCount++
 		s.failureStreak = 0
 		if s.ewmaLatency == 0 {
@@ -299,7 +304,80 @@ func (s *Scanner) recordDialOutcome(success bool, latency time.Duration) {
 	}
 
 	s.failureCount++
-	s.failureStreak++
+	if isDialTimeoutError(dialErr) {
+		s.failureStreak++
+		return
+	}
+	if s.failureStreak > 0 {
+		s.failureStreak--
+	}
+}
+
+func isDialTimeoutError(err error) bool {
+	if err == nil {
+		return false
+	}
+	var netErr net.Error
+	if errors.As(err, &netErr) && netErr.Timeout() {
+		return true
+	}
+	return errors.Is(err, syscall.ETIMEDOUT)
+}
+
+func dedupeOpenResults(results []ScanResult) []ScanResult {
+	if len(results) < 2 {
+		return results
+	}
+
+	seen := make(map[int]ScanResult, len(results))
+	for _, r := range results {
+		prev, ok := seen[r.Port]
+		if !ok {
+			seen[r.Port] = r
+			continue
+		}
+		seen[r.Port] = mergeOpenResult(prev, r)
+	}
+
+	out := make([]ScanResult, 0, len(seen))
+	for _, r := range seen {
+		out = append(out, r)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Port < out[j].Port })
+	return out
+}
+
+func mergeOpenResult(a, b ScanResult) ScanResult {
+	// Prefer richer fields from b where present.
+	out := a
+	if b.ServiceName != "" {
+		out.ServiceName = b.ServiceName
+	}
+	if b.Version != "" {
+		out.Version = b.Version
+	}
+	if b.Confidence != "" {
+		out.Confidence = b.Confidence
+	}
+	if b.Evidence != "" {
+		out.Evidence = b.Evidence
+	}
+	if b.DetectionPath != "" {
+		out.DetectionPath = b.DetectionPath
+	}
+	if b.TLS {
+		out.TLS = true
+		out.TLSVersion = b.TLSVersion
+		out.TLSCipher = b.TLSCipher
+		out.TLSALPN = b.TLSALPN
+		out.TLSServerName = b.TLSServerName
+		out.TLSIssuer = b.TLSIssuer
+	}
+	if b.LatencyMs > 0 {
+		out.Latency = b.Latency
+		out.LatencyMs = b.LatencyMs
+	}
+	return out
 }
 
 func (s *Scanner) retryBackoff(attempt int) time.Duration {
@@ -407,7 +485,27 @@ func (s *Scanner) grabBanner(conn net.Conn, port int, result *ScanResult) {
 
 	// If we still have no banner, use default service name
 	if banner == "" {
-		result.ServiceName = s.PortManager.GetServiceName(port, "")
+		mappedService := s.PortManager.GetServiceName(port, "")
+		if !s.GhostMode && shouldAttemptTLSFingerprint(port, mappedService) {
+			if fp, ok := s.detectTLSFingerprint(port); ok {
+				result.TLS = true
+				result.TLSVersion = fp.Version
+				result.TLSCipher = fp.Cipher
+				result.TLSALPN = fp.ALPN
+				result.TLSServerName = fp.SNI
+				result.TLSIssuer = fp.Issuer
+				result.ServiceName = inferTLServiceByPort(port, mappedService)
+				result.Version = strings.TrimSpace(strings.Join([]string{fp.Version, fp.Cipher}, " "))
+				if result.ServiceName == "winrm" && result.Version == "" {
+					result.Version = "Microsoft WinRM over TLS"
+				}
+				result.Confidence = "high"
+				result.Evidence = "tls handshake"
+				result.DetectionPath = "tls-fingerprint"
+				return
+			}
+		}
+		result.ServiceName = mappedService
 		if result.ServiceName == "msrpc" {
 			result.Version = "Microsoft Windows RPC"
 			result.Confidence = "medium"
@@ -450,6 +548,28 @@ func (s *Scanner) grabBanner(conn net.Conn, port int, result *ScanResult) {
 			result.Evidence = "protocol banner (generic)"
 		}
 		result.DetectionPath = "banner-parser"
+		if !s.GhostMode && shouldAttemptTLSFingerprint(port, result.ServiceName) {
+			if fp, ok := s.detectTLSFingerprint(port); ok {
+				result.TLS = true
+				result.TLSVersion = fp.Version
+				result.TLSCipher = fp.Cipher
+				result.TLSALPN = fp.ALPN
+				result.TLSServerName = fp.SNI
+				result.TLSIssuer = fp.Issuer
+				if result.ServiceName == "http" {
+					result.ServiceName = inferTLServiceByPort(port, result.ServiceName)
+				}
+				if result.Version == "" {
+					result.Version = strings.TrimSpace(strings.Join([]string{fp.Version, fp.Cipher}, " "))
+				}
+				if result.Evidence == "" {
+					result.Evidence = "tls handshake"
+				} else {
+					result.Evidence += "+tls"
+				}
+				result.DetectionPath += "+tls"
+			}
+		}
 	} else {
 		if !s.GhostMode {
 			if service, ver, confidence, evidence, path, ok := s.tryProtocolFingerprint(port); ok {

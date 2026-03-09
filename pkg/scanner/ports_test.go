@@ -34,3 +34,14 @@ func TestTopPortsIncludes47001(t *testing.T) {
 		t.Fatalf("expected top ports list to include 47001")
 	}
 }
+
+func TestTopPortsHasNoDuplicates(t *testing.T) {
+	ports := GetTop1000Ports()
+	seen := make(map[int]struct{}, len(ports))
+	for _, p := range ports {
+		if _, ok := seen[p]; ok {
+			t.Fatalf("duplicate port found in top list: %d", p)
+		}
+		seen[p] = struct{}{}
+	}
+}

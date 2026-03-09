@@ -5,6 +5,7 @@ A fast TCP port scanner written in Go, with optional service/version detection, 
 ## Current scope
 
 - Fast concurrent TCP scanning with selectable engine (`connect` or `syn`).
+- Default quick scan uses a curated top-port list normalized to unique ports (current effective size: 996).
 - Optional service and version detection (`-s`).
 - Single host, hostname, comma-separated targets, and CIDR ranges.
 - CIDR active-host discovery by TCP probes (no ICMP ping).
@@ -131,6 +132,7 @@ When `-s` is enabled, gomap combines port-based hints and protocol/banner parsin
 - HTTP/HTTPS server family/version where available.
 - SSH/FTP/PostgreSQL/Redis/MySQL and other protocol banners.
 - SMB-oriented identification for `microsoft-ds` targets.
+- TLS handshake metadata where applicable (`tls_version`, `tls_cipher`, ALPN, certificate issuer).
 
 Important: banner-based detection is heuristic. Always validate critical findings with a second tool.
 
@@ -209,7 +211,7 @@ One JSON record per open port, suitable for streaming pipelines.
 
 One row per open port with columns:
 
-`host,port,state,service,version,latency_ms,confidence,evidence,detection_path`
+`host,port,state,service,version,tls,tls_version,tls_cipher,tls_alpn,tls_server_name,tls_issuer,latency_ms,confidence,evidence,detection_path`
 
 ## Testing and quality
 
