@@ -131,7 +131,7 @@ gomap -v
 
 Validated in lab:
 - `apt update` resolves `InRelease` and `Packages` correctly from `https://nexusfireman.github.io/gomap`
-- `apt install gomap` installs `2.4.3` successfully on Kali
+- `apt install gomap` installs the current release successfully on Kali
 - `/usr/bin/gomap -v` shows embedded release metadata (`version`, `commit`, `date`)
 
 ### Container image

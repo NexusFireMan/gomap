@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.4.4] - 2026-03-18
+
+### Added
+- **Installation doctor**: new `gomap --doctor` command to inspect the active binary, detect multiple copies in `PATH`, report version/origin per copy, and highlight PATH shadowing issues.
+
+### Changed
+- **Safer removal flow**: `gomap --remove` now targets non-package copies found in `PATH` and common locations instead of assuming only `/usr/local/bin`.
+- **APT coexistence guidance**: README now documents how `apt` installations interact with older `go install` or manual copies and how to cleanly resolve conflicts.
+
+### Fixed
+- **Version parsing for managed installs**: internal version detection now understands the current colored `gomap -v` output format, improving updater and diagnostic accuracy.
+
 ## [2.4.3] - 2026-03-18
 
 ### Added
