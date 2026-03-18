@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.4.5](https://github.com/NexusFireMan/gomap/compare/v2.4.4...v2.4.5) (2026-03-18)
+
+
+### Bug Fixes
+
+* refine doctor output layout ([88d7c19](https://github.com/NexusFireMan/gomap/commit/88d7c197a77e0131296b1499bae3c900cb7ec456))
+
 ## [2.4.4] - 2026-03-18
 
 ### Added
