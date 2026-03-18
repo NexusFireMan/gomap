@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.4.2] - 2026-03-18
+
+### Added
+- **Container packaging**: project now includes a production-oriented `Dockerfile` and `.dockerignore` for fast containerized use of `gomap`.
+- **GHCR publishing workflow**: GitHub Actions now builds and publishes multi-arch container images to `ghcr.io`.
+- **Debian package release base**: GoReleaser now produces `.deb` artifacts for tagged releases.
+
+### Changed
+- **README installation docs**: added container usage, native SYN requirements inside containers, and direct `.deb` installation guidance.
+- **Release pipeline coverage**: documented and wired release outputs now include archives, checksums, `.deb` packages, and container images.
+
+### Fixed
+- **CI lint reproducibility**: CI now installs and runs a pinned `golangci-lint` version with config verification, aligned with the repository config schema.
+
 ## [2.4.1] - 2026-03-09
 
 ### Added
