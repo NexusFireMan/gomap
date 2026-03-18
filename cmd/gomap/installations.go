@@ -15,6 +15,7 @@ type gomapInstallation struct {
 	Path             string
 	DisplayPath      string
 	Active           bool
+	InPath           bool
 	Exists           bool
 	Version          string
 	PackageManaged   bool
@@ -36,41 +37,51 @@ func RunDoctor() error {
 		return nil
 	}
 
-	active := ""
+	var activeInst *gomapInstallation
 	for _, inst := range installs {
 		if inst.Active {
-			active = inst.DisplayPath
+			activeInst = &inst
 			break
 		}
 	}
-	if active == "" {
-		active = "not found in PATH"
+	fmt.Printf("%s\n", output.Bold("Summary"))
+	if activeInst == nil {
+		fmt.Printf("  active binary:  %s\n", output.Warning("not found in PATH"))
+	} else {
+		fmt.Printf("  active binary:  %s\n", output.Highlight(activeInst.DisplayPath))
+		fmt.Printf("  active version: %s\n", fallbackDoctorValue(activeInst.Version))
+		fmt.Printf("  active source:  %s\n", fallbackDoctorValue(activeInst.ProbableSource))
 	}
-	fmt.Printf("  active:      %s\n", output.Highlight(active))
 
+	fmt.Printf("%s\n", output.Bold("Detected Installations"))
 	for _, inst := range installs {
 		label := "copy"
 		if inst.Active {
 			label = "active"
+		} else if inst.InPath {
+			label = "path copy"
 		}
-		fmt.Printf("  %s:        %s\n", padDoctorLabel(label), output.Info(inst.DisplayPath))
-		fmt.Printf("    version:  %s\n", fallbackDoctorValue(inst.Version))
-		fmt.Printf("    source:   %s\n", fallbackDoctorValue(inst.ProbableSource))
+		fmt.Printf("  %s: %s\n", padDoctorLabel(label), output.Info(inst.DisplayPath))
+		fmt.Printf("    version: %s\n", fallbackDoctorValue(inst.Version))
+		fmt.Printf("    source:  %s\n", fallbackDoctorValue(inst.ProbableSource))
 		if inst.PackageManaged {
-			fmt.Printf("    package:  %s\n", fallbackDoctorValue(inst.PackageName))
+			fmt.Printf("    package: %s\n", fallbackDoctorValue(inst.PackageName))
 		}
 		if inst.PackageManaged {
-			fmt.Printf("    remove:   %s\n", output.Warning("managed by package manager; use sudo apt remove gomap"))
+			fmt.Printf("    remove:  %s\n", output.Warning("managed by package manager; use sudo apt remove gomap"))
 		} else if inst.RemovalSupported {
-			fmt.Printf("    remove:   %s\n", output.Info("can be removed by gomap --remove"))
+			fmt.Printf("    remove:  %s\n", output.Info("can be removed by gomap --remove"))
 		} else {
-			fmt.Printf("    remove:   %s\n", output.Warning("manual cleanup may be required"))
+			fmt.Printf("    remove:  %s\n", output.Warning("manual cleanup may be required"))
 		}
 	}
 
 	if hasPATHShadowing(installs) {
 		fmt.Printf("%s\n", output.StatusWarn("Multiple gomap binaries are present in PATH; older copies may shadow the packaged one"))
 		fmt.Printf("%s\n", output.Info("Run `which -a gomap` and keep the intended installation first in PATH"))
+	} else if hasAdditionalCopies(installs) {
+		fmt.Printf("%s\n", output.StatusWarn("Additional gomap copies were found outside the active command path"))
+		fmt.Printf("%s\n", output.Info("Use `gomap --remove` to clean removable copies or keep them if they are intentional"))
 	}
 
 	return nil
@@ -130,6 +141,7 @@ func detectGomapInstallations() ([]gomapInstallation, error) {
 	candidates := candidateBinaryPaths()
 	activePath, _ := exec.LookPath("gomap")
 	activeEval, _ := filepath.EvalSymlinks(activePath)
+	pathSet := pathBinarySet()
 
 	seen := map[string]bool{}
 	installs := make([]gomapInstallation, 0, len(candidates))
@@ -156,6 +168,7 @@ func detectGomapInstallations() ([]gomapInstallation, error) {
 			Path:             resolved,
 			DisplayPath:      displayPath(resolved),
 			Active:           resolved == activeEval || candidate == activePath,
+			InPath:           pathSet[resolved] || pathSet[candidate],
 			Exists:           true,
 			Version:          version,
 			PackageManaged:   pkgManaged,
@@ -166,6 +179,20 @@ func detectGomapInstallations() ([]gomapInstallation, error) {
 	}
 
 	return installs, nil
+}
+
+func pathBinarySet() map[string]bool {
+	out := map[string]bool{}
+	if pathEnv := os.Getenv("PATH"); pathEnv != "" {
+		for _, dir := range filepath.SplitList(pathEnv) {
+			bin := filepath.Join(dir, "gomap")
+			out[bin] = true
+			if resolved, err := filepath.EvalSymlinks(bin); err == nil {
+				out[resolved] = true
+			}
+		}
+	}
+	return out
 }
 
 func candidateBinaryPaths() []string {
@@ -258,18 +285,28 @@ func displayPath(path string) string {
 func hasPATHShadowing(installs []gomapInstallation) bool {
 	count := 0
 	for _, inst := range installs {
-		if inst.Active || strings.Contains(inst.Path, string(filepath.Separator)+"bin"+string(filepath.Separator)) {
+		if inst.InPath {
 			count++
 		}
 	}
 	return count > 1
 }
 
+func hasAdditionalCopies(installs []gomapInstallation) bool {
+	if len(installs) <= 1 {
+		return false
+	}
+	if hasPATHShadowing(installs) {
+		return false
+	}
+	return true
+}
+
 func padDoctorLabel(label string) string {
-	if len(label) >= 10 {
+	if len(label) >= 9 {
 		return label
 	}
-	return label + strings.Repeat(" ", 10-len(label))
+	return label + strings.Repeat(" ", 9-len(label))
 }
 
 func fallbackDoctorValue(value string) string {
