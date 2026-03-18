@@ -24,6 +24,8 @@ logs/
 tmp/
 temp/
 *.tmp
+.apt-input/
+.pages/
 
 # IDE and editor files
 .vscode/

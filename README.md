@@ -35,6 +35,7 @@
 - [Testing and Quality](#testing-and-quality)
 - [Project Layout](#project-layout)
 - [Release Process](#release-process)
+- [APT Repository Publishing](#apt-repository-publishing)
 - [Responsible Use](#responsible-use)
 - [Quick Links](#quick-links)
 
@@ -77,6 +78,25 @@ go build -o gomap .
 ```bash
 go install github.com/NexusFireMan/gomap/v2@latest
 ```
+
+### Install with APT (Kali / Parrot / Debian)
+
+GoMap is also prepared to be consumed from a signed APT repository published on GitHub Pages:
+
+```bash
+curl -fsSL https://nexusfireman.github.io/gomap/gomap-archive-keyring.gpg \
+  | sudo gpg --dearmor -o /usr/share/keyrings/gomap-archive-keyring.gpg
+
+echo "deb [signed-by=/usr/share/keyrings/gomap-archive-keyring.gpg] https://nexusfireman.github.io/gomap stable main" \
+  | sudo tee /etc/apt/sources.list.d/gomap.list > /dev/null
+
+sudo apt update
+sudo apt install gomap
+```
+
+Notes:
+- This is intended for Kali, Parrot, Debian, and close derivatives.
+- Arch users should prefer an AUR package in a later phase rather than this APT repository.
 
 ### Container image
 
@@ -331,6 +351,48 @@ Quick links:
 - Container publishing: `.github/workflows/container.yml` (GHCR image on `main` and tags).
 - Release PR automation: `release-please` workflow.
 - Tagged releases: GoReleaser workflow builds archives, checksums, and `.deb` packages.
+
+## APT Repository Publishing
+
+The APT repository is published automatically to GitHub Pages at:
+
+- `https://nexusfireman.github.io/gomap`
+
+Workflow:
+
+- `.github/workflows/release.yml` publishes GitHub release assets, including `.deb` packages.
+- `.github/workflows/apt-repo.yml` runs on `release.published`.
+- It downloads all released `.deb` assets, rebuilds the APT metadata, signs `Release`/`InRelease`, and deploys the result to GitHub Pages.
+
+Required GitHub configuration:
+
+1. Enable **GitHub Pages** for this repository.
+2. Set Pages source to **GitHub Actions**.
+3. Add repository secrets:
+   - `APT_GPG_PRIVATE_KEY`
+   - `APT_GPG_PASSPHRASE`
+
+Recommended GPG setup:
+
+```bash
+gpg --full-generate-key
+gpg --armor --export-secret-keys "<your-key-id>" > gomap-apt-private.asc
+gpg --export "<your-key-id>" > gomap-archive-keyring.gpg
+```
+
+Then:
+
+- store the contents of `gomap-apt-private.asc` in `APT_GPG_PRIVATE_KEY`
+- store the passphrase in `APT_GPG_PASSPHRASE`
+- keep `gomap-archive-keyring.gpg` as the public key distributed to users
+
+Local dry-run:
+
+```bash
+mkdir -p .apt-input
+cp dist/*.deb .apt-input/
+bash ./scripts/build-apt-repo.sh .apt-input .pages https://nexusfireman.github.io/gomap
+```
 
 ## Responsible Use
 

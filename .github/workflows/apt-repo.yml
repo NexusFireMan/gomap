@@ -1,0 +1,86 @@
+name: APT Repository
+
+on:
+  release:
+    types:
+      - published
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: apt-repo-pages
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish APT Repository
+    runs-on: ubuntu-latest
+    env:
+      PAGES_BASE_URL: https://nexusfireman.github.io/gomap
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Install repository tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y apt-utils dpkg-dev gnupg jq
+
+      - name: Download released .deb assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p .apt-input
+
+          gh api --paginate "/repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
+            | jq -r '.[] | select(.draft == false and .prerelease == false) | .assets[]? | select(.name | endswith(".deb")) | [.browser_download_url, .name] | @tsv' \
+            | while IFS=$'\t' read -r url name; do
+                echo "downloading ${name}"
+                curl -fsSL -H "Authorization: Bearer ${GH_TOKEN}" -o ".apt-input/${name}" "${url}"
+              done
+
+          test -n "$(find .apt-input -maxdepth 1 -type f -name '*.deb' -print -quit)"
+
+      - name: Import signing key
+        env:
+          APT_GPG_PRIVATE_KEY: ${{ secrets.APT_GPG_PRIVATE_KEY }}
+          APT_GPG_PASSPHRASE: ${{ secrets.APT_GPG_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+          export GNUPGHOME="$(mktemp -d)"
+          chmod 700 "${GNUPGHOME}"
+          printf '%s' "${APT_GPG_PRIVATE_KEY}" | gpg --batch --import
+          FPR="$(gpg --batch --with-colons --list-secret-keys | awk -F: '/^fpr:/ { print $10; exit }')"
+          test -n "${FPR}"
+          echo "GNUPGHOME=${GNUPGHOME}" >> "${GITHUB_ENV}"
+          echo "APT_GPG_FPR=${FPR}" >> "${GITHUB_ENV}"
+          echo "APT_GPG_PASSPHRASE=${APT_GPG_PASSPHRASE}" >> "${GITHUB_ENV}"
+
+      - name: Build APT repository
+        run: |
+          set -euo pipefail
+          bash ./scripts/build-apt-repo.sh .apt-input .pages "${PAGES_BASE_URL}"
+          gpg --batch --yes --export "${APT_GPG_FPR}" > .pages/gomap-archive-keyring.gpg
+          gpg --batch --yes --armor --export "${APT_GPG_FPR}" > .pages/gomap-archive-keyring.asc
+          gpg --batch --yes --pinentry-mode loopback --passphrase "${APT_GPG_PASSPHRASE}" \
+            --default-key "${APT_GPG_FPR}" \
+            --clearsign -o .pages/dists/stable/InRelease .pages/dists/stable/Release
+          gpg --batch --yes --pinentry-mode loopback --passphrase "${APT_GPG_PASSPHRASE}" \
+            --default-key "${APT_GPG_FPR}" \
+            -abs -o .pages/dists/stable/Release.gpg .pages/dists/stable/Release
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: .pages
+
+      - name: Deploy to GitHub Pages
+        uses: actions/deploy-pages@v4
