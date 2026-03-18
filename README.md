@@ -102,8 +102,31 @@ Notes:
 
 ```bash
 which -a gomap
+gomap --doctor
 /usr/bin/gomap -v
 hash -r
+```
+
+`gomap --doctor` reports:
+- the active binary currently resolved in `PATH`
+- all detected `gomap` copies in common locations
+- the detected version of each copy
+- the probable origin (`apt`, `go install`, manual install, user-local binary)
+- whether `gomap --remove` can remove it safely
+
+Behavior note:
+- `gomap --remove` skips package-managed binaries such as `/usr/bin/gomap`
+- to remove the APT installation itself, use `sudo apt remove gomap`
+
+Example cleanup when an older user-local binary shadows the packaged one:
+
+```bash
+which -a gomap
+gomap --doctor
+/usr/bin/gomap -v
+rm -f ~/.local/bin/gomap
+hash -r
+gomap -v
 ```
 
 Validated in lab:
@@ -225,7 +248,8 @@ Ghost defaults:
 Maintenance:
   -v                show version/build info
   -up               update to latest version
-  --remove          remove gomap from /usr/local/bin
+  --remove          remove non-package gomap copies found in PATH/common locations
+  --doctor          inspect active binary, PATH copies, and install origin
 ```
 
 ## Detection Realism (`-s`)

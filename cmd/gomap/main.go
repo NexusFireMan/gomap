@@ -35,6 +35,14 @@ func Run() {
 		os.Exit(0)
 	}
 
+	if opts.DoctorFlag {
+		if err := RunDoctor(); err != nil {
+			fmt.Printf("%s\n", output.StatusError(fmt.Sprintf("Doctor failed: %v", err)))
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}
+
 	if opts.UpdateFlag {
 		if err := CheckUpdate(); err != nil {
 			fmt.Printf("%s\n", output.StatusError(fmt.Sprintf("Update failed: %v", err)))

@@ -65,6 +65,16 @@ func TestParseCLIOptionsHelpFlag(t *testing.T) {
 	}
 }
 
+func TestParseCLIOptionsDoctorFlag(t *testing.T) {
+	opts, err := ParseCLIOptions([]string{"--doctor"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !opts.DoctorFlag {
+		t.Fatal("expected doctor flag enabled")
+	}
+}
+
 func TestParseCLIOptionsScanType(t *testing.T) {
 	opts, err := ParseCLIOptions([]string{"--scan-type", "syn", "10.0.11.6"})
 	if err != nil {

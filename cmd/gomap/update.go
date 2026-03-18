@@ -502,7 +502,8 @@ func replaceBinaryAtomicallyWithSudo(src, dst string) error {
 	return nil
 }
 
-var versionRegex = regexp.MustCompile(`(?m)^gomap version ([^ \n\r\t]+)`)
+var ansiRegex = regexp.MustCompile(`\x1b\[[0-9;]*m`)
+var versionRegex = regexp.MustCompile(`(?m)^\s*(?:gomap version|gomap:)\s*([^\s]+)\s*$`)
 
 func readBinaryVersion(path string) (string, error) {
 	cmd := exec.Command(path, "-v")
@@ -510,7 +511,8 @@ func readBinaryVersion(path string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	matches := versionRegex.FindStringSubmatch(string(out))
+	clean := ansiRegex.ReplaceAllString(string(out), "")
+	matches := versionRegex.FindStringSubmatch(clean)
 	if len(matches) != 2 {
 		return "", fmt.Errorf("could not parse version output from %s", path)
 	}

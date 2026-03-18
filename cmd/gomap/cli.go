@@ -19,6 +19,7 @@ type CLIOptions struct {
 	GhostFlag       bool
 	UpdateFlag      bool
 	RemoveFlag      bool
+	DoctorFlag      bool
 	VersionFlag     bool
 	NoDiscovery     bool
 	JSONFlag        bool
@@ -59,6 +60,7 @@ func ParseCLIOptions(args []string) (CLIOptions, error) {
 	fs.BoolVar(&opts.NoDiscovery, "nd", false, "disable host discovery (scan all hosts in CIDR even if inactive)")
 	fs.BoolVar(&opts.UpdateFlag, "up", false, "update gomap to the latest version")
 	fs.BoolVar(&opts.RemoveFlag, "remove", false, "remove gomap from the system (/usr/local/bin)")
+	fs.BoolVar(&opts.DoctorFlag, "doctor", false, "inspect active binary, PATH copies, and installation origin")
 	fs.BoolVar(&opts.VersionFlag, "v", false, "show version information")
 	fs.BoolVar(&opts.JSONFlag, "json", false, "output scan results in JSON format")
 	fs.BoolVar(&opts.CSVFlag, "csv", false, "output scan results in CSV format")
@@ -90,7 +92,7 @@ func ParseCLIOptions(args []string) (CLIOptions, error) {
 	}
 
 	// Special flags can run without host argument.
-	if opts.VersionFlag || opts.RemoveFlag || opts.UpdateFlag {
+	if opts.VersionFlag || opts.RemoveFlag || opts.UpdateFlag || opts.DoctorFlag {
 		return normalizeOptions(opts)
 	}
 
@@ -251,7 +253,8 @@ func printHelp(w *os.File) {
 
 %sMaintenance:%s
   -up                        self-update to latest version
-  --remove                   uninstall from /usr/local/bin
+  --remove                   remove non-package gomap copies found in PATH/common locations
+  --doctor                   inspect active binary, PATH copies, and install origin
   -v                         show version/build information
   -h                         show this help
 
