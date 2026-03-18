@@ -1,6 +1,42 @@
+<div align="center">
+
+<pre>
+  ██████╗  ██████╗ ███╗   ███╗ █████╗ ██████╗
+ ██╔════╝ ██╔═══██╗████╗ ████║██╔══██╗██╔══██╗
+ ██║  ███╗██║   ██║██╔████╔██║███████║██████╔╝
+ ██║   ██║██║   ██║██║╚██╔╝██║██╔══██║██╔═══╝
+ ╚██████╔╝╚██████╔╝██║ ╚═╝ ██║██║  ██║██║
+  ╚═════╝  ╚═════╝ ╚═╝     ╚═╝╚═╝  ╚═╝╚═╝
+</pre>
+
 # gomap
 
-![CI](https://github.com/NexusFireMan/gomap/actions/workflows/ci.yml/badge.svg)
+**Fast TCP scanner in Go with service fingerprinting, native SYN scanning, stealth profiles, and multi-format output.**
+
+[![CI](https://github.com/NexusFireMan/gomap/actions/workflows/ci.yml/badge.svg)](https://github.com/NexusFireMan/gomap/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/NexusFireMan/gomap?display_name=tag)](https://github.com/NexusFireMan/gomap/releases)
+[![Go](https://img.shields.io/badge/Go-1.24%2B-00ADD8?logo=go&logoColor=white)](https://go.dev/)
+[![Docker](https://img.shields.io/badge/Docker-GHCR-2496ED?logo=docker&logoColor=white)](https://github.com/NexusFireMan/gomap/pkgs/container/gomap)
+[![CLI](https://img.shields.io/badge/Interface-CLI-2C2C2C)](https://github.com/NexusFireMan/gomap)
+[![License](https://img.shields.io/github/license/NexusFireMan/gomap)](https://github.com/NexusFireMan/gomap/blob/main/LICENSE)
+[![Ko-fi](https://img.shields.io/badge/Ko--fi-Support-FF5E5B?logo=kofi&logoColor=white)](https://ko-fi.com/C0C61UHTB1)
+
+</div>
+
+## Navigation
+
+- [Current scope](#current-scope)
+- [Installation](#installation)
+- [Quick Start](#quick-start)
+- [CLI Reference](#cli-reference)
+- [Detection Realism (`-s`)](#detection-realism--s)
+- [Stealth Benchmark (Lab)](#stealth-benchmark-lab)
+- [Output Formats](#output-formats)
+- [Testing and Quality](#testing-and-quality)
+- [Project Layout](#project-layout)
+- [Release Process](#release-process)
+- [Responsible Use](#responsible-use)
+- [Quick Links](#quick-links)
 
 A fast TCP port scanner written in Go, with optional service/version detection, CIDR host discovery, adaptive timeout tuning, and multi-format output.
 
@@ -74,13 +110,13 @@ Each tagged release publishes `.deb` artifacts alongside archives and checksums.
 sudo dpkg -i gomap_<version>_linux_amd64.deb
 ```
 
-### Version Metadata
+### Version metadata
 
 - Release binaries and local script builds embed `Version`, `Commit`, and `Date`.
 - `gomap -up` now prefers release binaries to preserve embedded build metadata in final installations.
 - Plain `go install` builds may not include ldflags, so `gomap -v` also uses Go build info fallback when available.
 
-## Quick start
+## Quick Start
 
 ```bash
 # Default scan (top common ports)
@@ -108,7 +144,7 @@ sudo dpkg -i gomap_<version>_linux_amd64.deb
 ./gomap -g -nd -s --random-agent --random-ip -p 22,80,443 10.0.11.0/24
 ```
 
-## CLI reference
+## CLI Reference
 
 ```text
 Usage:
@@ -159,7 +195,7 @@ Maintenance:
   --remove          remove gomap from /usr/local/bin
 ```
 
-## Detection realism (`-s`)
+## Detection Realism (`-s`)
 
 When `-s` is enabled, gomap combines port-based hints and protocol/banner parsing to infer:
 
@@ -177,7 +213,7 @@ Important: banner-based detection is heuristic. Always validate critical finding
 
 Note: `--random-ip` randomizes HTTP headers only; it does not spoof the real TCP source IP.
 
-## Stealth benchmark (lab)
+## Stealth Benchmark (Lab)
 
 Benchmark executed on **March 9, 2026** with:
 
@@ -221,7 +257,7 @@ Takeaways:
 - In this Snort rule set, SYN generated more alerts than CONNECT for the same target/ports.
 - Ghost CIDR discovery is intentionally conservative and may scan fewer active hosts (`3` vs `4` in this run).
 
-## Output formats
+## Output Formats
 
 ### Text (`--format text`, default)
 
@@ -247,7 +283,7 @@ One row per open port with columns:
 
 `host,port,state,service,version,tls,tls_version,tls_cipher,tls_alpn,tls_server_name,tls_issuer,latency_ms,confidence,evidence,detection_path`
 
-## Testing and quality
+## Testing and Quality
 
 ### Local checks
 
@@ -272,7 +308,7 @@ export GOMAP_LAB_LINUX_IP=10.0.11.9
 go test ./pkg/app -run LabIntegration -v
 ```
 
-## Project layout
+## Project Layout
 
 ```text
 cmd/gomap/      CLI parsing, version/update/remove commands
@@ -282,17 +318,31 @@ pkg/output/     Table renderer + json/jsonl/csv report generation
 .github/        CI and release workflows
 ```
 
-## Release process
+## Release Process
+
+Quick links:
+
+- Source: `git clone https://github.com/NexusFireMan/gomap.git`
+- Latest release: `https://github.com/NexusFireMan/gomap/releases/latest`
+- Container image: `ghcr.io/nexusfireman/gomap:latest`
+- Debian packages: assets attached to each tagged release
 
 - CI: `.github/workflows/ci.yml` (lint, tests, race, coverage).
 - Container publishing: `.github/workflows/container.yml` (GHCR image on `main` and tags).
 - Release PR automation: `release-please` workflow.
 - Tagged releases: GoReleaser workflow builds archives, checksums, and `.deb` packages.
 
-## Responsible use
+## Responsible Use
 
 Use this tool only on systems and networks you are authorized to test.
 
 ---
-If you liked me, you can invite me for a coffee.
+## Quick Links
+
+- Releases: [github.com/NexusFireMan/gomap/releases](https://github.com/NexusFireMan/gomap/releases)
+- Container: [github.com/NexusFireMan/gomap/pkgs/container/gomap](https://github.com/NexusFireMan/gomap/pkgs/container/gomap)
+- CI: [github.com/NexusFireMan/gomap/actions/workflows/ci.yml](https://github.com/NexusFireMan/gomap/actions/workflows/ci.yml)
+- Support: [ko-fi.com/C0C61UHTB1](https://ko-fi.com/C0C61UHTB1)
+
+If you find the project useful, you can support it here:
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/C0C61UHTB1)
