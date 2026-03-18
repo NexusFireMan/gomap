@@ -41,6 +41,25 @@ archives:
 checksum:
   name_template: "checksums.txt"
 
+nfpms:
+  - id: packages
+    package_name: gomap
+    file_name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    homepage: https://github.com/NexusFireMan/gomap
+    description: Fast TCP scanner with service detection, stealth profiles, and native SYN scanning.
+    maintainer: NexusFireMan
+    license: MIT
+    formats:
+      - deb
+    bindir: /usr/bin
+    builds:
+      - gomap
+    contents:
+      - src: README.md
+        dst: /usr/share/doc/gomap/README.md
+      - src: CHANGELOG.md
+        dst: /usr/share/doc/gomap/CHANGELOG.md
+
 changelog:
   sort: asc
   use: github

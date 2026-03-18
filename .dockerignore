@@ -1,0 +1,7 @@
+.git
+.github
+bin
+coverage.out
+dist
+docs
+gomap

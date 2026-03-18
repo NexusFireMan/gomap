@@ -1,5 +1,7 @@
 # gomap
 
+![CI](https://github.com/NexusFireMan/gomap/actions/workflows/ci.yml/badge.svg)
+
 A fast TCP port scanner written in Go, with optional service/version detection, CIDR host discovery, adaptive timeout tuning, and multi-format output.
 
 ## Current scope
@@ -38,6 +40,38 @@ go build -o gomap .
 
 ```bash
 go install github.com/NexusFireMan/gomap/v2@latest
+```
+
+### Container image
+
+Published images are available on GHCR:
+
+```bash
+docker pull ghcr.io/nexusfireman/gomap:latest
+```
+
+Run a standard scan:
+
+```bash
+docker run --rm --network host ghcr.io/nexusfireman/gomap:latest 10.0.11.6
+```
+
+Run native SYN scan:
+
+```bash
+docker run --rm --network host --cap-add NET_RAW ghcr.io/nexusfireman/gomap:latest --scan-type syn 10.0.11.6
+```
+
+Notes:
+- `--network host` is recommended on Linux for predictable scan behavior.
+- Native SYN scan additionally requires `--cap-add NET_RAW`.
+
+### Debian package artifacts
+
+Each tagged release publishes `.deb` artifacts alongside archives and checksums. They can be installed directly with:
+
+```bash
+sudo dpkg -i gomap_<version>_linux_amd64.deb
 ```
 
 ### Version Metadata
@@ -251,8 +285,9 @@ pkg/output/     Table renderer + json/jsonl/csv report generation
 ## Release process
 
 - CI: `.github/workflows/ci.yml` (lint, tests, race, coverage).
+- Container publishing: `.github/workflows/container.yml` (GHCR image on `main` and tags).
 - Release PR automation: `release-please` workflow.
-- Tagged releases: GoReleaser workflow builds reproducible artifacts and checksums.
+- Tagged releases: GoReleaser workflow builds archives, checksums, and `.deb` packages.
 
 ## Responsible use
 

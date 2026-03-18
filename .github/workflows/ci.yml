@@ -23,11 +23,16 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6
-        with:
-          version: latest
-          args: --timeout=5m
+      - name: Install golangci-lint
+        run: |
+          curl -sSfL https://golangci-lint.run/install.sh | sh -s -- -b "${RUNNER_TEMP}/bin" v2.9.0
+          echo "${RUNNER_TEMP}/bin" >> "${GITHUB_PATH}"
+
+      - name: Verify golangci-lint config
+        run: golangci-lint config verify
+
+      - name: Run golangci-lint
+        run: golangci-lint run ./... --timeout=5m
 
   test:
     name: Test
