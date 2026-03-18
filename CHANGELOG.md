@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.4.3] - 2026-03-18
+
+### Added
+- **APT repository publishing**: GitHub Actions can now build and publish a signed APT repository for Kali, Parrot, Debian, and close derivatives via GitHub Pages.
+- **APT repository builder**: added a reusable script to assemble `pool/`, `Packages`, `Release`, `InRelease`, and the public installation landing page.
+
+### Changed
+- **Installation documentation**: README now documents APT installation, Pages setup, required GPG secrets, and local dry-run steps for the repository publisher.
+- **Repository hygiene**: local APT staging directories are now ignored by Git.
+
 ## [2.4.2] - 2026-03-18
 
 ### Added
