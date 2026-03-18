@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.4.5] - 2026-03-18
+
+### Fixed
+- **Doctor output polish**: `gomap --doctor` now presents a cleaner `Summary` plus `Detected Installations` layout, removes redundant active-path repetition, and only warns when additional copies are genuinely relevant.
+
 ## [2.4.4] - 2026-03-18
 
 ### Added
