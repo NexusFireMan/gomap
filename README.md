@@ -97,6 +97,19 @@ sudo apt install gomap
 Notes:
 - This is intended for Kali, Parrot, Debian, and close derivatives.
 - Arch users should prefer an AUR package in a later phase rather than this APT repository.
+- The Debian package installs the binary at `/usr/bin/gomap`.
+- If `gomap -v` still shows an older version after `apt install`, check for older copies earlier in `PATH`:
+
+```bash
+which -a gomap
+/usr/bin/gomap -v
+hash -r
+```
+
+Validated in lab:
+- `apt update` resolves `InRelease` and `Packages` correctly from `https://nexusfireman.github.io/gomap`
+- `apt install gomap` installs `2.4.3` successfully on Kali
+- `/usr/bin/gomap -v` shows embedded release metadata (`version`, `commit`, `date`)
 
 ### Container image
 
@@ -393,6 +406,10 @@ mkdir -p .apt-input
 cp dist/*.deb .apt-input/
 bash ./scripts/build-apt-repo.sh .apt-input .pages https://nexusfireman.github.io/gomap
 ```
+
+Operational note:
+
+- The APT repository is validated, but user shells may still resolve older local binaries first if `~/.local/bin` or `/usr/local/bin` appears before `/usr/bin` in `PATH`.
 
 ## Responsible Use
 
