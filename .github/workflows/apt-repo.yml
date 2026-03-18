@@ -1,9 +1,11 @@
 name: APT Repository
 
 on:
-  release:
+  workflow_run:
+    workflows:
+      - Release
     types:
-      - published
+      - completed
   workflow_dispatch:
 
 permissions:
@@ -18,6 +20,7 @@ concurrency:
 jobs:
   publish:
     name: Publish APT Repository
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     env:
       PAGES_BASE_URL: https://nexusfireman.github.io/gomap

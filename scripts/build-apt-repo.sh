@@ -34,11 +34,14 @@ for deb in "${DEBS[@]}"; do
   cp "${deb}" "${POOL_DIR}/"
 done
 
-dpkg-scanpackages -a amd64 --multiversion "${OUT_DIR}/pool" /dev/null > "${DIST_DIR}/binary-amd64/Packages"
-gzip -9fk "${DIST_DIR}/binary-amd64/Packages"
+(
+  cd "${OUT_DIR}"
+  dpkg-scanpackages -a amd64 --multiversion "pool" /dev/null > "dists/${DISTRIBUTION}/${COMPONENT}/binary-amd64/Packages"
+  gzip -9fk "dists/${DISTRIBUTION}/${COMPONENT}/binary-amd64/Packages"
 
-dpkg-scanpackages -a arm64 --multiversion "${OUT_DIR}/pool" /dev/null > "${DIST_DIR}/binary-arm64/Packages"
-gzip -9fk "${DIST_DIR}/binary-arm64/Packages"
+  dpkg-scanpackages -a arm64 --multiversion "pool" /dev/null > "dists/${DISTRIBUTION}/${COMPONENT}/binary-arm64/Packages"
+  gzip -9fk "dists/${DISTRIBUTION}/${COMPONENT}/binary-arm64/Packages"
+)
 
 cat > "${OUT_DIR}/apt-ftparchive.conf" <<EOF
 APT::FTPArchive::Release {

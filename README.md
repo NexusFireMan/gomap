@@ -361,7 +361,7 @@ The APT repository is published automatically to GitHub Pages at:
 Workflow:
 
 - `.github/workflows/release.yml` publishes GitHub release assets, including `.deb` packages.
-- `.github/workflows/apt-repo.yml` runs on `release.published`.
+- `.github/workflows/apt-repo.yml` runs after the `Release` workflow completes successfully.
 - It downloads all released `.deb` assets, rebuilds the APT metadata, signs `Release`/`InRelease`, and deploys the result to GitHub Pages.
 
 Required GitHub configuration:
