@@ -1,0 +1,58 @@
+name: Bug report
+description: Report a reproducible GoMap bug.
+title: "bug: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. Please avoid sharing credentials, private scan output, or data from systems you are not authorized to test.
+  - type: input
+    id: version
+    attributes:
+      label: GoMap version
+      description: Run `gomap -v` and paste the version.
+      placeholder: "2.4.6"
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: "Kali rolling, Ubuntu 24.04, macOS 15, ..."
+    validations:
+      required: true
+  - type: textarea
+    id: command
+    attributes:
+      label: Command
+      description: Paste the exact command used. Redact private targets if needed.
+      render: bash
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant output
+      description: Paste output, logs, or screenshots. Redact sensitive information.
+      render: text
+  - type: checkboxes
+    id: authorized
+    attributes:
+      label: Responsible use confirmation
+      options:
+        - label: The target system or network is owned by me or I am authorized to test it.
+          required: true

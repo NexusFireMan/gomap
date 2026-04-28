@@ -1,0 +1,46 @@
+name: Feature request
+description: Suggest an improvement or new capability.
+title: "feat: "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or use case
+      description: What problem would this solve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Describe the CLI, output, or workflow you would expect.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Mention other approaches or tools if relevant.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Scanner engine
+        - Service detection
+        - Output formats
+        - CLI / UX
+        - Packaging / install
+        - Documentation
+        - Other
+    validations:
+      required: true
+  - type: checkboxes
+    id: authorized
+    attributes:
+      label: Responsible use confirmation
+      options:
+        - label: This request is for authorized testing, defensive work, lab use, or general tooling improvement.
+          required: true
