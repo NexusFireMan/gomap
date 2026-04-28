@@ -85,6 +85,23 @@ func TestParseCLIOptionsScanType(t *testing.T) {
 	}
 }
 
+func TestParseCLIOptionsUDPFlag(t *testing.T) {
+	opts, err := ParseCLIOptions([]string{"-u", "10.0.11.6"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !opts.UDPFlag {
+		t.Fatal("expected udp flag enabled")
+	}
+}
+
+func TestParseCLIOptionsUDPRejectsSYN(t *testing.T) {
+	_, err := ParseCLIOptions([]string{"-u", "--scan-type", "syn", "10.0.11.6"})
+	if err == nil {
+		t.Fatal("expected error for udp with syn scan type")
+	}
+}
+
 func TestParseCLIOptionsScanTypeInvalid(t *testing.T) {
 	_, err := ParseCLIOptions([]string{"--scan-type", "udp", "10.0.11.6"})
 	if err == nil {

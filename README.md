@@ -11,7 +11,7 @@
 
 # gomap
 
-**Fast TCP scanner in Go with service fingerprinting, native SYN scanning, stealth profiles, and multi-format output.**
+**Fast TCP/UDP scanner in Go with service fingerprinting, native SYN scanning, stealth profiles, and multi-format output.**
 
 [![CI](https://github.com/NexusFireMan/gomap/actions/workflows/ci.yml/badge.svg)](https://github.com/NexusFireMan/gomap/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/NexusFireMan/gomap?display_name=tag)](https://github.com/NexusFireMan/gomap/releases)
@@ -32,18 +32,15 @@
 - [Detection Realism (`-s`)](#detection-realism--s)
 - [Stealth Benchmark (Lab)](#stealth-benchmark-lab)
 - [Output Formats](#output-formats)
-- [Testing and Quality](#testing-and-quality)
-- [Project Layout](#project-layout)
-- [Release Process](#release-process)
-- [APT Repository Publishing](#apt-repository-publishing)
 - [Responsible Use](#responsible-use)
 - [Quick Links](#quick-links)
 
-A fast TCP port scanner written in Go, with optional service/version detection, CIDR host discovery, adaptive timeout tuning, and multi-format output.
+A fast TCP/UDP port scanner written in Go, with optional service/version detection, CIDR host discovery, adaptive timeout tuning, and multi-format output.
 
 ## Current scope
 
 - Fast concurrent TCP scanning with selectable engine (`connect` or `syn`).
+- UDP probing with `-u` for responsive UDP services.
 - Default quick scan uses a curated top-port list normalized to unique ports (current effective size: 996).
 - Optional service and version detection (`-s`).
 - Single host, hostname, comma-separated targets, and CIDR ranges.
@@ -181,6 +178,12 @@ sudo dpkg -i gomap_<version>_linux_amd64.deb
 # Native SYN scan discovery (requires root/CAP_NET_RAW)
 ./gomap --scan-type syn 10.0.11.6
 
+# UDP scan (responsive UDP services only)
+./gomap -u 10.0.11.6
+
+# UDP scan on selected ports
+./gomap -u -s -p 53,123,137,161,1900 10.0.11.6
+
 # Service/version detection on selected ports
 ./gomap -s -p 21,22,80,135,139,445,5985 10.0.11.6
 
@@ -208,8 +211,9 @@ Usage:
 
 Main options:
   -p                ports to scan (example: 80,443 or 1-1024 or - for all)
+  -u                scan UDP instead of TCP
   --scan-type       connect|syn (default: connect)
-  --top, --top-ports scan top N ports from curated top-1000 list
+  --top, --top-ports scan top N ports from curated protocol list
   --exclude-ports   remove ports from final scan set
   -s                enable service/version detection
   -g                ghost mode (slower, stealthier)
@@ -267,6 +271,14 @@ Important: banner-based detection is heuristic. Always validate critical finding
 - Uses GoMap native raw TCP SYN probes for port discovery, then optional service detection on open ports.
 - If SYN scan cannot run (insufficient privileges or unsupported OS), GoMap falls back to `connect` scan automatically.
 - For noisy links, tune reliability explicitly with `--retries` and `--rate`.
+
+`-u` UDP notes:
+- TCP remains the default scan mode.
+- `-u` switches port probing to UDP and uses a compact UDP default port set unless `-p` is provided.
+- GoMap reports UDP ports as open only when a UDP response is received.
+- No-response UDP ports are intentionally omitted because they may be closed, filtered, or open-but-silent.
+- `-u` cannot be combined with `--scan-type syn`, because SYN is TCP-specific.
+- CIDR scans with `-u` still use TCP host discovery unless `-nd` is set.
 
 Note: `--random-ip` randomizes HTTP headers only; it does not spoof the real TCP source IP.
 
@@ -340,101 +352,6 @@ One row per open port with columns:
 
 `host,port,state,service,version,tls,tls_version,tls_cipher,tls_alpn,tls_server_name,tls_issuer,latency_ms,confidence,evidence,detection_path`
 
-## Testing and Quality
-
-### Local checks
-
-```bash
-make lint
-make test
-make test-race
-make coverage
-make ci
-```
-
-`make ci` runs lint + tests + race + coverage gate.
-
-### Lab integration tests (Metasploitable3)
-
-Integration tests are opt-in and target live lab hosts.
-
-```bash
-export GOMAP_RUN_LAB_TESTS=1
-export GOMAP_LAB_WINDOWS_IP=10.0.11.6
-export GOMAP_LAB_LINUX_IP=10.0.11.9
-go test ./pkg/app -run LabIntegration -v
-```
-
-## Project Layout
-
-```text
-cmd/gomap/      CLI parsing, version/update/remove commands
-pkg/app/        Orchestration: target expansion, discovery, scan workflow
-pkg/scanner/    Scan engine + service/banner detection
-pkg/output/     Table renderer + json/jsonl/csv report generation
-.github/        CI and release workflows
-```
-
-## Release Process
-
-Quick links:
-
-- Source: `git clone https://github.com/NexusFireMan/gomap.git`
-- Latest release: `https://github.com/NexusFireMan/gomap/releases/latest`
-- Container image: `ghcr.io/nexusfireman/gomap:latest`
-- Debian packages: assets attached to each tagged release
-
-- CI: `.github/workflows/ci.yml` (lint, tests, race, coverage).
-- Container publishing: `.github/workflows/container.yml` (GHCR image on `main` and tags).
-- Release PR automation: `release-please` workflow.
-- Tagged releases: GoReleaser workflow builds archives, checksums, and `.deb` packages.
-
-## APT Repository Publishing
-
-The APT repository is published automatically to GitHub Pages at:
-
-- `https://nexusfireman.github.io/gomap`
-
-Workflow:
-
-- `.github/workflows/release.yml` publishes GitHub release assets, including `.deb` packages.
-- `.github/workflows/apt-repo.yml` runs after the `Release` workflow completes successfully.
-- It downloads all released `.deb` assets, rebuilds the APT metadata, signs `Release`/`InRelease`, and deploys the result to GitHub Pages.
-
-Required GitHub configuration:
-
-1. Enable **GitHub Pages** for this repository.
-2. Set Pages source to **GitHub Actions**.
-3. Add repository secrets:
-   - `APT_GPG_PRIVATE_KEY`
-   - `APT_GPG_PASSPHRASE`
-
-Recommended GPG setup:
-
-```bash
-gpg --full-generate-key
-gpg --armor --export-secret-keys "<your-key-id>" > gomap-apt-private.asc
-gpg --export "<your-key-id>" > gomap-archive-keyring.gpg
-```
-
-Then:
-
-- store the contents of `gomap-apt-private.asc` in `APT_GPG_PRIVATE_KEY`
-- store the passphrase in `APT_GPG_PASSPHRASE`
-- keep `gomap-archive-keyring.gpg` as the public key distributed to users
-
-Local dry-run:
-
-```bash
-mkdir -p .apt-input
-cp dist/*.deb .apt-input/
-bash ./scripts/build-apt-repo.sh .apt-input .pages https://nexusfireman.github.io/gomap
-```
-
-Operational note:
-
-- The APT repository is validated, but user shells may still resolve older local binaries first if `~/.local/bin` or `/usr/local/bin` appears before `/usr/bin` in `PATH`.
-
 ## Responsible Use
 
 Use this tool only on systems and networks you are authorized to test.
@@ -444,7 +361,6 @@ Use this tool only on systems and networks you are authorized to test.
 
 - Releases: [github.com/NexusFireMan/gomap/releases](https://github.com/NexusFireMan/gomap/releases)
 - Container: [github.com/NexusFireMan/gomap/pkgs/container/gomap](https://github.com/NexusFireMan/gomap/pkgs/container/gomap)
-- CI: [github.com/NexusFireMan/gomap/actions/workflows/ci.yml](https://github.com/NexusFireMan/gomap/actions/workflows/ci.yml)
 - Support: [ko-fi.com/C0C61UHTB1](https://ko-fi.com/C0C61UHTB1)
 
 If you find the project useful, you can support it here:

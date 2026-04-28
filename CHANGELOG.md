@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.4.6] - 2026-04-28
+
+### Added
+- **UDP scan mode**: new `-u` flag to scan UDP instead of TCP.
+- **UDP default port set**: UDP scans now use a compact curated list of common UDP services unless `-p` is provided.
+- **UDP response classification**: initial service hints for responsive UDP services such as DNS, NTP, SNMP, SSDP, mDNS, LLMNR, and memcached-style responses.
+
+### Changed
+- **CLI and README**: help text and documentation now describe TCP/UDP usage, UDP examples, and UDP-specific limitations.
+- **Public README cleanup**: moved maintainer-focused testing, release, project-layout, and APT publishing notes out of the public README to keep the landing page focused on users.
+
+### Notes
+- UDP mode reports a port as open only when a UDP response is received.
+- Silent UDP ports are omitted because no response can mean closed, filtered, or open-but-silent.
+- `-u` cannot be combined with `--scan-type syn`, because SYN scanning is TCP-specific.
+
 ## [2.4.5] - 2026-03-18
 
 ### Fixed

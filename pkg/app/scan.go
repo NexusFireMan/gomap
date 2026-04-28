@@ -16,6 +16,7 @@ type ScanRequest struct {
 	Target          string
 	PortsFlag       string
 	ScanType        string
+	UDP             bool
 	ExcludePorts    string
 	TopPorts        int
 	Rate            int
@@ -43,6 +44,9 @@ func ExecuteScan(req ScanRequest) error {
 		req.ScanType = "connect"
 	}
 	scanLabel := strings.ToUpper(req.ScanType)
+	if req.UDP {
+		scanLabel = "UDP"
+	}
 
 	destWriter := output.DefaultWriter()
 	var outFile *os.File
@@ -63,11 +67,16 @@ func ExecuteScan(req ScanRequest) error {
 	)
 	if req.TopPorts > 0 {
 		top := scanner.GetTop1000Ports()
+		if req.UDP {
+			top = scanner.GetTopUDPPorts()
+		}
 		limit := req.TopPorts
 		if limit > len(top) {
 			limit = len(top)
 		}
 		portsToScan = top[:limit]
+	} else if req.UDP && req.PortsFlag == "" {
+		portsToScan = scanner.GetTopUDPPorts()
 	} else {
 		portsToScan, err = portManager.GetPortsToScan(req.PortsFlag)
 		if err != nil {
@@ -90,6 +99,9 @@ func ExecuteScan(req ScanRequest) error {
 	}
 	if req.RandomIP && !scanner.IsCIDR(req.Target) && !machineOutput {
 		fmt.Printf("%s\n", output.StatusWarn("--random-ip is most useful with CIDR targets; using local /24 approximation per host."))
+	}
+	if req.UDP && !req.NoDiscovery && scanner.IsCIDR(req.Target) && len(targets) > 1 && !machineOutput {
+		fmt.Printf("%s\n", output.StatusWarn("UDP CIDR scans still use TCP host discovery. Use -nd to scan every host when UDP-only targets are expected."))
 	}
 
 	if !req.NoDiscovery && scanner.IsCIDR(req.Target) && len(targets) > 1 {
@@ -192,7 +204,9 @@ func ExecuteScan(req ScanRequest) error {
 			TargetCIDR:      cidrForHeaders,
 		})
 		var openResults []scanner.ScanResult
-		if req.ScanType == "syn" {
+		if req.UDP {
+			openResults = s.ScanUDP(portsToScan, req.ServiceDetect)
+		} else if req.ScanType == "syn" {
 			synOpenPorts, synErr := scanner.DiscoverOpenPortsSYN(targetIP, portsToScan, scanner.SYNConfig{
 				Rate:      req.Rate,
 				Retries:   req.Retries,

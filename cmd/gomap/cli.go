@@ -14,6 +14,7 @@ import (
 type CLIOptions struct {
 	PortsFlag       string
 	ScanType        string
+	UDPFlag         bool
 	ExcludePorts    string
 	ServiceFlag     bool
 	GhostFlag       bool
@@ -54,6 +55,7 @@ func ParseCLIOptions(args []string) (CLIOptions, error) {
 	fs.SetOutput(os.Stderr)
 	fs.StringVar(&opts.PortsFlag, "p", "", "ports to scan (e.g., 80,443 or 1-1024 or - for all ports)")
 	fs.StringVar(&opts.ScanType, "scan-type", "connect", "scan technique: connect|syn")
+	fs.BoolVar(&opts.UDPFlag, "u", false, "scan UDP instead of TCP")
 	fs.StringVar(&opts.ExcludePorts, "exclude-ports", "", "exclude ports (e.g., 80,443 or 1-1024)")
 	fs.BoolVar(&opts.ServiceFlag, "s", false, "detect services and versions")
 	fs.BoolVar(&opts.GhostFlag, "g", false, "ghost mode - slower, stealthy scan to evade IDS/Firewall detection")
@@ -66,8 +68,8 @@ func ParseCLIOptions(args []string) (CLIOptions, error) {
 	fs.BoolVar(&opts.CSVFlag, "csv", false, "output scan results in CSV format")
 	fs.StringVar(&opts.FormatFlag, "format", "text", "output format: text|json|jsonl|csv")
 	fs.StringVar(&opts.OutPath, "out", "", "write output to file instead of stdout")
-	fs.IntVar(&opts.TopPorts, "top", 0, "scan top N ports from curated top-1000 list")
-	fs.IntVar(&opts.TopPortsAlias, "top-ports", 0, "scan top N ports from curated top-1000 list")
+	fs.IntVar(&opts.TopPorts, "top", 0, "scan top N ports from curated protocol list")
+	fs.IntVar(&opts.TopPortsAlias, "top-ports", 0, "scan top N ports from curated protocol list")
 	fs.IntVar(&opts.Rate, "rate", 0, "max scan rate in ports/second per host (0 = unlimited)")
 	fs.IntVar(&opts.MaxHosts, "max-hosts", 0, "maximum number of hosts to scan after discovery (0 = unlimited)")
 	fs.IntVar(&opts.TimeoutMS, "timeout", 0, "connection timeout per attempt in milliseconds (default: auto by mode)")
@@ -146,6 +148,9 @@ func normalizeOptions(opts CLIOptions) (CLIOptions, error) {
 	if opts.ScanType != "connect" && opts.ScanType != "syn" {
 		return opts, errors.New("invalid --scan-type. Allowed: connect, syn")
 	}
+	if opts.UDPFlag && opts.ScanType == "syn" {
+		return opts, errors.New("-u cannot be combined with --scan-type syn")
+	}
 	if opts.TopPorts < 0 {
 		return opts, errors.New("--top must be a positive number")
 	}
@@ -214,7 +219,7 @@ func printHelp(w *os.File) {
  ╚██████╔╝╚██████╔╝██║ ╚═╝ ██║██║  ██║██║
   ╚═════╝  ╚═════╝ ╚═╝     ╚═╝╚═╝  ╚═╝╚═╝%s
 
-%sGomap%s - fast TCP scanner with service detection and stealth profiles.
+%sGomap%s - fast TCP/UDP scanner with service detection and stealth profiles.
 
 %sUsage:%s
   gomap <host|CIDR> [options]
@@ -222,8 +227,9 @@ func printHelp(w *os.File) {
 
 %sTarget & Scan:%s
   -p <ports>                 ports to scan (80,443 | 1-1024 | -)
+  -u                         scan UDP instead of TCP
   --scan-type <type>         connect|syn (syn requires root/CAP_NET_RAW)
-  --top <N>                  scan top N ports from curated top-1000 list
+  --top <N>                  scan top N ports from curated protocol list
   --top-ports <N>            alias of --top
   --exclude-ports <ports>    remove ports from final scan set
   -s                         enable service/version detection
@@ -261,6 +267,7 @@ func printHelp(w *os.File) {
 %sExamples:%s
   gomap 10.0.11.6
   gomap --scan-type syn 10.0.11.6
+  gomap -u -p 53,123,161 10.0.11.6
   gomap -s -p 21,22,80,445 10.0.11.9
   gomap -s --top-ports 300 10.0.11.0/24
   gomap -g -s --random-agent --random-ip 10.0.11.0/24

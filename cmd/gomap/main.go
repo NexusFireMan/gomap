@@ -56,6 +56,7 @@ func Run() {
 		Target:          opts.Host,
 		PortsFlag:       opts.PortsFlag,
 		ScanType:        opts.ScanType,
+		UDP:             opts.UDPFlag,
 		ExcludePorts:    opts.ExcludePorts,
 		TopPorts:        opts.TopPorts,
 		Rate:            opts.Rate,
