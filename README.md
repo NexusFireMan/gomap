@@ -11,7 +11,7 @@
 
 # gomap
 
-**Fast TCP/UDP scanner in Go with service fingerprinting, native SYN scanning, stealth profiles, and multi-format output.**
+**Fast TCP/UDP scanner in Go for authorized reconnaissance, with service fingerprinting, native SYN scanning, low-noise profiles, and automation-friendly output.**
 
 [![CI](https://github.com/NexusFireMan/gomap/actions/workflows/ci.yml/badge.svg)](https://github.com/NexusFireMan/gomap/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/NexusFireMan/gomap?display_name=tag)](https://github.com/NexusFireMan/gomap/releases)
@@ -28,14 +28,23 @@
 - [Current scope](#current-scope)
 - [Installation](#installation)
 - [Quick Start](#quick-start)
+- [Example Output](#example-output)
 - [CLI Reference](#cli-reference)
 - [Detection Realism (`-s`)](#detection-realism--s)
-- [Stealth Benchmark (Lab)](#stealth-benchmark-lab)
+- [IDS Noise Benchmark (Lab)](#ids-noise-benchmark-lab)
 - [Output Formats](#output-formats)
 - [Responsible Use](#responsible-use)
 - [Quick Links](#quick-links)
 
 A fast TCP/UDP port scanner written in Go, with optional service/version detection, CIDR host discovery, adaptive timeout tuning, and multi-format output.
+
+## Why gomap?
+
+- Quick first look before deeper enumeration.
+- Lightweight single-binary workflow.
+- Structured output for Bash, Python, and CI/lab pipelines.
+- CIDR-aware scanning with optional host discovery.
+- Useful in CTFs, internal labs, and authorized assessments.
 
 ## Current scope
 
@@ -48,8 +57,8 @@ A fast TCP/UDP port scanner written in Go, with optional service/version detecti
 - Robust scan controls for unstable networks: retries, backoff, adaptive timeout.
 - Professional outputs: `text`, `json`, `jsonl`, `csv`.
 - Per-host exposure summary in text mode.
-- Ghost mode hardening: lower burst rate, heavier jitter, and fewer active probes.
-- Ultra-stealth ghost defaults: low rate, low worker count, and reduced CIDR discovery probes.
+- Low-noise mode: controlled rate, heavier jitter, and fewer active probes through the existing `-g` ghost mode flag.
+- Conservative low-noise defaults: low rate, low worker count, and reduced CIDR discovery probes.
 - Optional HTTP identity randomization: `--random-agent` and `--random-ip`.
 
 ## Installation
@@ -196,11 +205,28 @@ sudo dpkg -i gomap_<version>_linux_amd64.deb
 # Machine output for automation
 ./gomap -s --format json --out scan.json 10.0.11.6
 
-# Stealthier service detection profile
+# Low-noise service detection profile
 ./gomap -g -s --random-agent --random-ip 10.0.11.0/24
 
-# Maximum stealth for CIDR (skip discovery entirely)
+# Conservative CIDR scan (skip discovery entirely)
 ./gomap -g -nd -s --random-agent --random-ip -p 22,80,443 10.0.11.0/24
+```
+
+## Example Output
+
+Text output varies by target, network conditions, and enabled detection options. A typical authorized lab scan may look like:
+
+```text
+$ gomap -s --details -p 21,22,80,139,445 10.0.11.6
+
+PORT    STATE  SERVICE         VERSION                              LAT(ms) CONF     EVIDENCE
+21      open   ftp             InFreight FTP v1.1                   73      high     protocol banner
+22      open   ssh             SSH-2.0 - OpenSSH 8.2p1 Ubuntu       80      high     protocol banner
+139     open   netbios-ssn     Samba server (Ubuntu)                78      high     smbclient anonymous
+445     open   microsoft-ds    Samba server (Ubuntu)                82      high     smbclient anonymous
+
+Host Exposure Summary
+- 10.0.11.6 | open ports: 4 | critical: ftp, microsoft-ds, ssh | exposure: high
 ```
 
 ## CLI Reference
@@ -216,7 +242,7 @@ Main options:
   --top, --top-ports scan top N ports from curated protocol list
   --exclude-ports   remove ports from final scan set
   -s                enable service/version detection
-  -g                ghost mode (slower, stealthier)
+  -g                ghost mode: controlled-rate low-noise profile
   -nd               disable host discovery for CIDR targets
 
 Performance/robustness:
@@ -236,14 +262,14 @@ Output:
   --out             output file path
   --details         add latency/confidence/evidence columns (text only)
 
-Stealth/identity (HTTP probes):
+Low-noise identity controls (HTTP probes):
   --random-agent    randomize HTTP User-Agent on each request
   --random-ip       randomize HTTP X-Forwarded-For/X-Real-IP from target CIDR
 
 Compatibility note:
   legacy aliases (`--ramdom-agent`, `--ip-ram`, `--ip-random`) are still accepted for backward compatibility.
 
-Ghost defaults:
+Low-noise defaults for `-g` ghost mode:
   - lower default rate and worker count
   - reduced host-discovery probes on CIDR (443,80,22)
   - use `-nd` to disable host discovery completely on CIDR
@@ -287,7 +313,7 @@ Non-standard port note:
 
 Note: `--random-ip` randomizes HTTP headers only; it does not spoof the real TCP source IP.
 
-## Stealth Benchmark (Lab)
+## IDS Noise Benchmark (Lab)
 
 Benchmark executed on **March 9, 2026** with:
 
@@ -304,13 +330,13 @@ Commands compared:
 # CONNECT normal
 gomap -s -p 22,80,139,445,3389,5985 10.0.11.0/24
 
-# CONNECT ghost
+# CONNECT low-noise (`-g` ghost mode)
 gomap -g -s --random-agent --random-ip -p 22,80,139,445,3389,5985 10.0.11.0/24
 
 # SYN normal (native, requires root/CAP_NET_RAW)
 sudo gomap --scan-type syn -s -p 22,80,139,445,3389,5985 10.0.11.0/24
 
-# SYN ghost
+# SYN low-noise (`-g` ghost mode)
 sudo gomap -g -s --scan-type syn --random-agent --random-ip -p 22,80,139,445,3389,5985 10.0.11.0/24
 ```
 
@@ -319,17 +345,17 @@ Observed results (single run per profile):
 | Profile | Duration | Hosts scanned | Open ports found | New alerts (all) | New alerts from scanner IP | New TCP alerts from scanner IP |
 |---|---:|---:|---:|---:|---:|---:|
 | CONNECT normal | 6.801s | 4 | 10 | 97 | 97 | 96 |
-| CONNECT ghost | 10.893s | 3 | 9 | 64 | 64 | 62 |
+| CONNECT low-noise (`-g`) | 10.893s | 3 | 9 | 64 | 64 | 62 |
 | SYN normal | 9.26s | 4 | 10 | 104 | 104 | 103 |
-| SYN ghost | 11.793s | 3 | 9 | 48 | 48 | 47 |
+| SYN low-noise (`-g`) | 11.793s | 3 | 9 | 48 | 48 | 47 |
 
 Takeaways:
 
-- `ghost` mode reduced scanner-attributed TCP alerts in both engines:
+- The controlled-rate low-noise profile (`-g`, historically named ghost mode) reduced scanner-attributed TCP alerts in both engines:
   - CONNECT: `96 -> 62` (about `-35.4%`)
   - SYN: `103 -> 47` (about `-54.4%`)
 - In this Snort rule set, SYN generated more alerts than CONNECT for the same target/ports.
-- Ghost CIDR discovery is intentionally conservative and may scan fewer active hosts (`3` vs `4` in this run).
+- Low-noise CIDR discovery is intentionally conservative and may scan fewer active hosts (`3` vs `4` in this run).
 
 ## Output Formats
 

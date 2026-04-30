@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+Note: this changelog is maintained from this point forward in the project history.
+
+## Unreleased
+
+### Added
+
+### Changed
+- Refined README positioning around authorized reconnaissance, structured output, low-noise profiles, and automation-friendly CLI usage.
+
+### Fixed
+
 ## [2.4.7] - 2026-04-30
 
 ### Added
@@ -119,7 +130,7 @@ All notable changes to this project will be documented in this file.
 - **Version output upgrade**: `gomap -v` now renders structured version/build sections.
 
 ### Changed
-- **Ghost mode defaults hardened** for ultra-stealth:
+- **Ghost mode defaults refined** for low-noise scanning:
   - lower default rate
   - lower worker cap
   - reduced CIDR discovery probes (`443,80,22`) with explicit messaging
@@ -272,11 +283,11 @@ All notable changes to this project will be documented in this file.
   - DNS hostname resolution
   - Network filtering (excludes network/broadcast addresses)
 
-- **Stealth Features**
+- **Low-noise controls**
   - No ICMP/Ping scanning
   - TCP-only connections
-  - Ghost mode with randomization
-  - Jitter implementation for IDS evasion
+  - Ghost mode with controlled randomization
+  - Jitter implementation for IDS noise reduction
 
 ### Changed
 - Refactored scanner architecture for better performance
@@ -297,7 +308,7 @@ All notable changes to this project will be documented in this file.
 - Initial public release
 - Basic port scanning functionality
 - Service detection
-- Ghost mode for stealthy scanning
+- Ghost mode for controlled-rate low-noise scanning
 - Auto-update mechanism (`-up` flag)
 - Version information (`-v` flag)
 - Support for single host scanning
