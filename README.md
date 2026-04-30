@@ -264,8 +264,13 @@ When `-s` is enabled, gomap combines port-based hints and protocol/banner parsin
 - SSH/FTP/PostgreSQL/Redis/MySQL and other protocol banners.
 - SMB-oriented identification for `microsoft-ds` targets.
 - TLS handshake metadata where applicable (`tls_version`, `tls_cipher`, ALPN, certificate issuer).
+- Generic active probes for open ports without a known port mapping, useful when services run on non-standard ports.
 
 Important: banner-based detection is heuristic. Always validate critical findings with a second tool.
+
+Non-standard port note:
+- For unknown open TCP ports, `-s` may spend a few extra seconds sending lightweight generic probes (`GET`, `HELP`, `FEAT`, `CAPA`, IMAP capability) to identify moved services.
+- This improves realism on CTF/lab targets and custom deployments where a service is intentionally exposed away from its default port.
 
 `--scan-type syn` notes:
 - Uses GoMap native raw TCP SYN probes for port discovery, then optional service detection on open ports.

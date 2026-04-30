@@ -39,6 +39,36 @@ func TestParseSMTP(t *testing.T) {
 	}
 }
 
+func TestParseBannerPrefersSMTPBeforeGenericFTP220(t *testing.T) {
+	service, version := parseBanner("220 mail.example.local ESMTP Postfix")
+	if service != "smtp" {
+		t.Fatalf("expected smtp, got %q (%q)", service, version)
+	}
+	if version != "Postfix SMTP" {
+		t.Fatalf("expected Postfix SMTP, got %q", version)
+	}
+}
+
+func TestParseFTPKnownVersions(t *testing.T) {
+	tests := []struct {
+		banner  string
+		version string
+	}{
+		{"220 (vsFTPd 3.0.3)", "vsFTPd 3.0.3"},
+		{"220 ProFTPD 1.3.5e Server ready", "ProFTPD 1.3.5e"},
+		{"220 Pure-FTPd 1.0.49 ready", "Pure-FTPd 1.0.49"},
+		{"220\r\n215 UNIX Type: L8\r\n", "SYST UNIX Type: L8"},
+		{"220", "FTP service"},
+	}
+
+	for _, tt := range tests {
+		service, version := parseBanner(tt.banner)
+		if service != "ftp" || version != tt.version {
+			t.Fatalf("for %q expected ftp/%q, got %q/%q", tt.banner, tt.version, service, version)
+		}
+	}
+}
+
 func TestParsePOP3AndIMAP(t *testing.T) {
 	pop3Service, pop3Version := parsePOP3("+OK Dovecot ready.")
 	if pop3Service != "pop3" || pop3Version != "Dovecot" {

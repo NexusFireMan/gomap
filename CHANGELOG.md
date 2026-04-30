@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.4.7] - 2026-04-30
+
+### Added
+- **Richer service fingerprinting**: TCP service detection now includes generic probes for services exposed on non-standard ports.
+- **ONC RPC/NFS detection**: `-s` can now identify `rpcbind`, `nfs`, `mountd`, `nlockmgr`, `rpc.statd`, and related dynamic RPC services.
+- **SMB/Samba detection**: SMB fingerprinting now uses anonymous `smbclient` and `rpcclient` signals when available to identify Samba server comments and share banners.
+
+### Changed
+- **FTP banner probing**: FTP detection now waits longer for slow greetings, sends `SYST`, `FEAT`, and `HELP`, and prefers product banners such as `InFreight FTP v1.1` over generic protocol hints.
+- **SMB fallback behavior**: nmap SMB output no longer defaults to `Microsoft Windows` when it only reports protocol dialects.
+
+### Fixed
+- **SMTP vs FTP ambiguity**: `220 ... ESMTP` banners are no longer misclassified as FTP.
+- **NetBIOS/SMB coverage**: port `139` now receives SMB-oriented enrichment instead of remaining a plain `netbios-ssn` port-map result.
+- **NFS port mapping**: port `2049` is now mapped as `nfs` even when active fingerprinting cannot complete.
+
 ## [2.4.6] - 2026-04-28
 
 ### Added

@@ -16,6 +16,14 @@ func parseBanner(banner string) (service, version string) {
 		}
 	}
 
+	if service, version := parseSMTP(banner); service != "" {
+		return service, version
+	}
+
+	if service, version := parseFTP(banner); service != "" {
+		return service, version
+	}
+
 	// For other services, sanitize banner (keep only first line)
 	banner = sanitizeBanner(banner)
 
@@ -29,14 +37,6 @@ func parseBanner(banner string) (service, version string) {
 	}
 
 	if service, version := parseOpenSSHDetailed(banner); service != "" {
-		return service, version
-	}
-
-	if service, version := parseFTP(banner); service != "" {
-		return service, version
-	}
-
-	if service, version := parseSMTP(banner); service != "" {
 		return service, version
 	}
 
@@ -168,7 +168,15 @@ func parseSSH(banner string) (string, string) {
 
 // parseSMTP extracts SMTP server information
 func parseSMTP(banner string) (string, string) {
-	if !strings.HasPrefix(banner, "220") && !strings.Contains(strings.ToUpper(banner), "ESMTP") {
+	upper := strings.ToUpper(banner)
+	if !strings.HasPrefix(banner, "220") && !strings.Contains(upper, "ESMTP") {
+		return "", ""
+	}
+	if !strings.Contains(upper, "ESMTP") &&
+		!strings.Contains(upper, "SMTP") &&
+		!strings.Contains(upper, "POSTFIX") &&
+		!strings.Contains(upper, "EXIM") &&
+		!strings.Contains(upper, "SENDMAIL") {
 		return "", ""
 	}
 
@@ -231,7 +239,17 @@ func parseIMAP(banner string) (string, string) {
 
 // parseFTP extracts FTP server information
 func parseFTP(banner string) (string, string) {
-	if !strings.HasPrefix(banner, "220") {
+	if !looksLikeFTPResponse(banner) {
+		return "", ""
+	}
+	rawBanner := banner
+
+	if version := parseKnownFTPVersion(banner); version != "" {
+		return "ftp", version
+	}
+
+	banner = sanitizeBanner(banner)
+	if !looksLikeFTPResponse(banner) {
 		return "", ""
 	}
 
@@ -239,8 +257,9 @@ func parseFTP(banner string) (string, string) {
 	// Format: "220 <server> <version> ..."
 	ftpRegex := regexp.MustCompile(`^220[\s-]+([^()]+)(?:\s*\(([^)]+)\))?`)
 	if match := ftpRegex.FindStringSubmatch(banner); match != nil {
-		serverInfo := strings.TrimSpace(match[1])
+		serverInfo := cleanFTPBannerText(match[1])
 		version := strings.TrimSpace(match[2])
+		fallback := serverInfo
 
 		// Detect and normalize server names with versions
 		if strings.Contains(serverInfo, "Microsoft") {
@@ -287,9 +306,87 @@ func parseFTP(banner string) (string, string) {
 			return "ftp", "Gene6 FTP Server"
 		}
 
-		return "ftp", serverInfo
+		if !isWeakFTPVersion(serverInfo) {
+			return "ftp", serverInfo
+		}
+		if version := parseFTPSYSTVersion(rawBanner); version != "" {
+			return "ftp", version
+		}
+		return "ftp", fallback
 	}
-	return "", ""
+	if version := parseFTPSYSTVersion(rawBanner); version != "" {
+		return "ftp", version
+	}
+	if fallback := cleanFTPBannerText(banner); fallback != "" {
+		return "ftp", fallback
+	}
+	return "ftp", "FTP service"
+}
+
+func looksLikeFTPResponse(banner string) bool {
+	banner = strings.TrimSpace(banner)
+	if strings.HasPrefix(banner, "220") || strings.HasPrefix(banner, "230") || strings.HasPrefix(banner, "421") {
+		return true
+	}
+	return strings.Contains(strings.ToLower(banner), "ftp")
+}
+
+func parseKnownFTPVersion(banner string) string {
+	patterns := []struct {
+		name string
+		re   *regexp.Regexp
+	}{
+		{"vsFTPd", regexp.MustCompile(`(?i)\bvsftpd\s+([\w.\-]+)`)},
+		{"ProFTPD", regexp.MustCompile(`(?i)\bproftpd\s+([\w.\-]+)`)},
+		{"Pure-FTPd", regexp.MustCompile(`(?i)\bpure[\s-]?ftpd\s+([\w.\-]+)`)},
+		{"FileZilla", regexp.MustCompile(`(?i)\bfilezilla(?: server)?\s+([\w.\-]+)`)},
+	}
+	for _, p := range patterns {
+		if match := p.re.FindStringSubmatch(banner); match != nil {
+			return fmt.Sprintf("%s %s", p.name, match[1])
+		}
+	}
+
+	lower := strings.ToLower(banner)
+	switch {
+	case strings.Contains(lower, "vsftpd"):
+		return "vsFTPd"
+	case strings.Contains(lower, "proftpd"):
+		return "ProFTPD"
+	case strings.Contains(lower, "pure-ftpd") || strings.Contains(lower, "pure ftpd"):
+		return "Pure-FTPd"
+	case strings.Contains(lower, "filezilla"):
+		return "FileZilla"
+	}
+	return ""
+}
+
+func parseFTPSYSTVersion(banner string) string {
+	systRegex := regexp.MustCompile(`(?im)^215[\s-]+(.+)$`)
+	if match := systRegex.FindStringSubmatch(banner); match != nil {
+		info := sanitizeVersionString(match[1])
+		info = strings.Trim(info, ".")
+		if info != "" {
+			return "SYST " + info
+		}
+	}
+	return ""
+}
+
+func cleanFTPBannerText(text string) string {
+	text = sanitizeVersionString(text)
+	text = regexp.MustCompile(`^(?:220|230|421)[\s-]*`).ReplaceAllString(text, "")
+	text = strings.Trim(text, " -")
+	if text == "" {
+		return ""
+	}
+	lower := strings.ToLower(text)
+	switch lower {
+	case "service ready", "service ready for new user", "ftp server ready", "ready":
+		return "FTP service"
+	default:
+		return text
+	}
 }
 
 // parseHTTP extracts HTTP server information with version

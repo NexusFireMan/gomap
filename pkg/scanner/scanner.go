@@ -3,6 +3,7 @@ package scanner
 import (
 	"context"
 	"crypto/tls"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"math/rand/v2"
@@ -412,43 +413,62 @@ func (s *Scanner) addJitter() {
 	time.Sleep(minDelay + delay)
 }
 
-// tryExternalSMBDetection attempts to use external tools (nmap, smbclient) for SMB detection
-func tryExternalSMBDetection(host string) string {
+// tryExternalSMBDetection attempts to use nmap scripts for SMB detection.
+func tryExternalSMBDetection(host string) (string, string) {
 	if nmapPath, err := exec.LookPath("nmap"); err == nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 
-		cmd := exec.CommandContext(ctx, nmapPath, "-p", "445", "--script", "smb-os-discovery", "-n", "-Pn", host)
+		cmd := exec.CommandContext(ctx, nmapPath, "-p", "139,445", "--script", "smb-os-discovery,smb-protocols", "-n", "-Pn", host)
 		output, err := cmd.CombinedOutput()
 		if err == nil {
 			result := string(output)
 			if strings.Contains(result, "Windows Server 2008 R2") {
-				return "Windows Server 2008 R2"
+				return "Windows Server 2008 R2", "nmap smb-os-discovery"
 			} else if strings.Contains(result, "Windows Server 2012") {
-				return "Windows Server 2012"
+				return "Windows Server 2012", "nmap smb-os-discovery"
 			} else if strings.Contains(result, "Windows Server 2016") {
-				return "Windows Server 2016"
+				return "Windows Server 2016", "nmap smb-os-discovery"
 			} else if strings.Contains(result, "Windows Server 2019") {
-				return "Windows Server 2019"
+				return "Windows Server 2019", "nmap smb-os-discovery"
 			} else if strings.Contains(result, "Windows 7") {
-				return "Windows 7"
+				return "Windows 7", "nmap smb-os-discovery"
 			} else if strings.Contains(result, "Windows 10") {
-				return "Windows 10"
+				return "Windows 10", "nmap smb-os-discovery"
 			} else if strings.Contains(result, "Samba") {
 				if strings.Contains(result, "3.X - 4.X") || strings.Contains(result, "3.x - 4.x") {
-					return "Samba smbd 3.X-4.X"
+					return "Samba smbd 3.X-4.X", "nmap smb-os-discovery"
 				} else if strings.Contains(result, "3.") {
-					return "Samba smbd 3.X"
+					return "Samba smbd 3.X", "nmap smb-os-discovery"
 				} else if strings.Contains(result, "4.") {
-					return "Samba smbd 4.X"
+					return "Samba smbd 4.X", "nmap smb-os-discovery"
 				}
-				return "Samba smbd"
+				return "Samba smbd", "nmap smb-os-discovery"
 			}
-			return "Microsoft Windows"
+			if dialects := parseNmapSMBProtocols(result); dialects != "" {
+				return dialects, "nmap smb-protocols"
+			}
 		}
 	}
 
-	return ""
+	return "", ""
+}
+
+func parseNmapSMBProtocols(out string) string {
+	var dialects []string
+	for _, line := range strings.Split(out, "\n") {
+		line = strings.Trim(strings.TrimSpace(line), "|_ ")
+		if regexp.MustCompile(`^\d+\.\d+(?:\.\d+)?$`).MatchString(line) {
+			dialects = append(dialects, line)
+		}
+	}
+	if len(dialects) == 0 {
+		return ""
+	}
+	if len(dialects) == 1 {
+		return "SMB " + dialects[0]
+	}
+	return fmt.Sprintf("SMB %s-%s", dialects[0], dialects[len(dialects)-1])
 }
 
 // grabBanner attempts to grab the service banner
@@ -469,12 +489,28 @@ func (s *Scanner) grabBanner(conn net.Conn, port int, result *ScanResult) {
 	if banner == "" && !s.GhostMode {
 		banner = s.tryServiceProbe(port)
 	}
+	if banner == "" && !s.GhostMode {
+		if service, ver, confidence, evidence, path, ok := s.tryProtocolFingerprint(port); ok {
+			result.ServiceName = service
+			result.Version = ver
+			result.Confidence = confidence
+			result.Evidence = evidence
+			result.DetectionPath = path
+			return
+		}
+	}
+	if banner == "" && !s.GhostMode && s.PortManager.GetServiceName(port, "") == "" {
+		banner = s.tryGenericServiceProbes(port)
+	}
 
-	// Special handling for SMB (port 445)
-	if banner == "" && port == 445 && !s.GhostMode {
+	// Special handling for SMB/NetBIOS session service.
+	if banner == "" && (port == 139 || port == 445) && !s.GhostMode {
 		smbInfo, method := s.detectSMBVersion(port)
 		if smbInfo != "" {
-			result.ServiceName = "microsoft-ds"
+			result.ServiceName = s.PortManager.GetServiceName(port, "")
+			if result.ServiceName == "" {
+				result.ServiceName = "microsoft-ds"
+			}
 			result.Version = smbInfo
 			result.Confidence = "high"
 			result.Evidence = method
@@ -523,6 +559,16 @@ func (s *Scanner) grabBanner(conn net.Conn, port int, result *ScanResult) {
 
 	// Parse the banner to extract service and version
 	serviceName, version := parseBanner(banner)
+	if !s.GhostMode && (port == 21 || serviceName == "ftp") && (serviceName == "" || (serviceName == "ftp" && isWeakFTPVersion(version))) {
+		if ftpBanner := s.probeFTP(port); ftpBanner != "" {
+			if ftpService, ftpVersion := parseBanner(ftpBanner); ftpService == "ftp" {
+				serviceName = ftpService
+				if ftpVersion != "" && (version == "" || !isWeakFTPVersion(ftpVersion)) {
+					version = ftpVersion
+				}
+			}
+		}
+	}
 
 	// Use service name from banner if found, otherwise use port mapping
 	if serviceName != "" {
@@ -599,6 +645,16 @@ func isLikelyHTTPProxyPort(port int) bool {
 	}
 }
 
+func isWeakFTPVersion(version string) bool {
+	v := strings.ToLower(strings.TrimSpace(version))
+	return v == "" ||
+		v == "ftp service" ||
+		v == "service ready" ||
+		v == "service ready for new user" ||
+		v == "ftp server ready" ||
+		v == "ready"
+}
+
 // tryPassiveBanner reads banner without sending any data
 func (s *Scanner) tryPassiveBanner(conn net.Conn) string {
 	buffer := make([]byte, 4096)
@@ -668,7 +724,7 @@ func (s *Scanner) grabHTTPBanner(port int) string {
 func (s *Scanner) tryServiceProbe(port int) string {
 	switch port {
 	case 21:
-		return s.probeFTP()
+		return s.probeFTP(port)
 	case 25, 465, 587, 2525:
 		return s.probeTextService(port, "EHLO gomap.local\r\n")
 	case 110, 995:
@@ -684,11 +740,11 @@ func (s *Scanner) tryServiceProbe(port int) string {
 	}
 }
 
-func (s *Scanner) probeFTP() string {
-	address := net.JoinHostPort(s.Host, "21")
-	timeout := s.ioTimeout(1500 * time.Millisecond)
-	if timeout < 1500*time.Millisecond {
-		timeout = 1500 * time.Millisecond
+func (s *Scanner) probeFTP(port int) string {
+	address := net.JoinHostPort(s.Host, fmt.Sprintf("%d", port))
+	timeout := s.ioTimeout(6 * time.Second)
+	if timeout < 6*time.Second {
+		timeout = 6 * time.Second
 	}
 
 	conn, err := net.DialTimeout("tcp", address, timeout)
@@ -699,21 +755,24 @@ func (s *Scanner) probeFTP() string {
 
 	_ = conn.SetDeadline(time.Now().Add(timeout))
 	buf := make([]byte, 2048)
+	var response strings.Builder
 
-	// First attempt: capture greeting banner only (often includes product/version).
 	if n, err := conn.Read(buf); err == nil && n > 0 {
-		banner := string(buf[:n])
-		if strings.HasPrefix(strings.TrimSpace(banner), "220") || strings.Contains(strings.ToLower(banner), "ftp") {
-			return banner
+		response.Write(buf[:n])
+		response.WriteByte('\n')
+	}
+
+	for _, payload := range []string{"SYST\r\n", "FEAT\r\n", "HELP\r\n"} {
+		_ = conn.SetDeadline(time.Now().Add(timeout))
+		if _, err := conn.Write([]byte(payload)); err != nil {
+			break
+		}
+		if n, err := conn.Read(buf); err == nil && n > 0 {
+			response.Write(buf[:n])
+			response.WriteByte('\n')
 		}
 	}
-
-	// Fallback: ask for supported features.
-	_, _ = conn.Write([]byte("FEAT\r\n"))
-	if n, err := conn.Read(buf); err == nil && n > 0 {
-		return string(buf[:n])
-	}
-	return ""
+	return response.String()
 }
 
 // probeTextService performs a short connect/write/read interaction for text-based protocols
@@ -751,9 +810,65 @@ func (s *Scanner) probeTextService(port int, payload string) string {
 	return response.String()
 }
 
+// tryGenericServiceProbes improves detection for services exposed on non-standard ports.
+func (s *Scanner) tryGenericServiceProbes(port int) string {
+	probes := []string{
+		"GET / HTTP/1.0\r\n\r\n",
+		s.buildHTTPRequest("GET", "/"),
+		"\r\n",
+		"HELP\n",
+		"HELP\r\n",
+		"SYST\r\n",
+		"FEAT\r\n",
+		"CAPA\r\n",
+		"a001 CAPABILITY\r\n",
+	}
+
+	for _, payload := range probes {
+		if response := s.probeTextServiceWriteFirst(port, payload); response != "" {
+			if service, _ := parseBanner(response); service != "" {
+				return response
+			}
+		}
+	}
+	return ""
+}
+
+func (s *Scanner) probeTextServiceWriteFirst(port int, payload string) string {
+	address := net.JoinHostPort(s.Host, fmt.Sprintf("%d", port))
+	timeout := s.ioTimeout(1500 * time.Millisecond)
+	if timeout < 1500*time.Millisecond {
+		timeout = 1500 * time.Millisecond
+	}
+
+	conn, err := net.DialTimeout("tcp", address, timeout)
+	if err != nil {
+		return ""
+	}
+	defer func() { _ = conn.Close() }()
+
+	_ = conn.SetDeadline(time.Now().Add(timeout))
+	_, _ = conn.Write([]byte(payload))
+
+	buf := make([]byte, 2048)
+	n, err := conn.Read(buf)
+	if err != nil || n == 0 {
+		return ""
+	}
+	return string(buf[:n])
+}
+
 // tryProtocolFingerprint performs protocol-aware detection for services that often need active handshakes.
 func (s *Scanner) tryProtocolFingerprint(port int) (service, version, confidence, evidence, path string, ok bool) {
 	switch port {
+	case 111:
+		if ver, detected := s.detectONCRPCProgram(port, 100000, []uint32{4, 3, 2}); detected {
+			return "rpcbind", fmt.Sprintf("rpcbind v%d", ver), "high", "onc rpc null call", "protocol-fingerprint", true
+		}
+	case 2049:
+		if ver, detected := s.detectONCRPCProgram(port, 100003, []uint32{4, 3, 2}); detected {
+			return "nfs", fmt.Sprintf("NFS v%d", ver), "high", "onc rpc null call", "protocol-fingerprint", true
+		}
 	case 3306:
 		if version = s.detectMySQLHandshake(port); version != "" {
 			return "mysql", version, "high", "mysql handshake", "protocol-fingerprint", true
@@ -787,7 +902,134 @@ func (s *Scanner) tryProtocolFingerprint(port int) (service, version, confidence
 			return "ajp13", "Apache JServ Protocol (AJP/1.3)", "high", "ajp cping/cpong", "protocol-fingerprint", true
 		}
 	}
+	if port > 1024 {
+		if service, version, ok := s.detectDynamicONCRPCService(port); ok {
+			return service, version, "high", "onc rpc null call", "protocol-fingerprint", true
+		}
+	}
 	return "", "", "", "", "", false
+}
+
+type oncRPCProbe struct {
+	program  uint32
+	versions []uint32
+	service  string
+	name     string
+}
+
+func (s *Scanner) detectDynamicONCRPCService(port int) (service, version string, ok bool) {
+	probes := []oncRPCProbe{
+		{program: 100005, versions: []uint32{3, 2, 1}, service: "mountd", name: "mountd"},
+		{program: 100021, versions: []uint32{4, 3, 1}, service: "nlockmgr", name: "NFS lock manager"},
+		{program: 100024, versions: []uint32{1}, service: "status", name: "rpc.statd"},
+		{program: 100003, versions: []uint32{4, 3, 2}, service: "nfs", name: "NFS"},
+		{program: 100227, versions: []uint32{3, 2}, service: "nfs_acl", name: "NFS ACL"},
+	}
+	for _, probe := range probes {
+		for _, ver := range probe.versions {
+			accepted, responded := s.oncRPCNullCall(port, probe.program, ver)
+			if accepted {
+				return probe.service, fmt.Sprintf("%s v%d", probe.name, ver), true
+			}
+			if !responded {
+				return "", "", false
+			}
+		}
+	}
+	return "", "", false
+}
+
+func (s *Scanner) detectONCRPCProgram(port int, program uint32, versions []uint32) (uint32, bool) {
+	for _, version := range versions {
+		accepted, _ := s.oncRPCNullCall(port, program, version)
+		if accepted {
+			return version, true
+		}
+	}
+	return 0, false
+}
+
+func (s *Scanner) oncRPCNullCall(port int, program, version uint32) (accepted, responded bool) {
+	address := net.JoinHostPort(s.Host, fmt.Sprintf("%d", port))
+	timeout := s.ioTimeout(1200 * time.Millisecond)
+	if timeout < 1200*time.Millisecond {
+		timeout = 1200 * time.Millisecond
+	}
+
+	conn, err := net.DialTimeout("tcp", address, timeout)
+	if err != nil {
+		return false, false
+	}
+	defer func() { _ = conn.Close() }()
+
+	xid := uint32(0x676f0000) | uint32(rand.IntN(0xffff))
+	call := buildONCRPCNullCall(xid, program, version)
+	_ = conn.SetDeadline(time.Now().Add(timeout))
+	if _, err := conn.Write(call); err != nil {
+		return false, false
+	}
+
+	buf := make([]byte, 512)
+	n, err := conn.Read(buf)
+	if err != nil || n < 28 {
+		return false, false
+	}
+	return parseONCRPCReply(buf[:n], xid)
+}
+
+func buildONCRPCNullCall(xid, program, version uint32) []byte {
+	payload := make([]byte, 40)
+	binary.BigEndian.PutUint32(payload[0:4], xid)
+	binary.BigEndian.PutUint32(payload[4:8], 0)  // CALL
+	binary.BigEndian.PutUint32(payload[8:12], 2) // RPC version
+	binary.BigEndian.PutUint32(payload[12:16], program)
+	binary.BigEndian.PutUint32(payload[16:20], version)
+	binary.BigEndian.PutUint32(payload[20:24], 0) // NULL procedure
+	binary.BigEndian.PutUint32(payload[24:28], 0) // AUTH_NULL credential
+	binary.BigEndian.PutUint32(payload[28:32], 0)
+	binary.BigEndian.PutUint32(payload[32:36], 0) // AUTH_NULL verifier
+	binary.BigEndian.PutUint32(payload[36:40], 0)
+
+	msg := make([]byte, 4+len(payload))
+	binary.BigEndian.PutUint32(msg[0:4], uint32(len(payload))|0x80000000)
+	copy(msg[4:], payload)
+	return msg
+}
+
+func parseONCRPCReply(data []byte, xid uint32) (accepted, valid bool) {
+	if len(data) < 28 {
+		return false, false
+	}
+	if binary.BigEndian.Uint32(data[0:4])&0x7fffffff == 0 {
+		return false, false
+	}
+	payload := data[4:]
+	if len(payload) < 24 {
+		return false, false
+	}
+	if binary.BigEndian.Uint32(payload[0:4]) != xid {
+		return false, false
+	}
+	if binary.BigEndian.Uint32(payload[4:8]) != 1 {
+		return false, false
+	}
+	if binary.BigEndian.Uint32(payload[8:12]) != 0 {
+		return false, true
+	}
+
+	verifierLen := int(binary.BigEndian.Uint32(payload[16:20]))
+	acceptOffset := 20 + roundUp4(verifierLen)
+	if acceptOffset+4 > len(payload) {
+		return false, false
+	}
+	return binary.BigEndian.Uint32(payload[acceptOffset:acceptOffset+4]) == 0, true
+}
+
+func roundUp4(n int) int {
+	if n%4 == 0 {
+		return n
+	}
+	return n + (4 - n%4)
 }
 
 func (s *Scanner) detectAJP(port int) bool {
@@ -1021,9 +1263,16 @@ func (s *Scanner) detectWinRM(port int) string {
 func (s *Scanner) detectSMBVersion(port int) (string, string) {
 	address := net.JoinHostPort(s.Host, fmt.Sprintf("%d", port))
 
-	// Try external tools first (nmap) - it's very reliable
-	if external := tryExternalSMBDetection(s.Host); external != "" {
-		return external, "nmap smb-os-discovery"
+	if external := trySMBClientDetection(s.Host); external != "" {
+		return external, "smbclient anonymous"
+	}
+
+	if external := tryRPCClientSrvInfo(s.Host); external != "" {
+		return external, "rpcclient srvinfo"
+	}
+
+	if external, method := tryExternalSMBDetection(s.Host); external != "" {
+		return external, method
 	}
 
 	// Method 2: Try to detect by reading raw SMB response
@@ -1038,6 +1287,111 @@ func (s *Scanner) detectSMBVersion(port int) (string, string) {
 
 	// Default: we know port is open
 	return "Microsoft Windows SMB", "port 445 open"
+}
+
+func trySMBClientDetection(host string) string {
+	smbclientPath, err := exec.LookPath("smbclient")
+	if err != nil {
+		return ""
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, smbclientPath, "-L", "//"+host, "-N", "-g", "-m", "SMB3")
+	output, err := cmd.CombinedOutput()
+	if err != nil && len(output) == 0 {
+		return ""
+	}
+	return parseSMBClientOutput(string(output))
+}
+
+func tryRPCClientSrvInfo(host string) string {
+	rpcclientPath, err := exec.LookPath("rpcclient")
+	if err != nil {
+		return ""
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, rpcclientPath, "-U", "", "-N", host, "-c", "srvinfo")
+	output, err := cmd.CombinedOutput()
+	if err != nil && len(output) == 0 {
+		return ""
+	}
+	return parseRPCClientSrvInfo(string(output))
+}
+
+func parseSMBClientOutput(out string) string {
+	lines := strings.Split(out, "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		if server := extractSMBServerComment(line); server != "" {
+			return server
+		}
+	}
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "Disk|") {
+			continue
+		}
+		parts := strings.SplitN(line, "|", 3)
+		if len(parts) == 3 && strings.TrimSpace(parts[2]) != "" {
+			return fmt.Sprintf("SMB share %s: %s", strings.TrimSpace(parts[1]), strings.TrimSpace(parts[2]))
+		}
+	}
+	return ""
+}
+
+func extractSMBServerComment(line string) string {
+	if strings.Contains(line, "IPC Service (") {
+		start := strings.Index(line, "IPC Service (")
+		if start >= 0 {
+			server := line[start+len("IPC Service ("):]
+			server = strings.TrimSuffix(server, ")")
+			return normalizeSMBServerVersion(server)
+		}
+	}
+	lower := strings.ToLower(line)
+	if strings.Contains(lower, "samba ") || strings.Contains(lower, "(samba") || strings.Contains(lower, " samba,") {
+		return normalizeSMBServerVersion(line)
+	}
+	return ""
+}
+
+func parseRPCClientSrvInfo(out string) string {
+	for _, line := range strings.Split(out, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "platform_id") || strings.HasPrefix(line, "os version") || strings.HasPrefix(line, "server type") {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
+		}
+		for i, field := range fields {
+			if field == "SNT" && i+1 < len(fields) {
+				return normalizeSMBServerVersion(strings.Join(fields[i+1:], " "))
+			}
+		}
+		if strings.Contains(strings.ToLower(line), "samba") {
+			return normalizeSMBServerVersion(line)
+		}
+	}
+	return ""
+}
+
+func normalizeSMBServerVersion(version string) string {
+	version = sanitizeVersionString(version)
+	version = strings.TrimSpace(version)
+	if version == "" {
+		return ""
+	}
+	return version
 }
 
 func shouldUseTLSForHTTP(port int) bool {
