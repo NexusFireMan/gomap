@@ -50,6 +50,26 @@ Do not run integration tests against systems you are not authorized to scan.
 - Avoid unrelated refactors in feature or bugfix pull requests.
 - Do not commit generated binaries, private notes, credentials, lab logs, or local scan outputs.
 
+## Protected Main Workflow
+
+The `main` branch is protected by a GitHub Ruleset. Normal work should not be pushed directly to `main`; use a short-lived issue branch and open a pull request instead.
+
+Recommended flow:
+
+```bash
+git checkout main
+git pull origin main
+git checkout -b issue-<number>-short-description
+
+# make focused changes
+
+git add .
+git commit -m "type: concise description"
+git push origin issue-<number>-short-description
+```
+
+Open a pull request into `main` and reference the related issue in the PR body, for example `Closes #8`. Required checks such as `Lint` and `Test` must pass before merge. Prefer squash merge for small issue branches.
+
 ## Release Notes
 
 Maintainers handle tagging and releases. Use conventional commit style where possible:
