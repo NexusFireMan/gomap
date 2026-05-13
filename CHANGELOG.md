@@ -7,8 +7,10 @@ Note: this changelog is maintained from this point forward in the project histor
 ## Unreleased
 
 ### Added
+- Documented the maintainer release workflow for tags, GitHub Releases, binaries, Debian packages, GHCR images, checksums, and the signed GitHub Pages APT repository.
 
 ### Changed
+- Marked the APT/GHCR release workflow documentation roadmap item as completed.
 
 ### Fixed
 
