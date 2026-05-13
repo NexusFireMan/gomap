@@ -11,6 +11,9 @@ GoMap's roadmap focuses on improving reliability, test coverage, documentation, 
 
 ## Documentation and Release Workflow
 
-- Document APT/GHCR release workflow.
 - Add more lab-based examples for authorized environments.
 - Keep README language focused on controlled-rate scanning, structured output, and automation-friendly workflows.
+
+Completed:
+
+- Document APT/GHCR release workflow.

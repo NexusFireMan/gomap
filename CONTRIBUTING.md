@@ -79,3 +79,5 @@ Maintainers handle tagging and releases. Use conventional commit style where pos
 - `docs:` for documentation-only changes
 - `test:` for test-only changes
 - `chore:` for maintenance
+
+Release, package, GHCR, checksum, and APT repository publishing steps are documented in [GoMap Release Workflow](docs/RELEASE_WORKFLOW.md).
