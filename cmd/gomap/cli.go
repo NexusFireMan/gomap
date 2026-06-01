@@ -17,6 +17,7 @@ type CLIOptions struct {
 	UDPFlag         bool
 	ExcludePorts    string
 	ServiceFlag     bool
+	DeepVersionFlag bool
 	GhostFlag       bool
 	UpdateFlag      bool
 	RemoveFlag      bool
@@ -58,7 +59,8 @@ func ParseCLIOptions(args []string) (CLIOptions, error) {
 	fs.BoolVar(&opts.UDPFlag, "u", false, "scan UDP instead of TCP")
 	fs.StringVar(&opts.ExcludePorts, "exclude-ports", "", "exclude ports (e.g., 80,443 or 1-1024)")
 	fs.BoolVar(&opts.ServiceFlag, "s", false, "detect services and versions")
-	fs.BoolVar(&opts.GhostFlag, "g", false, "ghost mode - slower, stealthy scan to evade IDS/Firewall detection")
+	fs.BoolVar(&opts.DeepVersionFlag, "Dv", false, "enable deeper bounded service/version detection")
+	fs.BoolVar(&opts.GhostFlag, "g", false, "ghost mode - controlled-rate low-noise scan profile")
 	fs.BoolVar(&opts.NoDiscovery, "nd", false, "disable host discovery (scan all hosts in CIDR even if inactive)")
 	fs.BoolVar(&opts.UpdateFlag, "up", false, "update gomap to the latest version")
 	fs.BoolVar(&opts.RemoveFlag, "remove", false, "remove gomap from the system (/usr/local/bin)")
@@ -109,6 +111,9 @@ func ParseCLIOptions(args []string) (CLIOptions, error) {
 
 func normalizeOptions(opts CLIOptions) (CLIOptions, error) {
 	opts.FormatFlag = strings.ToLower(strings.TrimSpace(opts.FormatFlag))
+	if opts.DeepVersionFlag {
+		opts.ServiceFlag = true
+	}
 
 	if opts.JSONFlag {
 		if opts.FormatFlag != "text" && opts.FormatFlag != "json" {
@@ -182,7 +187,7 @@ func normalizeOptions(opts CLIOptions) (CLIOptions, error) {
 		return opts, errors.New("--details is only valid with text output")
 	}
 	if opts.RandomIP && !opts.ServiceFlag {
-		return opts, errors.New("--random-ip requires -s (service detection)")
+		return opts, errors.New("--random-ip requires -s or -Dv (service detection)")
 	}
 
 	return opts, nil
@@ -219,7 +224,7 @@ func printHelp(w *os.File) {
  ╚██████╔╝╚██████╔╝██║ ╚═╝ ██║██║  ██║██║
   ╚═════╝  ╚═════╝ ╚═╝     ╚═╝╚═╝  ╚═╝╚═╝%s
 
-%sGomap%s - fast TCP/UDP scanner with service detection and stealth profiles.
+%sGomap%s - fast TCP/UDP scanner with service detection and low-noise profiles.
 
 %sUsage:%s
   gomap <host|CIDR> [options]
@@ -233,7 +238,8 @@ func printHelp(w *os.File) {
   --top-ports <N>            alias of --top
   --exclude-ports <ports>    remove ports from final scan set
   -s                         enable service/version detection
-  -g                         ghost mode (slower, stealthier)
+  -Dv                        deeper bounded service/version detection
+  -g                         ghost mode (controlled-rate low-noise profile)
   -nd                        disable CIDR host discovery
 
 %sPerformance & Robustness:%s
@@ -253,7 +259,7 @@ func printHelp(w *os.File) {
   --out <path>               write output to file
   --details                  add latency/confidence/evidence columns (text only)
 
-%sStealth Identity (HTTP probes):%s
+%sHTTP Identity Controls:%s
   --random-agent             random User-Agent per request
   --random-ip                random X-Forwarded-For/X-Real-IP from target CIDR
 
@@ -269,6 +275,7 @@ func printHelp(w *os.File) {
   gomap --scan-type syn 10.0.11.6
   gomap -u -p 53,123,161 10.0.11.6
   gomap -s -p 21,22,80,445 10.0.11.9
+  gomap -Dv -p 21,22,53,2121 10.0.11.9
   gomap -s --top-ports 300 10.0.11.0/24
   gomap -g -s --random-agent --random-ip 10.0.11.0/24
   gomap -g -nd -s -p 22,80,443 10.0.11.0/24

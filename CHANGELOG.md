@@ -8,6 +8,7 @@ Note: this changelog is maintained from this point forward in the project histor
 
 ### Added
 - Documented the maintainer release workflow for tags, GitHub Releases, binaries, Debian packages, GHCR images, checksums, and the signed GitHub Pages APT repository.
+- Added `-Dv`, a bounded deep-version detection profile that enables service/version output and adds focused extra probes only for open ports with weak, generic, or empty version evidence.
 
 ### Changed
 - Marked the APT/GHCR release workflow documentation roadmap item as completed.

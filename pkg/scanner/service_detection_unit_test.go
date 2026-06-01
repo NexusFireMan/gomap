@@ -123,6 +123,25 @@ func TestNoGreetingDetectionMetadata(t *testing.T) {
 	}
 }
 
+func TestDeepVersionHelpers(t *testing.T) {
+	if !shouldDeepenVersion("imap", "IMAP4rev1") {
+		t.Fatal("expected generic IMAP capability to be eligible for deeper version probing")
+	}
+	if shouldDeepenVersion("ssh", "OpenSSH 9.6p1") {
+		t.Fatal("did not expect concrete SSH version to be deepened")
+	}
+	if got := normalizeVersionProbeService("imaps"); got != "imap" {
+		t.Fatalf("expected imaps to normalize to imap, got %q", got)
+	}
+	payloads := deepVersionPayloads(8443, "http")
+	if len(payloads) == 0 || payloads[0] != "HEAD / HTTP/1.0\r\n\r\n" {
+		t.Fatalf("unexpected HTTP deep version payloads: %#v", payloads)
+	}
+	if got := deepVersionPayloads(22, "ssh"); got != nil {
+		t.Fatalf("expected no generic deep probes for ssh, got %#v", got)
+	}
+}
+
 func grabBannerFromFixture(t *testing.T, port int, banner string) ScanResult {
 	t.Helper()
 

@@ -34,6 +34,7 @@ type Scanner struct {
 	GhostMode          bool
 	RandomAgent        bool
 	RandomIP           bool
+	DeepVersion        bool
 	targetPrefix       netip.Prefix
 
 	adaptiveMu    sync.Mutex
@@ -55,6 +56,7 @@ type ScanConfig struct {
 	RandomAgent     bool
 	RandomIP        bool
 	TargetCIDR      string
+	DeepVersion     bool
 }
 
 // NewScanner creates a new Scanner instance
@@ -82,6 +84,7 @@ func NewScanner(host string, ghostMode bool) *Scanner {
 		GhostMode:          ghostMode,
 		RandomAgent:        false,
 		RandomIP:           false,
+		DeepVersion:        false,
 	}
 }
 
@@ -106,6 +109,7 @@ func (s *Scanner) Configure(cfg ScanConfig) {
 	}
 	s.RandomAgent = cfg.RandomAgent
 	s.RandomIP = cfg.RandomIP
+	s.DeepVersion = cfg.DeepVersion
 	if s.RandomIP {
 		s.targetPrefix = parseTargetPrefix(cfg.TargetCIDR, s.Host)
 	}
@@ -492,6 +496,9 @@ func (s *Scanner) grabBanner(conn net.Conn, port int, result *ScanResult) {
 	if banner == "" && !s.GhostMode && s.PortManager.GetServiceName(port, "") == "" {
 		banner = s.tryGenericServiceProbes(port)
 	}
+	if banner == "" && !s.GhostMode && s.DeepVersion {
+		banner = s.tryDeepVersionProbe(port, s.PortManager.GetServiceName(port, ""))
+	}
 
 	// Special handling for SMB/NetBIOS session service.
 	if banner == "" && (port == 139 || port == 445) && !s.GhostMode {
@@ -560,6 +567,16 @@ func (s *Scanner) grabBanner(conn net.Conn, port int, result *ScanResult) {
 				serviceName = ftpService
 				if ftpVersion != "" && (version == "" || !isWeakFTPVersion(ftpVersion)) {
 					version = ftpVersion
+				}
+			}
+		}
+	}
+	if !s.GhostMode && s.DeepVersion && serviceName != "" && shouldDeepenVersion(serviceName, version) {
+		if deepBanner := s.tryDeepVersionProbe(port, serviceName); deepBanner != "" {
+			if deepService, deepVersion := parseBanner(deepBanner); deepService != "" {
+				serviceName = deepService
+				if deepVersion != "" && (version == "" || isWeakVersion(version)) {
+					version = deepVersion
 				}
 			}
 		}
@@ -829,6 +846,28 @@ func shouldUseFTPProbe(port int) bool {
 	}
 }
 
+func shouldDeepenVersion(serviceName, version string) bool {
+	if serviceName == "" {
+		return false
+	}
+	return isWeakVersion(version)
+}
+
+func isWeakVersion(version string) bool {
+	v := strings.ToLower(strings.TrimSpace(version))
+	if v == "" {
+		return true
+	}
+	switch v {
+	case "service", "service ready", "ready", "unknown":
+		return true
+	case "ftp service", "ftp server ready", "smtp service", "pop3 service", "imap4rev1", "http":
+		return true
+	default:
+		return false
+	}
+}
+
 func (s *Scanner) probeFTP(port int) string {
 	address := net.JoinHostPort(s.Host, fmt.Sprintf("%d", port))
 	timeout := s.boundedServiceTimeout(1200*time.Millisecond, 4*time.Second)
@@ -903,6 +942,77 @@ func (s *Scanner) probeMailService(port int, payload string, useTLS bool) string
 	return response.String()
 }
 
+func (s *Scanner) tryDeepVersionProbe(port int, serviceName string) string {
+	serviceName = normalizeVersionProbeService(serviceName)
+	if serviceName == "" {
+		return ""
+	}
+	if response := s.tryServiceProbeForService(port, serviceName); response != "" {
+		return response
+	}
+	for _, payload := range deepVersionPayloads(port, serviceName) {
+		if response := s.probeTextServiceWriteFirstWithTimeout(port, payload, 700*time.Millisecond, 1500*time.Millisecond); response != "" {
+			if service, _ := parseBanner(response); service != "" {
+				return response
+			}
+		}
+	}
+	return ""
+}
+
+func (s *Scanner) tryServiceProbeForService(port int, serviceName string) string {
+	serviceName = normalizeVersionProbeService(serviceName)
+	switch serviceName {
+	case "ftp":
+		return s.probeFTP(port)
+	case "smtp":
+		return s.probeMailService(port, "EHLO gomap.local\r\n", port == 465)
+	case "pop3":
+		return s.probeMailService(port, "CAPA\r\n", port == 995)
+	case "imap":
+		return s.probeMailService(port, "a001 CAPABILITY\r\n", port == 993)
+	case "redis":
+		return s.probeTextService(port, "INFO\r\n")
+	case "ajp13":
+		return s.probeAJP(port)
+	default:
+		return ""
+	}
+}
+
+func deepVersionPayloads(port int, serviceName string) []string {
+	serviceName = normalizeVersionProbeService(serviceName)
+	switch serviceName {
+	case "http", "http-proxy", "winrm":
+		return []string{"HEAD / HTTP/1.0\r\n\r\n", "OPTIONS / HTTP/1.0\r\n\r\n"}
+	case "ftp":
+		return []string{"SYST\r\n", "FEAT\r\n"}
+	case "smtp":
+		return []string{"EHLO gomap.local\r\n", "HELP\r\n"}
+	case "pop3":
+		return []string{"CAPA\r\n"}
+	case "imap":
+		return []string{"a001 CAPABILITY\r\n"}
+	case "redis":
+		return []string{"INFO\r\n"}
+	default:
+		return nil
+	}
+}
+
+func normalizeVersionProbeService(serviceName string) string {
+	switch strings.ToLower(strings.TrimSpace(serviceName)) {
+	case "smtps":
+		return "smtp"
+	case "pop3s":
+		return "pop3"
+	case "imaps":
+		return "imap"
+	default:
+		return strings.ToLower(strings.TrimSpace(serviceName))
+	}
+}
+
 // probeTextService performs a short connect/write/read interaction for text-based protocols
 func (s *Scanner) probeTextService(port int, payload string) string {
 	address := net.JoinHostPort(s.Host, fmt.Sprintf("%d", port))
@@ -963,11 +1073,12 @@ func (s *Scanner) tryGenericServiceProbes(port int) string {
 }
 
 func (s *Scanner) probeTextServiceWriteFirst(port int, payload string) string {
+	return s.probeTextServiceWriteFirstWithTimeout(port, payload, 1500*time.Millisecond, 0)
+}
+
+func (s *Scanner) probeTextServiceWriteFirstWithTimeout(port int, payload string, minTimeout, maxTimeout time.Duration) string {
 	address := net.JoinHostPort(s.Host, fmt.Sprintf("%d", port))
-	timeout := s.ioTimeout(1500 * time.Millisecond)
-	if timeout < 1500*time.Millisecond {
-		timeout = 1500 * time.Millisecond
-	}
+	timeout := s.boundedServiceTimeout(minTimeout, maxTimeout)
 
 	conn, err := net.DialTimeout("tcp", address, timeout)
 	if err != nil {

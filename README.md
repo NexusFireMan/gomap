@@ -197,6 +197,9 @@ sudo dpkg -i gomap_<version>_linux_amd64.deb
 # Service/version detection on selected ports
 ./gomap -s -p 21,22,80,135,139,445,5985 10.0.11.6
 
+# Deeper bounded version detection on selected ports
+./gomap -Dv -p 21,22,53,2121 10.0.11.6
+
 # CIDR scan with automatic active-host discovery
 ./gomap -s --top-ports 300 10.0.11.0/24
 
@@ -243,6 +246,7 @@ Main options:
   --top, --top-ports scan top N ports from curated protocol list
   --exclude-ports   remove ports from final scan set
   -s                enable service/version detection
+  -Dv               deeper bounded service/version detection
   -g                ghost mode: controlled-rate low-noise profile
   -nd               disable host discovery for CIDR targets
 
@@ -292,6 +296,8 @@ When `-s` is enabled, gomap combines port-based hints and protocol/banner parsin
 - SMB-oriented identification for `microsoft-ds` targets.
 - TLS handshake metadata where applicable (`tls_version`, `tls_cipher`, ALPN, certificate issuer).
 - Generic active probes for open ports without a known port mapping, useful when services run on non-standard ports.
+
+`-Dv` enables the same service/version output as `-s` and adds a bounded deep-version pass for open ports whose first result is generic, weak, or empty. It is intended as GoMap's fast native version-detection profile for authorized lab/internal reconnaissance: more focused than the default `-s`, but still controlled so it does not turn a quick scan into a long script scan.
 
 Important: banner-based detection is heuristic. Always validate critical findings with a second tool.
 
