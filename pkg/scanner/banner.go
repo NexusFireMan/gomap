@@ -403,12 +403,14 @@ func looksLikeFTPResponse(banner string) bool {
 }
 
 func parseKnownFTPVersion(banner string) string {
+	if version := parseProFTPDVersion(banner); version != "" {
+		return version
+	}
 	patterns := []struct {
 		name string
 		re   *regexp.Regexp
 	}{
 		{"vsFTPd", regexp.MustCompile(`(?i)\bvsftpd\s+([\w.\-]+)`)},
-		{"ProFTPD", regexp.MustCompile(`(?i)\bproftpd\s+([\w.\-]+)`)},
 		{"Pure-FTPd", regexp.MustCompile(`(?i)\bpure[\s-]?ftpd\s+([\w.\-]+)`)},
 		{"FileZilla", regexp.MustCompile(`(?i)\bfilezilla(?: server)?\s+([\w.\-]+)`)},
 	}
@@ -433,6 +435,21 @@ func parseKnownFTPVersion(banner string) string {
 		return "FileZilla"
 	}
 	return ""
+}
+
+func parseProFTPDVersion(banner string) string {
+	proftpdRegex := regexp.MustCompile(`(?i)\bproftpd(?:\s+([\d][\w.\-]*))?(?:\s+server)?(?:\s*\(([^)\r\n]+)\))?`)
+	match := proftpdRegex.FindStringSubmatch(banner)
+	if match == nil {
+		return ""
+	}
+	if strings.TrimSpace(match[1]) != "" {
+		return "ProFTPD " + sanitizeVersionString(match[1])
+	}
+	if strings.TrimSpace(match[2]) != "" {
+		return "ProFTPD (" + sanitizeVersionString(match[2]) + ")"
+	}
+	return "ProFTPD"
 }
 
 func isGenericFTPProductToken(token string) bool {

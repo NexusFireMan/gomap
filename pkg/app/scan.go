@@ -48,6 +48,9 @@ func ExecuteScan(req ScanRequest) error {
 	if req.UDP {
 		scanLabel = "UDP"
 	}
+	if req.DeepVersion {
+		scanLabel += "+DV"
+	}
 
 	destWriter := output.DefaultWriter()
 	var outFile *os.File
@@ -174,7 +177,7 @@ func ExecuteScan(req ScanRequest) error {
 		}
 	}
 
-	formatter := output.NewOutputFormatter(req.ServiceDetect, req.Details)
+	formatter := output.NewOutputFormatter(req.ServiceDetect, req.Details || req.DeepVersion)
 	allResults := make(map[string][]scanner.ScanResult)
 	scanStart := time.Now()
 

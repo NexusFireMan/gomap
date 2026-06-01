@@ -426,6 +426,10 @@ func (s *Scanner) addJitter() {
 // grabBanner attempts to grab the service banner
 func (s *Scanner) grabBanner(conn net.Conn, port int, result *ScanResult) {
 	var banner string
+	deepProbeUsed := false
+	deepProbeAttempted := false
+	mappedService := s.PortManager.GetServiceName(port, "")
+	mappedFTP := normalizeVersionProbeService(mappedService) == "ftp"
 
 	if !s.GhostMode && port == 3306 {
 		if version := detectMySQLHandshakeFromConn(conn, s.boundedServiceTimeout(1200*time.Millisecond, 2500*time.Millisecond)); version != "" {
@@ -468,8 +472,14 @@ func (s *Scanner) grabBanner(conn net.Conn, port int, result *ScanResult) {
 		banner = s.grabHTTPBanner(port)
 	}
 
+	if banner == "" && !s.GhostMode && s.DeepVersion && mappedFTP {
+		deepProbeAttempted = true
+		banner = s.probeTextServiceOnConn(conn, "\r\n\r\n")
+		deepProbeUsed = banner != ""
+	}
+
 	// If no banner yet, try passive read
-	if banner == "" {
+	if banner == "" && (!s.DeepVersion || !mappedFTP) {
 		banner = s.tryPassiveBanner(conn)
 	}
 
@@ -484,20 +494,25 @@ func (s *Scanner) grabBanner(conn net.Conn, port int, result *ScanResult) {
 					result.Evidence = noGreetingEvidenceForPort(port)
 					result.DetectionPath = "connected-probe"
 				}
-				return
+				if !s.DeepVersion || normalizeVersionProbeService(result.ServiceName) != "ftp" {
+					return
+				}
 			}
 		}
 	}
 
+	// Deep version mode tries focused, bounded probes before the default fallback path.
+	if banner == "" && !s.GhostMode && s.DeepVersion && !deepProbeAttempted {
+		deepProbeAttempted = true
+		banner = s.tryDeepVersionProbe(port, s.PortManager.GetServiceName(port, ""))
+		deepProbeUsed = banner != ""
+	}
 	// If still no banner, use active probes only outside ghost mode.
-	if banner == "" && !s.GhostMode {
+	if banner == "" && !s.GhostMode && (!deepProbeAttempted || !mappedFTP) {
 		banner = s.tryServiceProbe(port)
 	}
 	if banner == "" && !s.GhostMode && s.PortManager.GetServiceName(port, "") == "" {
 		banner = s.tryGenericServiceProbes(port)
-	}
-	if banner == "" && !s.GhostMode && s.DeepVersion {
-		banner = s.tryDeepVersionProbe(port, s.PortManager.GetServiceName(port, ""))
 	}
 
 	// Special handling for SMB/NetBIOS session service.
@@ -574,6 +589,7 @@ func (s *Scanner) grabBanner(conn net.Conn, port int, result *ScanResult) {
 	if !s.GhostMode && s.DeepVersion && serviceName != "" && shouldDeepenVersion(serviceName, version) {
 		if deepBanner := s.tryDeepVersionProbe(port, serviceName); deepBanner != "" {
 			if deepService, deepVersion := parseBanner(deepBanner); deepService != "" {
+				deepProbeUsed = true
 				serviceName = deepService
 				if deepVersion != "" && (version == "" || isWeakVersion(version)) {
 					version = deepVersion
@@ -606,6 +622,13 @@ func (s *Scanner) grabBanner(conn net.Conn, port int, result *ScanResult) {
 			result.Evidence = "protocol banner (generic)"
 		}
 		result.DetectionPath = "banner-parser"
+		if deepProbeUsed {
+			result.Evidence = "deep version probe"
+			result.DetectionPath = "deep-version"
+			if version == "" {
+				result.Evidence = "deep version probe (generic)"
+			}
+		}
 		if !s.GhostMode && shouldAttemptTLSFingerprint(port, result.ServiceName) {
 			if fp, ok := s.detectTLSFingerprint(port); ok {
 				result.TLS = true
@@ -947,6 +970,11 @@ func (s *Scanner) tryDeepVersionProbe(port int, serviceName string) string {
 	if serviceName == "" {
 		return ""
 	}
+	if serviceName == "ftp" {
+		if response := s.probeFTPGenericLines(port); response != "" {
+			return response
+		}
+	}
 	if response := s.tryServiceProbeForService(port, serviceName); response != "" {
 		return response
 	}
@@ -958,6 +986,38 @@ func (s *Scanner) tryDeepVersionProbe(port int, serviceName string) string {
 		}
 	}
 	return ""
+}
+
+func (s *Scanner) probeFTPGenericLines(port int) string {
+	address := net.JoinHostPort(s.Host, fmt.Sprintf("%d", port))
+	timeout := s.boundedServiceTimeout(700*time.Millisecond, 1500*time.Millisecond)
+
+	conn, err := net.DialTimeout("tcp", address, timeout)
+	if err != nil {
+		return ""
+	}
+	defer func() { _ = conn.Close() }()
+
+	_ = conn.SetDeadline(time.Now().Add(timeout))
+	if _, err := conn.Write([]byte("\r\n\r\n")); err != nil {
+		return ""
+	}
+
+	var response strings.Builder
+	buf := make([]byte, 2048)
+	for {
+		n, err := conn.Read(buf)
+		if n > 0 {
+			response.Write(buf[:n])
+			if response.Len() >= 4096 {
+				break
+			}
+		}
+		if err != nil {
+			break
+		}
+	}
+	return response.String()
 }
 
 func (s *Scanner) tryServiceProbeForService(port int, serviceName string) string {

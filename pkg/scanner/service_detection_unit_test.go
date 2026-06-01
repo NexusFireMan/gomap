@@ -142,6 +142,45 @@ func TestDeepVersionHelpers(t *testing.T) {
 	}
 }
 
+func TestDeepVersionFTPGenericLinesOnExistingConnection(t *testing.T) {
+	client, server := net.Pipe()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		defer func() { _ = server.Close() }()
+		buf := make([]byte, 8)
+		_, _ = server.Read(buf)
+		_, _ = server.Write([]byte("220 ProFTPD Server (Ceil's FTP) [10.0.11.6]\r\n500 Invalid command\r\n"))
+	}()
+
+	t.Cleanup(func() { _ = client.Close() })
+
+	s := NewScanner("fixture.local", false)
+	s.DeepVersion = true
+	s.AdaptiveTimeout = false
+	s.Timeout = 25 * time.Millisecond
+	s.PortManager = NewPortManager()
+
+	result := ScanResult{Port: 2121, IsOpen: true}
+	s.grabBanner(client, 2121, &result)
+
+	if result.ServiceName != "ftp" {
+		t.Fatalf("expected ftp service, got %q", result.ServiceName)
+	}
+	if result.Version != "ProFTPD (Ceil's FTP)" {
+		t.Fatalf("unexpected version: %q", result.Version)
+	}
+	if result.Evidence != "deep version probe" || result.DetectionPath != "deep-version" {
+		t.Fatalf("unexpected deep metadata: evidence=%q path=%q", result.Evidence, result.DetectionPath)
+	}
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("fixture server did not finish")
+	}
+}
+
 func grabBannerFromFixture(t *testing.T, port int, banner string) ScanResult {
 	t.Helper()
 

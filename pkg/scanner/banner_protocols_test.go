@@ -63,6 +63,7 @@ func TestParseFTPKnownVersions(t *testing.T) {
 		{"220 (vsFTPd 3.0.3)", "vsFTPd 3.0.3"},
 		{"220 ProFTPD 1.3.5e Server ready", "ProFTPD 1.3.5e"},
 		{"220 ProFTPD Server ready", "ProFTPD"},
+		{"220 ProFTPD Server (Ceil's FTP) [10.0.11.6]", "ProFTPD (Ceil's FTP)"},
 		{"220 Pure-FTPd 1.0.49 ready", "Pure-FTPd 1.0.49"},
 		{"220\r\n215 UNIX Type: L8\r\n", "SYST UNIX Type: L8"},
 		{"220", "FTP service"},

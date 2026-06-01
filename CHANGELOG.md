@@ -12,6 +12,7 @@ Note: this changelog is maintained from this point forward in the project histor
 
 ### Changed
 - Marked the APT/GHCR release workflow documentation roadmap item as completed.
+- `-Dv` now makes text output visibly distinct with detail columns and uses a faster FTP deep-version probe path before falling back to no-greeting evidence.
 
 ### Fixed
 - **Alternate FTP banner detection**: port `2121` now maps to `ftp`, uses the FTP probe path, normalizes generic ProFTPD greetings to `ProFTPD`, and reports silent FTP services as `FTP service (no greeting)` instead of leaving the version empty.
