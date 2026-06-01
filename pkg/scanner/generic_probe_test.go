@@ -103,3 +103,16 @@ func TestFTPProbeEnrichesGenericGreetingWithSYST(t *testing.T) {
 		t.Fatalf("expected SYST UNIX Type: L8, got %+v", results[0])
 	}
 }
+
+func TestKnownAlternateFTPPortUsesFTPProbe(t *testing.T) {
+	pm := NewPortManager()
+	if got := pm.GetServiceName(2121, ""); got != "ftp" {
+		t.Fatalf("expected port 2121 to map to ftp, got %q", got)
+	}
+	if !shouldUseFTPProbe(2121) {
+		t.Fatal("expected port 2121 to use the FTP probe")
+	}
+	if shouldUseFTPProbe(2222) {
+		t.Fatal("did not expect arbitrary ports to use the FTP probe directly")
+	}
+}

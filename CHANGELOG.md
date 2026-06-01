@@ -13,6 +13,7 @@ Note: this changelog is maintained from this point forward in the project histor
 - Marked the APT/GHCR release workflow documentation roadmap item as completed.
 
 ### Fixed
+- **Alternate FTP banner detection**: port `2121` now maps to `ftp`, uses the FTP probe path, normalizes generic ProFTPD greetings to `ProFTPD`, and reports silent FTP services as `FTP service (no greeting)` instead of leaving the version empty.
 
 ## [2.4.8] - 2026-05-13
 

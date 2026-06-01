@@ -540,8 +540,13 @@ func (s *Scanner) grabBanner(conn net.Conn, port int, result *ScanResult) {
 			return
 		}
 		if result.ServiceName != "" {
+			if version := noGreetingVersionForPort(port); version != "" {
+				result.Version = version
+				result.Evidence = noGreetingEvidenceForPort(port)
+			} else {
+				result.Evidence = "port map"
+			}
 			result.Confidence = "low"
-			result.Evidence = "port map"
 			result.DetectionPath = "portmap"
 		}
 		return
@@ -691,6 +696,8 @@ func (s *Scanner) probeTextServiceOnConn(conn net.Conn, payload string) string {
 
 func noGreetingVersionForPort(port int) string {
 	switch port {
+	case 21, 2121:
+		return "FTP service (no greeting)"
 	case 25, 465, 587, 2525:
 		return "SMTP service (no greeting)"
 	case 110, 995:
@@ -704,6 +711,8 @@ func noGreetingVersionForPort(port int) string {
 
 func noGreetingEvidenceForPort(port int) string {
 	switch port {
+	case 21, 2121:
+		return "port open; no ftp greeting"
 	case 25, 465, 587, 2525:
 		return "port open; no smtp greeting"
 	case 110, 995:
@@ -792,9 +801,10 @@ func (s *Scanner) grabHTTPBanner(port int) string {
 
 // tryServiceProbe sends minimal protocol-specific probes to improve detection when passive banners are absent
 func (s *Scanner) tryServiceProbe(port int) string {
-	switch port {
-	case 21:
+	if shouldUseFTPProbe(port) {
 		return s.probeFTP(port)
+	}
+	switch port {
 	case 25, 465, 587, 2525:
 		return s.probeMailService(port, "EHLO gomap.local\r\n", port == 465)
 	case 110, 995:
@@ -810,12 +820,18 @@ func (s *Scanner) tryServiceProbe(port int) string {
 	}
 }
 
+func shouldUseFTPProbe(port int) bool {
+	switch port {
+	case 21, 2121:
+		return true
+	default:
+		return false
+	}
+}
+
 func (s *Scanner) probeFTP(port int) string {
 	address := net.JoinHostPort(s.Host, fmt.Sprintf("%d", port))
-	timeout := s.ioTimeout(6 * time.Second)
-	if timeout < 6*time.Second {
-		timeout = 6 * time.Second
-	}
+	timeout := s.boundedServiceTimeout(1200*time.Millisecond, 4*time.Second)
 
 	conn, err := net.DialTimeout("tcp", address, timeout)
 	if err != nil {

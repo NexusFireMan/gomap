@@ -414,6 +414,9 @@ func parseKnownFTPVersion(banner string) string {
 	}
 	for _, p := range patterns {
 		if match := p.re.FindStringSubmatch(banner); match != nil {
+			if isGenericFTPProductToken(match[1]) {
+				return p.name
+			}
 			return fmt.Sprintf("%s %s", p.name, match[1])
 		}
 	}
@@ -430,6 +433,15 @@ func parseKnownFTPVersion(banner string) string {
 		return "FileZilla"
 	}
 	return ""
+}
+
+func isGenericFTPProductToken(token string) bool {
+	switch strings.ToLower(strings.TrimSpace(token)) {
+	case "", "server", "service", "ready":
+		return true
+	default:
+		return false
+	}
 }
 
 func parseFTPSYSTVersion(banner string) string {

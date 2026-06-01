@@ -103,6 +103,8 @@ func TestNoGreetingDetectionMetadata(t *testing.T) {
 		version  string
 		evidence string
 	}{
+		{21, "FTP service (no greeting)", "port open; no ftp greeting"},
+		{2121, "FTP service (no greeting)", "port open; no ftp greeting"},
 		{25, "SMTP service (no greeting)", "port open; no smtp greeting"},
 		{110, "POP3 service (no greeting)", "port open; no pop3 greeting"},
 		{143, "IMAP service (no greeting)", "port open; no imap greeting"},
