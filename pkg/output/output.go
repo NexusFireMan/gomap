@@ -13,6 +13,7 @@ import (
 type OutputFormatter struct {
 	IncludeServices bool
 	IncludeDetails  bool
+	IncludeEvidence bool
 }
 
 var ansiPattern = regexp.MustCompile(`\x1b\[[0-9;]*m`)
@@ -28,6 +29,14 @@ func NewOutputFormatter(includeServices bool, includeDetails bool) *OutputFormat
 	return &OutputFormatter{
 		IncludeServices: includeServices,
 		IncludeDetails:  includeDetails,
+	}
+}
+
+// NewEvidenceOutputFormatter creates the compact deep-version output view.
+func NewEvidenceOutputFormatter() *OutputFormatter {
+	return &OutputFormatter{
+		IncludeServices: true,
+		IncludeEvidence: true,
 	}
 }
 
@@ -65,6 +74,20 @@ func (of *OutputFormatter) printBasic(results []scanner.ScanResult) {
 
 // printWithServices prints results with service and version information
 func (of *OutputFormatter) printWithServices(results []scanner.ScanResult) {
+	if of.IncludeEvidence {
+		fmt.Printf("%s%s%s\n", ColorBold, fmt.Sprintf("%-*s %-*s %-*s %-36s %s", portColWidth, "PORT", stateColWidth, "STATE", serviceColWidth, "SERVICE", "VERSION", "EVIDENCE"), ColorReset)
+		for _, result := range results {
+			fmt.Printf("%s %s %s %-36s %s\n",
+				padANSI(Port(result.Port), portColWidth),
+				padANSI(State("open"), stateColWidth),
+				padANSI(Service(result.ServiceName), serviceColWidth),
+				padANSI(Version(result.Version), 36),
+				result.Evidence,
+			)
+		}
+		return
+	}
+
 	if of.IncludeDetails {
 		fmt.Printf("%s%s%s\n", ColorBold, fmt.Sprintf("%-*s %-*s %-*s %-36s %-7s %-8s %s", portColWidth, "PORT", stateColWidth, "STATE", serviceColWidth, "SERVICE", "VERSION", "LAT(ms)", "CONF", "EVIDENCE"), ColorReset)
 		for _, result := range results {

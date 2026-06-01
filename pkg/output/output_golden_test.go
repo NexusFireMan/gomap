@@ -42,6 +42,7 @@ func TestOutputFormatterGolden(t *testing.T) {
 		{name: "basic", formatter: NewOutputFormatter(false, false), golden: "basic.golden"},
 		{name: "services", formatter: NewOutputFormatter(true, false), golden: "services.golden"},
 		{name: "details", formatter: NewOutputFormatter(true, true), golden: "details.golden"},
+		{name: "evidence", formatter: NewEvidenceOutputFormatter(), golden: "evidence.golden"},
 	}
 
 	for _, tc := range cases {

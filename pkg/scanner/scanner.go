@@ -621,11 +621,20 @@ func (s *Scanner) grabBanner(conn net.Conn, port int, result *ScanResult) {
 			result.Confidence = "medium"
 			result.Evidence = "protocol banner (generic)"
 		}
+		if s.DeepVersion {
+			if evidence := evidenceFromBanner(banner); evidence != "" {
+				result.Evidence = evidence
+			}
+		}
 		result.DetectionPath = "banner-parser"
 		if deepProbeUsed {
-			result.Evidence = "deep version probe"
+			if evidence := evidenceFromBanner(banner); evidence != "" {
+				result.Evidence = evidence
+			} else {
+				result.Evidence = "deep version probe"
+			}
 			result.DetectionPath = "deep-version"
-			if version == "" {
+			if version == "" && result.Evidence == "" {
 				result.Evidence = "deep version probe (generic)"
 			}
 		}
@@ -1071,6 +1080,17 @@ func normalizeVersionProbeService(serviceName string) string {
 	default:
 		return strings.ToLower(strings.TrimSpace(serviceName))
 	}
+}
+
+func evidenceFromBanner(banner string) string {
+	for _, line := range strings.Split(banner, "\n") {
+		line = sanitizeVersionString(line)
+		if line == "" {
+			continue
+		}
+		return line
+	}
+	return ""
 }
 
 // probeTextService performs a short connect/write/read interaction for text-based protocols

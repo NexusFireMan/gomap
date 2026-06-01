@@ -177,7 +177,10 @@ func ExecuteScan(req ScanRequest) error {
 		}
 	}
 
-	formatter := output.NewOutputFormatter(req.ServiceDetect, req.Details || req.DeepVersion)
+	formatter := output.NewOutputFormatter(req.ServiceDetect, req.Details)
+	if req.DeepVersion {
+		formatter = output.NewEvidenceOutputFormatter()
+	}
 	allResults := make(map[string][]scanner.ScanResult)
 	scanStart := time.Now()
 

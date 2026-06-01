@@ -297,7 +297,7 @@ When `-s` is enabled, gomap combines port-based hints and protocol/banner parsin
 - TLS handshake metadata where applicable (`tls_version`, `tls_cipher`, ALPN, certificate issuer).
 - Generic active probes for open ports without a known port mapping, useful when services run on non-standard ports.
 
-`-Dv` enables the same service/version output as `-s`, shows detail columns in text output, and adds a bounded deep-version pass for open ports whose first result is generic, weak, or empty. It is intended as GoMap's fast native version-detection profile for authorized lab/internal reconnaissance: more focused than the default `-s`, but still controlled so it does not turn a quick scan into a long script scan.
+`-Dv` enables the same service/version output as `-s`, shows a compact evidence column in text output, and adds a bounded deep-version pass for open ports whose first result is generic, weak, or empty. It is intended as GoMap's fast native version-detection profile for authorized lab/internal reconnaissance: more focused than the default `-s`, but still controlled so it does not turn a quick scan into a long script scan.
 
 Important: banner-based detection is heuristic. Always validate critical findings with a second tool.
 

@@ -170,7 +170,7 @@ func TestDeepVersionFTPGenericLinesOnExistingConnection(t *testing.T) {
 	if result.Version != "ProFTPD (Ceil's FTP)" {
 		t.Fatalf("unexpected version: %q", result.Version)
 	}
-	if result.Evidence != "deep version probe" || result.DetectionPath != "deep-version" {
+	if result.Evidence != "220 ProFTPD Server (Ceil's FTP) [10.0.11.6]" || result.DetectionPath != "deep-version" {
 		t.Fatalf("unexpected deep metadata: evidence=%q path=%q", result.Evidence, result.DetectionPath)
 	}
 
