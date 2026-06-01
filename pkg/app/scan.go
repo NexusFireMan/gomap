@@ -22,6 +22,7 @@ type ScanRequest struct {
 	Rate            int
 	MaxHosts        int
 	ServiceDetect   bool
+	DeepVersion     bool
 	GhostMode       bool
 	NoDiscovery     bool
 	Format          string
@@ -114,7 +115,7 @@ func ExecuteScan(req ScanRequest) error {
 			NumWorkers: 50,
 		}
 		if req.GhostMode {
-			// Ultra-stealth profile for CIDR discovery: fewer probe ports and lower concurrency.
+			// Low-noise profile for CIDR discovery: fewer probe ports and lower concurrency.
 			discoveryOpts = scanner.DiscoveryOptions{
 				Ports:      []int{443, 80, 22},
 				Timeout:    900 * time.Millisecond,
@@ -159,14 +160,14 @@ func ExecuteScan(req ScanRequest) error {
 	if !machineOutput {
 		if len(targets) == 1 {
 			if req.GhostMode {
-				fmt.Printf("%s\n\n", output.Info(fmt.Sprintf("🎯 Scanning %s (%s ports, %s scan) - %s (stealthy)", output.Host(targets[0]), output.Count(len(portsToScan)), output.Highlight(scanLabel), output.Warning("Ghost mode"))))
+				fmt.Printf("%s\n\n", output.Info(fmt.Sprintf("🎯 Scanning %s (%s ports, %s scan) - %s (low-noise)", output.Host(targets[0]), output.Count(len(portsToScan)), output.Highlight(scanLabel), output.Warning("Ghost mode"))))
 			} else {
 				fmt.Printf("%s\n\n", output.Info(fmt.Sprintf("🎯 Scanning %s (%s ports, %s scan)", output.Host(targets[0]), output.Count(len(portsToScan)), output.Highlight(scanLabel))))
 			}
 		} else {
 			targetRange, _, _ := scanner.FormatCIDRInfo(req.Target)
 			if req.GhostMode {
-				fmt.Printf("%s\n\n", output.Info(fmt.Sprintf("🎯 Scanning %s (%s active hosts, %s ports, %s scan) - %s (stealthy)", output.Highlight(targetRange), output.Count(len(targets)), output.Count(len(portsToScan)), output.Highlight(scanLabel), output.Warning("Ghost mode"))))
+				fmt.Printf("%s\n\n", output.Info(fmt.Sprintf("🎯 Scanning %s (%s active hosts, %s ports, %s scan) - %s (low-noise)", output.Highlight(targetRange), output.Count(len(targets)), output.Count(len(portsToScan)), output.Highlight(scanLabel), output.Warning("Ghost mode"))))
 			} else {
 				fmt.Printf("%s\n\n", output.Info(fmt.Sprintf("🎯 Scanning %s (%s active hosts, %s ports, %s scan)", output.Highlight(targetRange), output.Count(len(targets)), output.Count(len(portsToScan)), output.Highlight(scanLabel))))
 			}
@@ -202,6 +203,7 @@ func ExecuteScan(req ScanRequest) error {
 			RandomAgent:     req.RandomAgent,
 			RandomIP:        req.RandomIP,
 			TargetCIDR:      cidrForHeaders,
+			DeepVersion:     req.DeepVersion,
 		})
 		var openResults []scanner.ScanResult
 		if req.UDP {
