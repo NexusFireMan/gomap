@@ -557,7 +557,7 @@ func (s *Scanner) grabBanner(conn net.Conn, port int, result *ScanResult) {
 		if result.ServiceName == "msrpc" {
 			result.Version = "Microsoft Windows RPC"
 			result.Confidence = "medium"
-			result.Evidence = "port+protocol behavior"
+			result.Evidence = "DCE/RPC Endpoint Mapper on tcp/135"
 			result.DetectionPath = "portmap+heuristic"
 			return
 		}
@@ -753,6 +753,8 @@ func noGreetingVersionForPort(port int) string {
 		return "POP3 service (no greeting)"
 	case 143, 993:
 		return "IMAP service (no greeting)"
+	case 3389:
+		return "Microsoft Terminal Services"
 	default:
 		return ""
 	}
@@ -768,6 +770,8 @@ func noGreetingEvidenceForPort(port int) string {
 		return "port open; no pop3 greeting"
 	case 143, 993:
 		return "port open; no imap greeting"
+	case 3389:
+		return "RDP TCP/3389 open; no negotiation response"
 	default:
 		return "port open; no greeting"
 	}
@@ -1186,19 +1190,19 @@ func (s *Scanner) tryProtocolFingerprint(port int) (service, version, confidence
 		}
 	case 111:
 		if ver, detected := s.detectONCRPCProgram(port, 100000, []uint32{4, 3, 2}); detected {
-			return "rpcbind", fmt.Sprintf("rpcbind v%d", ver), "high", "onc rpc null call", "protocol-fingerprint", true
+			return "rpcbind", fmt.Sprintf("rpcbind v%d", ver), "high", rpcAcceptedEvidence(100000, ver, port), "protocol-fingerprint", true
 		}
 	case 2049:
 		if ver, detected := s.detectONCRPCProgram(port, 100003, []uint32{4, 3, 2}); detected {
-			return "nfs", fmt.Sprintf("NFS v%d", ver), "high", "onc rpc null call", "protocol-fingerprint", true
+			return "nfs", fmt.Sprintf("NFS v%d", ver), "high", rpcAcceptedEvidence(100003, ver, port), "protocol-fingerprint", true
 		}
 	case 1433:
 		if s.detectMSSQLTDS(port) {
 			return "mssql", "Microsoft SQL Server (TDS)", "medium", "tds prelogin response", "protocol-fingerprint", true
 		}
 	case 3389:
-		if s.detectRDPX224(port) {
-			return "ms-wbt-server", "RDP service (X.224)", "medium", "rdp x224 response", "protocol-fingerprint", true
+		if version, evidence, detected := s.detectRDPInfo(port); detected {
+			return "ms-wbt-server", version, "high", evidence, "protocol-fingerprint", true
 		}
 	case 389:
 		if s.detectLDAPBind(port, false) {
@@ -1209,12 +1213,12 @@ func (s *Scanner) tryProtocolFingerprint(port int) (service, version, confidence
 			return "ldaps", "LDAP over TLS", "medium", "ldap bind response (tls)", "protocol-fingerprint", true
 		}
 	case 5985, 5986:
-		if version = s.detectWinRM(port); version != "" {
-			return "winrm", version, "high", "wsman/httpapi response", "protocol-fingerprint", true
+		if version, evidence := s.detectWinRM(port); version != "" {
+			return "winrm", version, "high", evidence, "protocol-fingerprint", true
 		}
 	case 47001:
-		if version = s.detectWinRM(port); version != "" {
-			return "winrm", version, "high", "wsman/httpapi response", "protocol-fingerprint", true
+		if version, evidence := s.detectWinRM(port); version != "" {
+			return "winrm", version, "high", evidence, "protocol-fingerprint", true
 		}
 	case 8009:
 		if s.detectAJP(port) {
@@ -1223,7 +1227,7 @@ func (s *Scanner) tryProtocolFingerprint(port int) (service, version, confidence
 	}
 	if port > 1024 {
 		if service, version, ok := s.detectDynamicONCRPCService(port); ok {
-			return service, version, "high", "onc rpc null call", "protocol-fingerprint", true
+			return service, version, "high", rpcAcceptedEvidence(rpcProgramForService(service), rpcVersionFromServiceVersion(service, version), port), "protocol-fingerprint", true
 		}
 	}
 	return "", "", "", "", "", false
@@ -1256,6 +1260,58 @@ func (s *Scanner) detectDynamicONCRPCService(port int) (service, version string,
 		}
 	}
 	return "", "", false
+}
+
+func rpcProgramForService(service string) uint32 {
+	switch service {
+	case "rpcbind":
+		return 100000
+	case "nfs":
+		return 100003
+	case "mountd":
+		return 100005
+	case "nlockmgr":
+		return 100021
+	case "status":
+		return 100024
+	case "nfs_acl":
+		return 100227
+	default:
+		return 0
+	}
+}
+
+func rpcServiceName(service string) string {
+	switch service {
+	case "nfs":
+		return "NFS"
+	case "nlockmgr":
+		return "NFS lock manager"
+	case "status":
+		return "rpc.statd"
+	case "nfs_acl":
+		return "NFS ACL"
+	default:
+		return service
+	}
+}
+
+func rpcVersionFromServiceVersion(service, version string) uint32 {
+	prefix := rpcServiceName(service) + " v"
+	if strings.HasPrefix(version, prefix) {
+		var v uint32
+		if _, err := fmt.Sscanf(strings.TrimPrefix(version, prefix), "%d", &v); err == nil {
+			return v
+		}
+	}
+	return 0
+}
+
+func rpcAcceptedEvidence(program, version uint32, port int) string {
+	if version == 0 {
+		return fmt.Sprintf("RPC #%d accepted on tcp/%d", program, port)
+	}
+	return fmt.Sprintf("RPC #%d accepted v%d on tcp/%d", program, version, port)
 }
 
 func (s *Scanner) detectONCRPCProgram(port int, program uint32, versions []uint32) (uint32, bool) {
@@ -1555,30 +1611,94 @@ func (s *Scanner) detectMSSQLTDS(port int) bool {
 	return buf[0] == 0x04 || buf[0] == 0x12
 }
 
-func (s *Scanner) detectRDPX224(port int) bool {
+func (s *Scanner) detectRDPInfo(port int) (version, evidence string, ok bool) {
 	address := net.JoinHostPort(s.Host, fmt.Sprintf("%d", port))
-	timeout := s.ioTimeout(1200 * time.Millisecond)
-	if timeout < 1200*time.Millisecond {
-		timeout = 1200 * time.Millisecond
-	}
+	timeout := s.boundedServiceTimeout(900*time.Millisecond, 1800*time.Millisecond)
 
 	conn, err := net.DialTimeout("tcp", address, timeout)
 	if err != nil {
-		return false
+		return "", "", false
 	}
 	defer func() { _ = conn.Close() }()
 
-	req := []byte{0x03, 0x00, 0x00, 0x0b, 0x06, 0xe0, 0x00, 0x00, 0x00, 0x00, 0x00}
+	// TPKT + X.224 connection request with RDP Negotiation Request:
+	// request SSL or CredSSP, then inspect the selected protocol.
+	req := []byte{
+		0x03, 0x00, 0x00, 0x13,
+		0x0e, 0xe0, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x01, 0x00, 0x08, 0x00,
+		0x03, 0x00, 0x00, 0x00,
+	}
 	_ = conn.SetDeadline(time.Now().Add(timeout))
-	_, _ = conn.Write(req)
+	if _, err := conn.Write(req); err != nil {
+		return "", "", false
+	}
 
 	buf := make([]byte, 128)
 	n, err := conn.Read(buf)
 	if err != nil || n < 7 {
-		return false
+		return "", "", false
+	}
+	if buf[0] != 0x03 || buf[1] != 0x00 || (buf[5] != 0xd0 && buf[5] != 0xe0 && buf[5] != 0xf0) {
+		return "", "", false
 	}
 
-	return buf[0] == 0x03 && buf[1] == 0x00 && (buf[5] == 0xd0 || buf[5] == 0xe0 || buf[5] == 0xf0)
+	selected, selectedOK := parseRDPNegotiationProtocol(buf[:n])
+	evidence = "X.224 connection confirm"
+	if selectedOK {
+		evidence = "RDP negotiation: " + rdpProtocolName(selected)
+		if selected != 0 {
+			if cn := s.readRDPTLSCertificateCN(conn, timeout); cn != "" {
+				evidence += "; cert CN=" + cn
+			}
+		}
+	}
+	return "Microsoft Terminal Services", evidence, true
+}
+
+func parseRDPNegotiationProtocol(data []byte) (uint32, bool) {
+	for i := 0; i+8 <= len(data); i++ {
+		if data[i] == 0x02 && data[i+2] == 0x08 && data[i+3] == 0x00 {
+			return binary.LittleEndian.Uint32(data[i+4 : i+8]), true
+		}
+	}
+	return 0, false
+}
+
+func rdpProtocolName(protocol uint32) string {
+	names := make([]string, 0, 3)
+	if protocol == 0 {
+		return "standard RDP security"
+	}
+	if protocol&0x01 != 0 {
+		names = append(names, "TLS")
+	}
+	if protocol&0x02 != 0 {
+		names = append(names, "CredSSP")
+	}
+	if protocol&0x08 != 0 {
+		names = append(names, "CredSSP Early User Auth")
+	}
+	if len(names) == 0 {
+		return fmt.Sprintf("protocol 0x%x", protocol)
+	}
+	return strings.Join(names, "/")
+}
+
+func (s *Scanner) readRDPTLSCertificateCN(conn net.Conn, timeout time.Duration) string {
+	tlsConn := tls.Client(conn, &tls.Config{
+		InsecureSkipVerify: true,
+		ServerName:         s.Host,
+	})
+	_ = tlsConn.SetDeadline(time.Now().Add(timeout))
+	if err := tlsConn.Handshake(); err != nil {
+		return ""
+	}
+	state := tlsConn.ConnectionState()
+	if len(state.PeerCertificates) == 0 {
+		return ""
+	}
+	return sanitizeVersionString(state.PeerCertificates[0].Subject.CommonName)
 }
 
 func (s *Scanner) detectLDAPBind(port int, useTLS bool) bool {
@@ -1625,7 +1745,7 @@ func (s *Scanner) detectLDAPBind(port int, useTLS bool) bool {
 	return strings.Contains(string(buf[:n]), "LDAP") || (n > 5 && buf[5] == 0x61)
 }
 
-func (s *Scanner) detectWinRM(port int) string {
+func (s *Scanner) detectWinRM(port int) (string, string) {
 	address := net.JoinHostPort(s.Host, fmt.Sprintf("%d", port))
 	timeout := s.ioTimeout(1500 * time.Millisecond)
 	if timeout < 1500*time.Millisecond {
@@ -1646,7 +1766,7 @@ func (s *Scanner) detectWinRM(port int) string {
 		conn, err = net.DialTimeout("tcp", address, timeout)
 	}
 	if err != nil {
-		return ""
+		return "", ""
 	}
 	defer func() { _ = conn.Close() }()
 
@@ -1656,14 +1776,52 @@ func (s *Scanner) detectWinRM(port int) string {
 	buf := make([]byte, 4096)
 	n, err := conn.Read(buf)
 	if err != nil || n == 0 {
-		return ""
+		return "", ""
 	}
 
-	resp := strings.ToLower(string(buf[:n]))
+	raw := string(buf[:n])
+	resp := strings.ToLower(raw)
 	if strings.Contains(resp, "wsman") || strings.Contains(resp, "microsoft-httpapi") || strings.Contains(resp, "www-authenticate: negotiate") {
-		return "Microsoft WinRM"
+		if server := httpHeaderValue(raw, "Server"); server != "" {
+			return winRMVersionFromServerHeader(server), "Server: " + server
+		}
+		if auth := httpHeaderValue(raw, "WWW-Authenticate"); auth != "" {
+			return "Microsoft WinRM", "WWW-Authenticate: " + auth
+		}
+		if status := firstHTTPStatusLine(raw); status != "" {
+			return "Microsoft WinRM", status
+		}
+		return "Microsoft WinRM", "WSMan/HTTPAPI response"
+	}
+	return "", ""
+}
+
+func httpHeaderValue(response, header string) string {
+	prefix := strings.ToLower(header) + ":"
+	for _, line := range strings.Split(response, "\n") {
+		line = strings.TrimSpace(strings.TrimRight(line, "\r"))
+		if strings.HasPrefix(strings.ToLower(line), prefix) {
+			return strings.TrimSpace(line[len(prefix):])
+		}
 	}
 	return ""
+}
+
+func firstHTTPStatusLine(response string) string {
+	for _, line := range strings.Split(response, "\n") {
+		line = strings.TrimSpace(strings.TrimRight(line, "\r"))
+		if strings.HasPrefix(strings.ToUpper(line), "HTTP/") {
+			return line
+		}
+	}
+	return ""
+}
+
+func winRMVersionFromServerHeader(server string) string {
+	if strings.Contains(strings.ToLower(server), "microsoft-httpapi") {
+		return "Microsoft HTTPAPI httpd " + strings.TrimPrefix(server, "Microsoft-HTTPAPI/")
+	}
+	return "Microsoft WinRM"
 }
 
 // detectSMBVersion attempts to detect SMB version through multiple methods
@@ -1678,7 +1836,10 @@ func (s *Scanner) detectSMBVersion(port int) (string, string) {
 		return smbLib, "smb library"
 	}
 
-	return "SMB service", "port open"
+	if port == 139 {
+		return "Microsoft Windows netbios-ssn", "NetBIOS session service on tcp/139"
+	}
+	return "SMB service", "SMB negotiate attempted; no dialect returned"
 }
 
 func shouldUseTLSForHTTP(port int) bool {
