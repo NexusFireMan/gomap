@@ -109,6 +109,7 @@ func TestNoGreetingDetectionMetadata(t *testing.T) {
 		{110, "POP3 service (no greeting)", "port open; no pop3 greeting"},
 		{143, "IMAP service (no greeting)", "port open; no imap greeting"},
 		{2525, "SMTP service (no greeting)", "port open; no smtp greeting"},
+		{3389, "Microsoft Terminal Services", "RDP TCP/3389 open; no negotiation response"},
 	}
 
 	for _, tt := range tests {
@@ -178,6 +179,39 @@ func TestDeepVersionFTPGenericLinesOnExistingConnection(t *testing.T) {
 	case <-done:
 	case <-time.After(time.Second):
 		t.Fatal("fixture server did not finish")
+	}
+}
+
+func TestRDPAndWinRMDetectionHelpers(t *testing.T) {
+	data := []byte{
+		0x03, 0x00, 0x00, 0x13,
+		0x0e, 0xd0, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x02, 0x00, 0x08, 0x00,
+		0x03, 0x00, 0x00, 0x00,
+	}
+	selected, ok := parseRDPNegotiationProtocol(data)
+	if !ok {
+		t.Fatal("expected RDP negotiation response")
+	}
+	if got := rdpProtocolName(selected); got != "TLS/CredSSP" {
+		t.Fatalf("unexpected RDP protocol evidence: %q", got)
+	}
+
+	response := "HTTP/1.1 404 Not Found\r\nServer: Microsoft-HTTPAPI/2.0\r\nWWW-Authenticate: Negotiate\r\n\r\n"
+	if got := httpHeaderValue(response, "Server"); got != "Microsoft-HTTPAPI/2.0" {
+		t.Fatalf("unexpected server header: %q", got)
+	}
+	if got := winRMVersionFromServerHeader("Microsoft-HTTPAPI/2.0"); got != "Microsoft HTTPAPI httpd 2.0" {
+		t.Fatalf("unexpected WinRM version: %q", got)
+	}
+}
+
+func TestEvidenceFormattingHelpers(t *testing.T) {
+	if got := rpcAcceptedEvidence(100005, 3, 2049); got != "RPC #100005 accepted v3 on tcp/2049" {
+		t.Fatalf("unexpected RPC evidence: %q", got)
+	}
+	if got := rpcVersionFromServiceVersion("mountd", "mountd v3"); got != 3 {
+		t.Fatalf("unexpected RPC version: %d", got)
 	}
 }
 

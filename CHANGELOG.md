@@ -15,6 +15,7 @@ Note: this changelog is maintained from this point forward in the project histor
 - `-Dv` now makes text output visibly distinct with a compact evidence column and uses a faster FTP deep-version probe path before falling back to no-greeting evidence.
 
 ### Fixed
+- **Deep-version evidence quality**: `-Dv` now avoids empty RDP versions, reports `Microsoft Terminal Services` for RDP, extracts RDP negotiation/certificate evidence when available, and uses concrete WinRM/RPC/SMB evidence strings instead of generic probe labels.
 - **Alternate FTP banner detection**: port `2121` now maps to `ftp`, uses the FTP probe path, normalizes generic ProFTPD greetings to `ProFTPD`, and reports silent FTP services as `FTP service (no greeting)` instead of leaving the version empty.
 
 ## [2.4.8] - 2026-05-13

@@ -2,6 +2,7 @@ package scanner
 
 import (
 	"encoding/binary"
+	"fmt"
 	"net"
 	"testing"
 	"time"
@@ -26,6 +27,9 @@ func TestProtocolFingerprintDetectsDynamicMountd(t *testing.T) {
 	}
 	if results[0].DetectionPath != "protocol-fingerprint" {
 		t.Fatalf("expected protocol-fingerprint, got %q", results[0].DetectionPath)
+	}
+	if results[0].Evidence != "RPC #100005 accepted v3 on tcp/"+fmt.Sprint(port) {
+		t.Fatalf("unexpected evidence: %q", results[0].Evidence)
 	}
 }
 
