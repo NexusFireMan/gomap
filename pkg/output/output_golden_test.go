@@ -28,6 +28,7 @@ func TestOutputFormatterGolden(t *testing.T) {
 			IsOpen:      true,
 			ServiceName: "microsoft-ds",
 			Version:     "Windows Server 2008 R2",
+			Hostname:    "WINMEDIUM",
 			LatencyMs:   4,
 			Confidence:  "high",
 			Evidence:    "raw smb negotiate",

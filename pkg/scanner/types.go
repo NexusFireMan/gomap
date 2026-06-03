@@ -8,6 +8,7 @@ type ScanResult struct {
 	IsOpen        bool          `json:"open"`
 	ServiceName   string        `json:"service,omitempty"`
 	Version       string        `json:"version,omitempty"`
+	Hostname      string        `json:"hostname,omitempty"`
 	TLS           bool          `json:"tls,omitempty"`
 	TLSVersion    string        `json:"tls_version,omitempty"`
 	TLSCipher     string        `json:"tls_cipher,omitempty"`

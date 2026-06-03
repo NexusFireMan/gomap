@@ -38,6 +38,7 @@ func sampleResults() ([]string, map[string][]scanner.ScanResult) {
 				IsOpen:        true,
 				ServiceName:   "microsoft-ds",
 				Version:       "Windows Server 2008 R2",
+				Hostname:      "WINMEDIUM",
 				LatencyMs:     3,
 				Confidence:    "high",
 				Evidence:      "raw smb negotiate",
@@ -139,15 +140,15 @@ func TestPrintCSVReport(t *testing.T) {
 	if len(rows) != 3 {
 		t.Fatalf("expected header plus 2 rows, got %d", len(rows))
 	}
-	wantHeader := []string{"host", "port", "state", "service", "version", "tls", "tls_version", "tls_cipher", "tls_alpn", "tls_server_name", "tls_issuer", "latency_ms", "confidence", "evidence", "detection_path"}
+	wantHeader := []string{"host", "port", "state", "service", "version", "hostname", "tls", "tls_version", "tls_cipher", "tls_alpn", "tls_server_name", "tls_issuer", "latency_ms", "confidence", "evidence", "detection_path"}
 	if !reflect.DeepEqual(rows[0], wantHeader) {
 		t.Fatalf("unexpected csv header:\n got: %#v\nwant: %#v", rows[0], wantHeader)
 	}
-	wantFirstRow := []string{"10.0.11.6", "80", "open", "http", "IIS 7.5", "true", "TLS1.2", "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256", "http/1.1", "10.0.11.6", "Test CA", "2", "high", "protocol banner", "banner-parser"}
+	wantFirstRow := []string{"10.0.11.6", "80", "open", "http", "IIS 7.5", "", "true", "TLS1.2", "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256", "http/1.1", "10.0.11.6", "Test CA", "2", "high", "protocol banner", "banner-parser"}
 	if !reflect.DeepEqual(rows[1], wantFirstRow) {
 		t.Fatalf("unexpected first csv row:\n got: %#v\nwant: %#v", rows[1], wantFirstRow)
 	}
-	wantSecondRow := []string{"10.0.11.6", "445", "open", "microsoft-ds", "Windows Server 2008 R2", "false", "", "", "", "", "", "3", "high", "raw smb negotiate", "smb-specialized"}
+	wantSecondRow := []string{"10.0.11.6", "445", "open", "microsoft-ds", "Windows Server 2008 R2", "WINMEDIUM", "false", "", "", "", "", "", "3", "high", "raw smb negotiate", "smb-specialized"}
 	if !reflect.DeepEqual(rows[2], wantSecondRow) {
 		t.Fatalf("unexpected second csv row:\n got: %#v\nwant: %#v", rows[2], wantSecondRow)
 	}
@@ -168,7 +169,7 @@ func TestPrintCSVReportEmptyResults(t *testing.T) {
 	if len(rows) != 1 {
 		t.Fatalf("expected only csv header for empty results, got %d rows", len(rows))
 	}
-	wantHeader := []string{"host", "port", "state", "service", "version", "tls", "tls_version", "tls_cipher", "tls_alpn", "tls_server_name", "tls_issuer", "latency_ms", "confidence", "evidence", "detection_path"}
+	wantHeader := []string{"host", "port", "state", "service", "version", "hostname", "tls", "tls_version", "tls_cipher", "tls_alpn", "tls_server_name", "tls_issuer", "latency_ms", "confidence", "evidence", "detection_path"}
 	if !reflect.DeepEqual(rows[0], wantHeader) {
 		t.Fatalf("unexpected csv header:\n got: %#v\nwant: %#v", rows[0], wantHeader)
 	}
@@ -216,7 +217,7 @@ func TestPrintJSONLReport(t *testing.T) {
 	if err := json.Unmarshal([]byte(lines[1]), &second); err != nil {
 		t.Fatalf("invalid second jsonl record: %v", err)
 	}
-	if second.Port != 445 || second.Service != "microsoft-ds" || second.Version != "Windows Server 2008 R2" || second.Evidence != "raw smb negotiate" {
+	if second.Port != 445 || second.Service != "microsoft-ds" || second.Version != "Windows Server 2008 R2" || second.Hostname != "WINMEDIUM" || second.Evidence != "raw smb negotiate" {
 		t.Fatalf("unexpected second jsonl record: %+v", second)
 	}
 }

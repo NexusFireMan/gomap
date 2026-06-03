@@ -462,6 +462,7 @@ func (s *Scanner) grabBanner(conn net.Conn, port int, result *ScanResult) {
 			result.Version = ver
 			result.Confidence = confidence
 			result.Evidence = evidence
+			result.Hostname = hostnameFromEvidence(evidence)
 			result.DetectionPath = path
 			return
 		}
@@ -1093,6 +1094,31 @@ func evidenceFromBanner(banner string) string {
 			continue
 		}
 		return line
+	}
+	return ""
+}
+
+func hostnameFromEvidence(evidence string) string {
+	patterns := []string{
+		"cert CN=",
+		"NetBIOS_Computer_Name=",
+		"NetBIOS_Computer_Name: ",
+		"DNS_Computer_Name=",
+		"DNS_Computer_Name: ",
+		"Target_Name=",
+		"Target_Name: ",
+	}
+	for _, pattern := range patterns {
+		if idx := strings.Index(evidence, pattern); idx >= 0 {
+			value := evidence[idx+len(pattern):]
+			value = strings.Split(value, ";")[0]
+			value = strings.Split(value, ",")[0]
+			value = strings.TrimSpace(value)
+			value = strings.Trim(value, "[]()")
+			if value != "" {
+				return sanitizeVersionString(value)
+			}
+		}
 	}
 	return ""
 }

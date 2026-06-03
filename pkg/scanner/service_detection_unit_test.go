@@ -213,6 +213,9 @@ func TestEvidenceFormattingHelpers(t *testing.T) {
 	if got := rpcVersionFromServiceVersion("mountd", "mountd v3"); got != 3 {
 		t.Fatalf("unexpected RPC version: %d", got)
 	}
+	if got := hostnameFromEvidence("RDP negotiation: CredSSP; cert CN=WINMEDIUM"); got != "WINMEDIUM" {
+		t.Fatalf("unexpected hostname from evidence: %q", got)
+	}
 }
 
 func grabBannerFromFixture(t *testing.T, port int, banner string) ScanResult {
