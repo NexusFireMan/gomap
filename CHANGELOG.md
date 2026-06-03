@@ -20,6 +20,23 @@ Note: this changelog is maintained from this point forward in the project histor
 - **Deep-version evidence quality**: `-Dv` now avoids empty RDP versions, reports `Microsoft Terminal Services` for RDP, extracts RDP negotiation/certificate evidence when available, and uses concrete WinRM/RPC/SMB evidence strings instead of generic probe labels.
 - **Alternate FTP banner detection**: port `2121` now maps to `ftp`, uses the FTP probe path, normalizes generic ProFTPD greetings to `ProFTPD`, and reports silent FTP services as `FTP service (no greeting)` instead of leaving the version empty.
 
+## [2.5.0](https://github.com/NexusFireMan/gomap/compare/v2.4.7...v2.5.0) (2026-06-03)
+
+
+### Features
+
+* add bounded deep version detection ([5a5666d](https://github.com/NexusFireMan/gomap/commit/5a5666d5286890e711b61711f8dc2a1e8167afe7))
+* report detected Windows hostnames ([8242e22](https://github.com/NexusFireMan/gomap/commit/8242e22d8d4dea13e387615d88ede0d0210dd44f))
+
+
+### Bug Fixes
+
+* enrich deep version evidence ([acb6ac9](https://github.com/NexusFireMan/gomap/commit/acb6ac92ae343acd0e0c4e0dd6e9cd4974a664e8))
+* focus deep version output on evidence ([ec6da2c](https://github.com/NexusFireMan/gomap/commit/ec6da2c0f9d060b597eea89e520272d0c0019fd0))
+* improve alternate FTP banner detection ([6fe8e73](https://github.com/NexusFireMan/gomap/commit/6fe8e73477db7806f9d331c30718467379ed53a5))
+* make deep version detection visible ([6d1a03c](https://github.com/NexusFireMan/gomap/commit/6d1a03c1da8d044f4f96f365eb6577d539f32e13))
+* show detected hostnames in service output ([e0e8bae](https://github.com/NexusFireMan/gomap/commit/e0e8bae4aed8b8c7d1cc771df38c80c5ce39c12e))
+
 ## [2.4.8] - 2026-05-13
 
 ### Added
