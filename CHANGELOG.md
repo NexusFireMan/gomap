@@ -14,6 +14,7 @@ Note: this changelog is maintained from this point forward in the project histor
 ### Changed
 - Marked the APT/GHCR release workflow documentation roadmap item as completed.
 - `-Dv` now makes text output visibly distinct with a compact evidence column and uses a faster FTP deep-version probe path before falling back to no-greeting evidence.
+- Detected hostnames now appear in all text service-detection tables, not only in the `-Dv` evidence view.
 
 ### Fixed
 - **Deep-version evidence quality**: `-Dv` now avoids empty RDP versions, reports `Microsoft Terminal Services` for RDP, extracts RDP negotiation/certificate evidence when available, and uses concrete WinRM/RPC/SMB evidence strings instead of generic probe labels.

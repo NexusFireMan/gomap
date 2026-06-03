@@ -74,10 +74,11 @@ func (of *OutputFormatter) printBasic(results []scanner.ScanResult) {
 
 // printWithServices prints results with service and version information
 func (of *OutputFormatter) printWithServices(results []scanner.ScanResult) {
+	if hostnames := detectedHostnames(results); len(hostnames) > 0 {
+		fmt.Printf("%s%s%s\n", ColorBold, "Detected Hostname: "+strings.Join(hostnames, ", "), ColorReset)
+	}
+
 	if of.IncludeEvidence {
-		if hostnames := detectedHostnames(results); len(hostnames) > 0 {
-			fmt.Printf("%s%s%s\n", ColorBold, "Detected Hostname: "+strings.Join(hostnames, ", "), ColorReset)
-		}
 		fmt.Printf("%s%s%s\n", ColorBold, fmt.Sprintf("%-*s %-*s %-*s %-36s %s", portColWidth, "PORT", stateColWidth, "STATE", serviceColWidth, "SERVICE", "VERSION", "EVIDENCE"), ColorReset)
 		for _, result := range results {
 			fmt.Printf("%s %s %s %-36s %s\n",
