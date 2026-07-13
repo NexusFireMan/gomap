@@ -77,6 +77,7 @@ func Run() {
 		RandomAgent:     opts.RandomAgent,
 		RandomIP:        opts.RandomIP,
 		SourceInterface: opts.SourceInterface,
+		SourceIPs:       opts.SourceIPs,
 	}
 	if req.Format == "text" {
 		output.PrintBanner()

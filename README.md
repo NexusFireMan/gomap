@@ -213,8 +213,10 @@ sudo dpkg -i gomap_<version>_linux_amd64.deb
 # Low-noise service detection profile
 ./gomap -g -s --random-agent --random-ip 10.0.11.0/24
 
-# Bind each connection to an assigned address selected from eth0
-./gomap --random-ip --source-interface eth0 -p 22,80,443 10.0.11.6
+# Temporarily add an explicit source pool, rotate it, and clean it up
+sudo ./gomap --random-ip --source-interface eth0 \
+  --source-ips 10.0.11.20/24,10.0.11.21/24,10.0.11.22/24 \
+  -p 22,80,443 10.0.11.6
 
 # Conservative CIDR scan (skip discovery entirely)
 ./gomap -g -nd -s --random-agent --random-ip -p 22,80,443 10.0.11.0/24
@@ -274,7 +276,8 @@ Output:
 Source and HTTP identity controls:
   --random-agent    randomize HTTP User-Agent on each request
   --random-ip       enable randomized IP identity controls
-  --source-interface <NIC> bind sockets to assigned IPs selected from this interface
+  --source-interface <NIC> interface used for real source-IP binding
+  --source-ips <IP/CIDR,...> temporarily add and rotate explicit addresses
 
 Compatibility note:
   legacy aliases (`--ramdom-agent`, `--ip-ram`, `--ip-random`) are still accepted for backward compatibility.
@@ -325,17 +328,21 @@ Non-standard port note:
 
 ### Real Source-IP Selection
 
-`--random-ip --source-interface <NIC>` selects a compatible address already assigned to that interface and binds each TCP, TLS, or UDP socket to it. When several addresses of the required IP family are configured, GoMap chooses one per connection. This is real source-address selection with a valid return path, not arbitrary source-IP spoofing.
+`--random-ip --source-interface <NIC>` selects a compatible address assigned to that interface and binds each TCP, TLS, or UDP socket to it. When several addresses of the required IP family are available, GoMap chooses one per connection. This is real source-address selection with a valid return path, not arbitrary source-IP spoofing.
 
-GoMap does not add or remove NIC addresses. On Linux, administrators can prepare an address they own before scanning and remove it afterwards, for example:
+On Linux, `--source-ips` lets GoMap manage an explicit temporary pool. Entries may be bare IPs or CIDR addresses, separated by commas. The operation requires root privileges because it changes interface addresses through native netlink calls:
 
 ```bash
-sudo ip address add 192.0.2.20/24 dev eth0
-gomap --random-ip --source-interface eth0 -p 22,80,443 192.0.2.50
-sudo ip address del 192.0.2.20/24 dev eth0
+sudo gomap --random-ip --source-interface eth0 \
+  --source-ips 192.0.2.20/24,192.0.2.21/24,192.0.2.22/24 \
+  -p 22,80,443 192.0.2.50
 ```
 
-Replace the documentation-only addresses above with an authorized local subnet. Never add an address unless it is allocated to you and routed on that interface. GoMap rejects this mode for raw SYN scans; use the default connect scan or UDP mode.
+GoMap records which addresses it added and removes only those addresses after the scan. Existing interface addresses are never removed. Partial setup failures are rolled back, and cleanup also runs for `Ctrl+C` and `SIGTERM`. `SIGKILL` cannot be intercepted by any process, so avoid terminating managed scans with `kill -9`.
+
+The managed pool accepts at most 64 explicit addresses. Replace the documentation-only addresses above with addresses allocated to you and routed on that interface. GoMap cannot determine whether another device owns an address, so the operator remains responsible for preventing address conflicts. Managed source pools are intentionally unavailable for raw SYN scans; use the default connect scan or UDP mode.
+
+Without `--source-ips`, `--source-interface` continues to rotate addresses that were configured before GoMap started and does not require root privileges.
 
 For backward compatibility, `--random-ip` without `--source-interface` still randomizes HTTP `X-Forwarded-For` and `X-Real-IP` headers only; it does not change the actual TCP source IP.
 

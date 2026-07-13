@@ -42,6 +42,7 @@ type CLIOptions struct {
 	RandomAgent     bool
 	RandomIP        bool
 	SourceInterface string
+	SourceIPs       string
 	Host            string
 }
 
@@ -83,8 +84,9 @@ func ParseCLIOptions(args []string) (CLIOptions, error) {
 	fs.BoolVar(&opts.AdaptiveTimeout, "adaptive-timeout", true, "enable adaptive timeout tuning during scan")
 	fs.BoolVar(&opts.DetailsFlag, "details", false, "include latency/confidence/evidence columns in table output")
 	fs.BoolVar(&opts.RandomAgent, "random-agent", false, "randomize HTTP User-Agent on each request (service detection)")
-	fs.BoolVar(&opts.RandomIP, "random-ip", false, "send randomized X-Forwarded-For/X-Real-IP headers from target CIDR (HTTP probes)")
-	fs.StringVar(&opts.SourceInterface, "source-interface", "", "bind connections to randomized IPs already assigned to this interface")
+	fs.BoolVar(&opts.RandomIP, "random-ip", false, "enable randomized source-IP or HTTP identity controls")
+	fs.StringVar(&opts.SourceInterface, "source-interface", "", "interface used for real source-IP socket binding")
+	fs.StringVar(&opts.SourceIPs, "source-ips", "", "temporarily add and rotate comma-separated IP/CIDR addresses (Linux, root required)")
 
 	fs.Usage = func() {
 		printHelp(os.Stderr)
@@ -189,6 +191,10 @@ func normalizeOptions(opts CLIOptions) (CLIOptions, error) {
 		return opts, errors.New("--details is only valid with text output")
 	}
 	opts.SourceInterface = strings.TrimSpace(opts.SourceInterface)
+	opts.SourceIPs = strings.TrimSpace(opts.SourceIPs)
+	if opts.SourceIPs != "" && opts.SourceInterface == "" {
+		return opts, errors.New("--source-ips requires --source-interface")
+	}
 	if opts.SourceInterface != "" && !opts.RandomIP {
 		return opts, errors.New("--source-interface requires --random-ip")
 	}
@@ -272,6 +278,7 @@ func printHelp(w *os.File) {
   --random-agent             random User-Agent per request
   --random-ip                enable randomized IP identity controls
   --source-interface <NIC>   bind sockets to assigned IPs selected from NIC
+  --source-ips <IP/CIDR,...> temporarily add and rotate explicit addresses
 
 %sMaintenance:%s
   -up                        self-update to latest version
@@ -289,6 +296,7 @@ func printHelp(w *os.File) {
   gomap -s --top-ports 300 10.0.11.0/24
   gomap -g -s --random-agent --random-ip 10.0.11.0/24
   gomap --random-ip --source-interface eth0 -p 22,80,443 10.0.11.6
+  sudo gomap --random-ip --source-interface eth0 --source-ips 10.0.11.20/24,10.0.11.21/24 -p 22,80,443 10.0.11.6
   gomap -g -nd -s -p 22,80,443 10.0.11.0/24
   gomap -s --format json --out scan.json 10.0.11.6
 
@@ -297,6 +305,7 @@ func printHelp(w *os.File) {
   - With --source-interface, --random-ip selects real, preconfigured source IPs.
   - Without --source-interface, --random-ip only changes HTTP headers for compatibility.
   - GoMap never adds arbitrary addresses to a NIC; configure only addresses you own.
+  - --source-ips adds explicit addresses for this run and removes them on exit.
   - Legacy aliases kept for compatibility: --ramdom-agent, --ip-ram, --ip-random.
 `, out.ColorBrightCyan, out.ColorReset,
 		out.ColorBold, out.ColorReset,
