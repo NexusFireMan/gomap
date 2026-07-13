@@ -46,7 +46,7 @@ func TestDialTCPBindsConfiguredSourceIP(t *testing.T) {
 	if err != nil {
 		t.Fatalf("listen: %v", err)
 	}
-	defer listener.Close()
+	defer func() { _ = listener.Close() }()
 
 	remoteAddr := make(chan net.Addr, 1)
 	go func() {
