@@ -7,12 +7,14 @@ Note: this changelog is maintained from this point forward in the project histor
 ## Unreleased
 
 ### Added
+- Managed Linux source-IP pools through `--source-ips`, with native netlink setup, per-connection rotation, rollback, and automatic cleanup on normal exit, `Ctrl+C`, or `SIGTERM`.
 - Real TCP, TLS, and UDP source-address selection with `--random-ip --source-interface <NIC>`, limited to addresses already assigned to the selected interface.
 - Documented the maintainer release workflow for tags, GitHub Releases, binaries, Debian packages, GHCR images, checksums, and the signed GitHub Pages APT repository.
 - Added `-Dv`, a bounded deep-version detection profile that enables service/version output and adds focused extra probes only for open ports with weak, generic, or empty version evidence.
 - Added Windows hostname reporting for `-Dv` when native probes expose a reliable host name, such as the RDP certificate common name.
 
 ### Changed
+- Source-IP rotation can now use an explicit temporary pool instead of requiring administrators to add and remove every interface alias manually.
 - Clarified the difference between real socket source binding and the backward-compatible HTTP header behavior of `--random-ip`.
 - Marked the APT/GHCR release workflow documentation roadmap item as completed.
 - `-Dv` now makes text output visibly distinct with a compact evidence column and uses a faster FTP deep-version probe path before falling back to no-greeting evidence.

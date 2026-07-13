@@ -1,6 +1,7 @@
 package app
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -38,10 +39,11 @@ type ScanRequest struct {
 	RandomAgent     bool
 	RandomIP        bool
 	SourceInterface string
+	SourceIPs       string
 }
 
 // ExecuteScan runs the complete scan workflow: target expansion, host discovery, scan, and rendering.
-func ExecuteScan(req ScanRequest) error {
+func ExecuteScan(req ScanRequest) (resultErr error) {
 	machineOutput := req.Format != "text"
 	if req.ScanType == "" {
 		req.ScanType = "connect"
@@ -108,15 +110,33 @@ func ExecuteScan(req ScanRequest) error {
 	}
 	var sourceIPs []net.IP
 	if req.SourceInterface != "" {
-		sourceIPs, err = scanner.InterfaceSourceIPs(req.SourceInterface)
-		if err != nil {
-			return err
+		if req.SourceIPs != "" {
+			managed, manageErr := scanner.PrepareManagedSourceIPs(req.SourceInterface, req.SourceIPs)
+			if manageErr != nil {
+				return manageErr
+			}
+			defer func() {
+				if cleanupErr := managed.Close(); cleanupErr != nil {
+					resultErr = errors.Join(resultErr, cleanupErr)
+				} else if !machineOutput && managed.AddedCount() > 0 {
+					fmt.Printf("%s\n", output.StatusOK(fmt.Sprintf("Source IP cleanup complete: %d temporary address(es) removed from %s.", managed.AddedCount(), req.SourceInterface)))
+				}
+			}()
+			sourceIPs = managed.IPs()
+			if !machineOutput {
+				fmt.Printf("%s\n", output.StatusOK(fmt.Sprintf("Source interface %s: %d managed IP(s) active; %d added for this scan.", req.SourceInterface, len(sourceIPs), managed.AddedCount())))
+			}
+		} else {
+			sourceIPs, err = scanner.InterfaceSourceIPs(req.SourceInterface)
+			if err != nil {
+				return err
+			}
+			if !machineOutput {
+				fmt.Printf("%s\n", output.StatusOK(fmt.Sprintf("Source interface %s: %d assigned IP(s) available for socket binding.", req.SourceInterface, len(sourceIPs))))
+			}
 		}
 		if err := scanner.ValidateSourceIPsForTargets(sourceIPs, targets); err != nil {
 			return err
-		}
-		if !machineOutput {
-			fmt.Printf("%s\n", output.StatusOK(fmt.Sprintf("Source interface %s: %d assigned IP(s) available for socket binding.", req.SourceInterface, len(sourceIPs))))
 		}
 	}
 	if req.UDP && !req.NoDiscovery && scanner.IsCIDR(req.Target) && len(targets) > 1 && !machineOutput {

@@ -82,6 +82,28 @@ func TestParseCLIOptionsSourceInterfaceRejectsSYN(t *testing.T) {
 	}
 }
 
+func TestParseCLIOptionsManagedSourceIPs(t *testing.T) {
+	opts, err := ParseCLIOptions([]string{
+		"--random-ip",
+		"--source-interface", "eth0",
+		"--source-ips", "192.0.2.20/24,192.0.2.21/24",
+		"10.0.11.6",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if opts.SourceIPs != "192.0.2.20/24,192.0.2.21/24" {
+		t.Fatalf("unexpected source IPs: %q", opts.SourceIPs)
+	}
+}
+
+func TestParseCLIOptionsSourceIPsRequireInterface(t *testing.T) {
+	_, err := ParseCLIOptions([]string{"--random-ip", "--source-ips", "192.0.2.20/24", "10.0.11.6"})
+	if err == nil {
+		t.Fatal("expected --source-ips to require --source-interface")
+	}
+}
+
 func TestParseCLIOptionsHelpFlag(t *testing.T) {
 	_, err := ParseCLIOptions([]string{"-h"})
 	if !errors.Is(err, errHelp) {
