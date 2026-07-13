@@ -41,6 +41,7 @@ type CLIOptions struct {
 	DetailsFlag     bool
 	RandomAgent     bool
 	RandomIP        bool
+	SourceInterface string
 	Host            string
 }
 
@@ -83,6 +84,7 @@ func ParseCLIOptions(args []string) (CLIOptions, error) {
 	fs.BoolVar(&opts.DetailsFlag, "details", false, "include latency/confidence/evidence columns in table output")
 	fs.BoolVar(&opts.RandomAgent, "random-agent", false, "randomize HTTP User-Agent on each request (service detection)")
 	fs.BoolVar(&opts.RandomIP, "random-ip", false, "send randomized X-Forwarded-For/X-Real-IP headers from target CIDR (HTTP probes)")
+	fs.StringVar(&opts.SourceInterface, "source-interface", "", "bind connections to randomized IPs already assigned to this interface")
 
 	fs.Usage = func() {
 		printHelp(os.Stderr)
@@ -186,8 +188,15 @@ func normalizeOptions(opts CLIOptions) (CLIOptions, error) {
 	if opts.DetailsFlag && opts.FormatFlag != "text" {
 		return opts, errors.New("--details is only valid with text output")
 	}
-	if opts.RandomIP && !opts.ServiceFlag {
+	opts.SourceInterface = strings.TrimSpace(opts.SourceInterface)
+	if opts.SourceInterface != "" && !opts.RandomIP {
+		return opts, errors.New("--source-interface requires --random-ip")
+	}
+	if opts.RandomIP && opts.SourceInterface == "" && !opts.ServiceFlag {
 		return opts, errors.New("--random-ip requires -s or -Dv (service detection)")
+	}
+	if opts.SourceInterface != "" && opts.ScanType == "syn" {
+		return opts, errors.New("--source-interface is supported with connect and UDP scans, not raw SYN scans")
 	}
 
 	return opts, nil
@@ -259,9 +268,10 @@ func printHelp(w *os.File) {
   --out <path>               write output to file
   --details                  add latency/confidence/evidence columns (text only)
 
-%sHTTP Identity Controls:%s
+%sSource & HTTP Identity Controls:%s
   --random-agent             random User-Agent per request
-  --random-ip                random X-Forwarded-For/X-Real-IP from target CIDR
+  --random-ip                enable randomized IP identity controls
+  --source-interface <NIC>   bind sockets to assigned IPs selected from NIC
 
 %sMaintenance:%s
   -up                        self-update to latest version
@@ -278,12 +288,15 @@ func printHelp(w *os.File) {
   gomap -Dv -p 21,22,53,2121 10.0.11.9
   gomap -s --top-ports 300 10.0.11.0/24
   gomap -g -s --random-agent --random-ip 10.0.11.0/24
+  gomap --random-ip --source-interface eth0 -p 22,80,443 10.0.11.6
   gomap -g -nd -s -p 22,80,443 10.0.11.0/24
   gomap -s --format json --out scan.json 10.0.11.6
 
 %sNotes:%s
   - CIDR discovery is enabled by default; ghost mode uses a low-noise profile.
-  - --random-ip changes HTTP headers only, not the real TCP source IP.
+  - With --source-interface, --random-ip selects real, preconfigured source IPs.
+  - Without --source-interface, --random-ip only changes HTTP headers for compatibility.
+  - GoMap never adds arbitrary addresses to a NIC; configure only addresses you own.
   - Legacy aliases kept for compatibility: --ramdom-agent, --ip-ram, --ip-random.
 `, out.ColorBrightCyan, out.ColorReset,
 		out.ColorBold, out.ColorReset,

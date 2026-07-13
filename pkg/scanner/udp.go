@@ -122,7 +122,7 @@ func (s *Scanner) scanUDPPort(port int, detectServices bool) ScanResult {
 }
 
 func (s *Scanner) exchangeUDP(address string, payload []byte) ([]byte, error) {
-	conn, err := net.DialTimeout("udp", address, s.currentTimeout())
+	conn, err := s.dialUDP(address, s.currentTimeout())
 	if err != nil {
 		return nil, err
 	}

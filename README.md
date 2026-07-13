@@ -31,6 +31,7 @@
 - [Example Output](#example-output)
 - [CLI Reference](#cli-reference)
 - [Detection Realism (`-s`)](#detection-realism--s)
+- [Real Source-IP Selection](#real-source-ip-selection)
 - [HTB Performance Benchmark (Lab)](#htb-performance-benchmark-lab)
 - [Output Formats](#output-formats)
 - [Responsible Use](#responsible-use)
@@ -59,7 +60,7 @@ A fast TCP/UDP port scanner written in Go, with optional service/version detecti
 - Per-host exposure summary in text mode.
 - Low-noise mode: controlled rate, heavier jitter, and fewer active probes through the existing `-g` ghost mode flag.
 - Conservative low-noise defaults: low rate, low worker count, and reduced CIDR discovery probes.
-- Optional HTTP identity randomization: `--random-agent` and `--random-ip`.
+- Optional HTTP identity randomization and real source-IP selection from preconfigured interface addresses.
 
 ## Installation
 
@@ -212,6 +213,9 @@ sudo dpkg -i gomap_<version>_linux_amd64.deb
 # Low-noise service detection profile
 ./gomap -g -s --random-agent --random-ip 10.0.11.0/24
 
+# Bind each connection to an assigned address selected from eth0
+./gomap --random-ip --source-interface eth0 -p 22,80,443 10.0.11.6
+
 # Conservative CIDR scan (skip discovery entirely)
 ./gomap -g -nd -s --random-agent --random-ip -p 22,80,443 10.0.11.0/24
 ```
@@ -267,9 +271,10 @@ Output:
   --out             output file path
   --details         add latency/confidence/evidence columns (text only)
 
-Low-noise identity controls (HTTP probes):
+Source and HTTP identity controls:
   --random-agent    randomize HTTP User-Agent on each request
-  --random-ip       randomize HTTP X-Forwarded-For/X-Real-IP from target CIDR
+  --random-ip       enable randomized IP identity controls
+  --source-interface <NIC> bind sockets to assigned IPs selected from this interface
 
 Compatibility note:
   legacy aliases (`--ramdom-agent`, `--ip-ram`, `--ip-random`) are still accepted for backward compatibility.
@@ -318,7 +323,21 @@ Non-standard port note:
 - `-u` cannot be combined with `--scan-type syn`, because SYN is TCP-specific.
 - CIDR scans with `-u` still use TCP host discovery unless `-nd` is set.
 
-Note: `--random-ip` randomizes HTTP headers only; it does not spoof the real TCP source IP.
+### Real Source-IP Selection
+
+`--random-ip --source-interface <NIC>` selects a compatible address already assigned to that interface and binds each TCP, TLS, or UDP socket to it. When several addresses of the required IP family are configured, GoMap chooses one per connection. This is real source-address selection with a valid return path, not arbitrary source-IP spoofing.
+
+GoMap does not add or remove NIC addresses. On Linux, administrators can prepare an address they own before scanning and remove it afterwards, for example:
+
+```bash
+sudo ip address add 192.0.2.20/24 dev eth0
+gomap --random-ip --source-interface eth0 -p 22,80,443 192.0.2.50
+sudo ip address del 192.0.2.20/24 dev eth0
+```
+
+Replace the documentation-only addresses above with an authorized local subnet. Never add an address unless it is allocated to you and routed on that interface. GoMap rejects this mode for raw SYN scans; use the default connect scan or UDP mode.
+
+For backward compatibility, `--random-ip` without `--source-interface` still randomizes HTTP `X-Forwarded-For` and `X-Real-IP` headers only; it does not change the actual TCP source IP.
 
 ## HTB Performance Benchmark (Lab)
 

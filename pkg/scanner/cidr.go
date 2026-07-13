@@ -13,6 +13,7 @@ type DiscoveryOptions struct {
 	Ports      []int
 	Timeout    time.Duration
 	NumWorkers int
+	SourceIPs  []net.IP
 }
 
 // ExpandCIDR expands a CIDR notation to a list of IPs
@@ -186,7 +187,7 @@ func DiscoverActiveHostsWithOptions(hosts []string, opts DiscoveryOptions) []str
 			semaphore <- struct{}{}        // Acquire slot
 			defer func() { <-semaphore }() // Release slot
 
-			if isHostActive(h, commonPorts, timeout) {
+			if isHostActive(h, commonPorts, timeout, opts.SourceIPs) {
 				activeChan <- h
 			}
 		}(host)
@@ -206,10 +207,10 @@ func DiscoverActiveHostsWithOptions(hosts []string, opts DiscoveryOptions) []str
 }
 
 // isHostActive checks if a host is reachable by attempting connections to common ports
-func isHostActive(host string, ports []int, timeout time.Duration) bool {
+func isHostActive(host string, ports []int, timeout time.Duration, sourceIPs []net.IP) bool {
 	for _, port := range ports {
 		address := net.JoinHostPort(host, fmt.Sprintf("%d", port))
-		conn, err := net.DialTimeout("tcp", address, timeout)
+		conn, err := dialerForSourceIPs(sourceIPs, "tcp", address, timeout).Dial("tcp", address)
 		if err == nil {
 			_ = conn.Close()
 			return true

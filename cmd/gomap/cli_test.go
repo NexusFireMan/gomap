@@ -58,6 +58,30 @@ func TestParseCLIOptionsRandomIPRequiresServiceDetection(t *testing.T) {
 	}
 }
 
+func TestParseCLIOptionsRandomIPWithSourceInterfaceDoesNotRequireServiceDetection(t *testing.T) {
+	opts, err := ParseCLIOptions([]string{"--random-ip", "--source-interface", "eth0", "10.0.11.6"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if opts.SourceInterface != "eth0" || !opts.RandomIP {
+		t.Fatalf("unexpected options: %+v", opts)
+	}
+}
+
+func TestParseCLIOptionsSourceInterfaceRequiresRandomIP(t *testing.T) {
+	_, err := ParseCLIOptions([]string{"--source-interface", "eth0", "10.0.11.6"})
+	if err == nil {
+		t.Fatal("expected --source-interface to require --random-ip")
+	}
+}
+
+func TestParseCLIOptionsSourceInterfaceRejectsSYN(t *testing.T) {
+	_, err := ParseCLIOptions([]string{"--scan-type", "syn", "--random-ip", "--source-interface", "eth0", "10.0.11.6"})
+	if err == nil {
+		t.Fatal("expected source-interface to reject raw SYN scans")
+	}
+}
+
 func TestParseCLIOptionsHelpFlag(t *testing.T) {
 	_, err := ParseCLIOptions([]string{"-h"})
 	if !errors.Is(err, errHelp) {

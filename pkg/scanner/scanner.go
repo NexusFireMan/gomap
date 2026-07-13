@@ -34,6 +34,7 @@ type Scanner struct {
 	GhostMode          bool
 	RandomAgent        bool
 	RandomIP           bool
+	SourceIPs          []net.IP
 	DeepVersion        bool
 	targetPrefix       netip.Prefix
 
@@ -55,6 +56,7 @@ type ScanConfig struct {
 	MaxTimeout      time.Duration
 	RandomAgent     bool
 	RandomIP        bool
+	SourceIPs       []net.IP
 	TargetCIDR      string
 	DeepVersion     bool
 }
@@ -109,6 +111,7 @@ func (s *Scanner) Configure(cfg ScanConfig) {
 	}
 	s.RandomAgent = cfg.RandomAgent
 	s.RandomIP = cfg.RandomIP
+	s.SourceIPs = append([]net.IP(nil), cfg.SourceIPs...)
 	s.DeepVersion = cfg.DeepVersion
 	if s.RandomIP {
 		s.targetPrefix = parseTargetPrefix(cfg.TargetCIDR, s.Host)
@@ -206,7 +209,7 @@ func (s *Scanner) scanPort(port int, detectServices bool) ScanResult {
 
 	for attempt := 0; attempt <= s.Retries; attempt++ {
 		attemptStart := time.Now()
-		conn, err = net.DialTimeout("tcp", address, s.currentTimeout())
+		conn, err = s.dialTCP(address, s.currentTimeout())
 		s.recordDialOutcome(err, time.Since(attemptStart))
 		if err == nil {
 			break
@@ -816,8 +819,7 @@ func (s *Scanner) grabHTTPBanner(port int) string {
 
 	// Try TLS first on common HTTPS ports for realistic service/version discovery.
 	if shouldUseTLSForHTTP(port) {
-		dialer := &net.Dialer{Timeout: timeout}
-		tlsConn, tlsErr := tls.DialWithDialer(dialer, "tcp", address, &tls.Config{
+		tlsConn, tlsErr := s.dialTLS(address, timeout, &tls.Config{
 			InsecureSkipVerify: true, // Banner grabbing only
 			ServerName:         s.Host,
 		})
@@ -827,7 +829,7 @@ func (s *Scanner) grabHTTPBanner(port int) string {
 	}
 
 	if conn == nil {
-		conn, err = net.DialTimeout("tcp", address, timeout)
+		conn, err = s.dialTCP(address, timeout)
 		if err != nil {
 			return ""
 		}
@@ -909,7 +911,7 @@ func (s *Scanner) probeFTP(port int) string {
 	address := net.JoinHostPort(s.Host, fmt.Sprintf("%d", port))
 	timeout := s.boundedServiceTimeout(1200*time.Millisecond, 4*time.Second)
 
-	conn, err := net.DialTimeout("tcp", address, timeout)
+	conn, err := s.dialTCP(address, timeout)
 	if err != nil {
 		return ""
 	}
@@ -946,13 +948,12 @@ func (s *Scanner) probeMailService(port int, payload string, useTLS bool) string
 		err  error
 	)
 	if useTLS {
-		dialer := &net.Dialer{Timeout: timeout}
-		conn, err = tls.DialWithDialer(dialer, "tcp", address, &tls.Config{
+		conn, err = s.dialTLS(address, timeout, &tls.Config{
 			InsecureSkipVerify: true,
 			ServerName:         s.Host,
 		})
 	} else {
-		conn, err = net.DialTimeout("tcp", address, timeout)
+		conn, err = s.dialTCP(address, timeout)
 	}
 	if err != nil {
 		return ""
@@ -1006,7 +1007,7 @@ func (s *Scanner) probeFTPGenericLines(port int) string {
 	address := net.JoinHostPort(s.Host, fmt.Sprintf("%d", port))
 	timeout := s.boundedServiceTimeout(700*time.Millisecond, 1500*time.Millisecond)
 
-	conn, err := net.DialTimeout("tcp", address, timeout)
+	conn, err := s.dialTCP(address, timeout)
 	if err != nil {
 		return ""
 	}
@@ -1131,7 +1132,7 @@ func (s *Scanner) probeTextService(port int, payload string) string {
 		timeout = 750 * time.Millisecond
 	}
 
-	conn, err := net.DialTimeout("tcp", address, timeout)
+	conn, err := s.dialTCP(address, timeout)
 	if err != nil {
 		return ""
 	}
@@ -1190,7 +1191,7 @@ func (s *Scanner) probeTextServiceWriteFirstWithTimeout(port int, payload string
 	address := net.JoinHostPort(s.Host, fmt.Sprintf("%d", port))
 	timeout := s.boundedServiceTimeout(minTimeout, maxTimeout)
 
-	conn, err := net.DialTimeout("tcp", address, timeout)
+	conn, err := s.dialTCP(address, timeout)
 	if err != nil {
 		return ""
 	}
@@ -1357,7 +1358,7 @@ func (s *Scanner) oncRPCNullCall(port int, program, version uint32) (accepted, r
 		timeout = 1200 * time.Millisecond
 	}
 
-	conn, err := net.DialTimeout("tcp", address, timeout)
+	conn, err := s.dialTCP(address, timeout)
 	if err != nil {
 		return false, false
 	}
@@ -1440,7 +1441,7 @@ func (s *Scanner) detectAJP(port int) bool {
 		timeout = 1200 * time.Millisecond
 	}
 
-	conn, err := net.DialTimeout("tcp", address, timeout)
+	conn, err := s.dialTCP(address, timeout)
 	if err != nil {
 		return false
 	}
@@ -1475,7 +1476,7 @@ func (s *Scanner) detectDNSVersionTCP(port int) string {
 		timeout = 1500 * time.Millisecond
 	}
 
-	conn, err := net.DialTimeout("tcp", address, timeout)
+	conn, err := s.dialTCP(address, timeout)
 	if err != nil {
 		return ""
 	}
@@ -1608,7 +1609,7 @@ func (s *Scanner) detectMSSQLTDS(port int) bool {
 		timeout = 1200 * time.Millisecond
 	}
 
-	conn, err := net.DialTimeout("tcp", address, timeout)
+	conn, err := s.dialTCP(address, timeout)
 	if err != nil {
 		return false
 	}
@@ -1641,7 +1642,7 @@ func (s *Scanner) detectRDPInfo(port int) (version, evidence string, ok bool) {
 	address := net.JoinHostPort(s.Host, fmt.Sprintf("%d", port))
 	timeout := s.boundedServiceTimeout(900*time.Millisecond, 1800*time.Millisecond)
 
-	conn, err := net.DialTimeout("tcp", address, timeout)
+	conn, err := s.dialTCP(address, timeout)
 	if err != nil {
 		return "", "", false
 	}
@@ -1740,13 +1741,12 @@ func (s *Scanner) detectLDAPBind(port int, useTLS bool) bool {
 	)
 
 	if useTLS {
-		dialer := &net.Dialer{Timeout: timeout}
-		conn, err = tls.DialWithDialer(dialer, "tcp", address, &tls.Config{
+		conn, err = s.dialTLS(address, timeout, &tls.Config{
 			InsecureSkipVerify: true,
 			ServerName:         s.Host,
 		})
 	} else {
-		conn, err = net.DialTimeout("tcp", address, timeout)
+		conn, err = s.dialTCP(address, timeout)
 	}
 	if err != nil {
 		return false
@@ -1783,13 +1783,12 @@ func (s *Scanner) detectWinRM(port int) (string, string) {
 		err  error
 	)
 	if port == 5986 {
-		dialer := &net.Dialer{Timeout: timeout}
-		conn, err = tls.DialWithDialer(dialer, "tcp", address, &tls.Config{
+		conn, err = s.dialTLS(address, timeout, &tls.Config{
 			InsecureSkipVerify: true,
 			ServerName:         s.Host,
 		})
 	} else {
-		conn, err = net.DialTimeout("tcp", address, timeout)
+		conn, err = s.dialTCP(address, timeout)
 	}
 	if err != nil {
 		return "", ""
@@ -1879,7 +1878,7 @@ func shouldUseTLSForHTTP(port int) bool {
 
 // attemptRawSMBDetection tries to detect SMB by reading raw response
 func (s *Scanner) attemptRawSMBDetection(address string) string {
-	conn, err := net.DialTimeout("tcp", address, s.Timeout)
+	conn, err := s.dialTCP(address, s.Timeout)
 	if err != nil {
 		return ""
 	}
@@ -2016,6 +2015,9 @@ func (s *Scanner) extractSMB2Dialect(data []byte) string {
 
 // attemptSMBLibrary tries to use SMB library for detection
 func (s *Scanner) attemptSMBLibrary(address string) string {
+	if len(s.SourceIPs) > 0 {
+		return ""
+	}
 	opts := smb.Options{
 		Host:     s.Host,
 		Port:     445,

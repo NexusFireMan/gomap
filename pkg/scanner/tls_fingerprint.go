@@ -24,13 +24,12 @@ func (s *Scanner) detectTLSFingerprint(port int) (tlsFingerprint, bool) {
 		timeout = 1600 * time.Millisecond
 	}
 
-	dialer := &net.Dialer{Timeout: timeout}
 	cfg := &tls.Config{
 		InsecureSkipVerify: true,
 		ServerName:         s.Host,
 		NextProtos:         []string{"h2", "http/1.1"},
 	}
-	conn, err := tls.DialWithDialer(dialer, "tcp", address, cfg)
+	conn, err := s.dialTLS(address, timeout, cfg)
 	if err != nil {
 		return fp, false
 	}

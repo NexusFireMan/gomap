@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"net"
 	"os"
 	"sort"
 	"strings"
@@ -36,6 +37,7 @@ type ScanRequest struct {
 	Details         bool
 	RandomAgent     bool
 	RandomIP        bool
+	SourceInterface string
 }
 
 // ExecuteScan runs the complete scan workflow: target expansion, host discovery, scan, and rendering.
@@ -101,8 +103,21 @@ func ExecuteScan(req ScanRequest) error {
 	if err != nil {
 		return fmt.Errorf("invalid target specification: %w", err)
 	}
-	if req.RandomIP && !scanner.IsCIDR(req.Target) && !machineOutput {
+	if req.RandomIP && req.SourceInterface == "" && !scanner.IsCIDR(req.Target) && !machineOutput {
 		fmt.Printf("%s\n", output.StatusWarn("--random-ip is most useful with CIDR targets; using local /24 approximation per host."))
+	}
+	var sourceIPs []net.IP
+	if req.SourceInterface != "" {
+		sourceIPs, err = scanner.InterfaceSourceIPs(req.SourceInterface)
+		if err != nil {
+			return err
+		}
+		if err := scanner.ValidateSourceIPsForTargets(sourceIPs, targets); err != nil {
+			return err
+		}
+		if !machineOutput {
+			fmt.Printf("%s\n", output.StatusOK(fmt.Sprintf("Source interface %s: %d assigned IP(s) available for socket binding.", req.SourceInterface, len(sourceIPs))))
+		}
 	}
 	if req.UDP && !req.NoDiscovery && scanner.IsCIDR(req.Target) && len(targets) > 1 && !machineOutput {
 		fmt.Printf("%s\n", output.StatusWarn("UDP CIDR scans still use TCP host discovery. Use -nd to scan every host when UDP-only targets are expected."))
@@ -116,6 +131,7 @@ func ExecuteScan(req ScanRequest) error {
 			Ports:      []int{443, 80, 22, 445, 3306, 8080, 3389},
 			Timeout:    500 * time.Millisecond,
 			NumWorkers: 50,
+			SourceIPs:  sourceIPs,
 		}
 		if req.GhostMode {
 			// Low-noise profile for CIDR discovery: fewer probe ports and lower concurrency.
@@ -123,6 +139,7 @@ func ExecuteScan(req ScanRequest) error {
 				Ports:      []int{443, 80, 22},
 				Timeout:    900 * time.Millisecond,
 				NumWorkers: 12,
+				SourceIPs:  sourceIPs,
 			}
 			if !machineOutput {
 				fmt.Printf("%s\n", output.StatusWarn("Ghost discovery profile active: low-noise probes on 443,80,22. Use -nd to skip discovery completely."))
@@ -208,6 +225,7 @@ func ExecuteScan(req ScanRequest) error {
 			MaxTimeout:      maxTimeoutDuration,
 			RandomAgent:     req.RandomAgent,
 			RandomIP:        req.RandomIP,
+			SourceIPs:       sourceIPs,
 			TargetCIDR:      cidrForHeaders,
 			DeepVersion:     req.DeepVersion,
 		})
