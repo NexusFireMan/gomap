@@ -2,14 +2,36 @@ name: CI
 
 on:
   pull_request:
+    branches:
+      - main
+      - dev
   push:
     branches:
       - main
+      - dev
 
 permissions:
   contents: read
 
 jobs:
+  branch-policy:
+    name: Branch Policy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate pull request destination
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+          HEAD_REF: ${{ github.head_ref }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+        run: |
+          if [[ "$EVENT_NAME" == "pull_request" && "$BASE_REF" == "main" ]]; then
+            if [[ "$HEAD_REF" != "dev" || "$HEAD_REPO" != "$GITHUB_REPOSITORY" ]]; then
+              echo "::error::Changes to main must come from this repository's dev branch."
+              exit 1
+            fi
+          fi
+
   lint:
     name: Lint
     runs-on: ubuntu-latest

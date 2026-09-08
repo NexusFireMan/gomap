@@ -2,7 +2,17 @@
 
 This document describes how maintainers publish GoMap releases, binaries, Debian packages, container images, and the GitHub Pages APT repository.
 
-GoMap's `main` branch is protected. Normal changes should land through a pull request with the required checks passing. Maintainers should create tags only from reviewed and merged commits on `main`.
+GoMap has two permanent protected branches: `dev` for integration and `main` for stable releases. Changes travel through a short-lived branch, a PR into `dev`, and then a PR from `dev` into `main`. See [Contributing](../CONTRIBUTING.md#protected-branch-workflow).
+
+## Integration And Release Preparation
+
+1. Prepare the version and changelog on a temporary branch targeting `dev`.
+2. Merge reviewed work into `dev` after `Branch Policy`, `Lint`, and `Test` pass.
+3. Open `dev` into `main`, summarize the release, and reference completed issues with `Closes #N`.
+4. Merge with a merge commit after checks pass. Never squash, rebase, or delete the permanent branches.
+5. Tag the reviewed commit on `main` explicitly when ready to publish.
+
+Merging a PR does not itself create a release. Release Please is no longer used; maintainers choose the version and publish its tag. A `dev` push runs CI, not release, container, or APT publishing. If needed, synchronize `main` back into `dev` through a merge-commit PR before starting the next cycle.
 
 ## Release Inputs
 
@@ -27,7 +37,7 @@ Before tagging, confirm:
 
 ## GitHub Release And Binaries
 
-The `Release` workflow runs on tags matching `v*.*.*`.
+The `Release` workflow runs on tags matching `v*.*.*` and verifies that the tagged commit belongs to `main` before publishing. Do not move or reuse published tags.
 
 Workflow file:
 
@@ -118,6 +128,8 @@ Triggers:
 - push of tags matching `v*.*.*`
 - manual `workflow_dispatch`
 
+Manual container builds are previews of the selected ref. Release tag builds must belong to `main`; a branch build does not update `latest`.
+
 Platforms:
 
 - `linux/amd64`
@@ -137,6 +149,8 @@ The Docker build embeds:
 ## APT Repository On GitHub Pages
 
 The `APT Repository` workflow publishes a signed APT repository to GitHub Pages after the `Release` workflow completes successfully.
+
+Its workflow and any manual dispatch run from `main`, never from `dev`.
 
 Workflow file:
 

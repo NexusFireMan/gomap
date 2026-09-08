@@ -14,6 +14,7 @@ Note: this changelog is maintained from this point forward in the project histor
 - Added Windows hostname reporting for `-Dv` when native probes expose a reliable host name, such as the RDP certificate common name.
 
 ### Changed
+- Adopt protected `dev` integration and merge-commit promotion into `main`, with CI on both branches. Replace Release Please with explicit maintainer tags; retain binary, GHCR, and APT publishing with main-branch release checks.
 - Source-IP rotation can now use an explicit temporary pool instead of requiring administrators to add and remove every interface alias manually.
 - Clarified the difference between real socket source binding and the backward-compatible HTTP header behavior of `--random-ip`.
 - Marked the APT/GHCR release workflow documentation roadmap item as completed.
