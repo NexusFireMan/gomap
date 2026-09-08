@@ -84,7 +84,6 @@ func PrintJSONReport(w io.Writer, target string, ports []int, targets []string, 
 // PrintCSVReport prints one row per open port.
 func PrintCSVReport(writer io.Writer, allResults map[string][]scanner.ScanResult, targets []string) error {
 	w := csv.NewWriter(writer)
-	defer w.Flush()
 
 	header := []string{"host", "port", "state", "service", "version", "hostname", "tls", "tls_version", "tls_cipher", "tls_alpn", "tls_server_name", "tls_issuer", "latency_ms", "confidence", "evidence", "detection_path"}
 	if err := w.Write(header); err != nil {
@@ -118,6 +117,7 @@ func PrintCSVReport(writer io.Writer, allResults map[string][]scanner.ScanResult
 		}
 	}
 
+	w.Flush()
 	return w.Error()
 }
 

@@ -144,14 +144,17 @@ func normalizeOptions(opts CLIOptions) (CLIOptions, error) {
 	if opts.JSONFlag && opts.CSVFlag {
 		return opts, errors.New("choose only one machine output format: --json or --csv")
 	}
-	if opts.PortsFlag != "" && opts.TopPorts > 0 {
-		return opts, errors.New("use either -p or --top, not both")
+	if opts.TopPortsAlias < 0 {
+		return opts, errors.New("--top-ports must be a positive number")
 	}
 	if opts.TopPorts > 0 && opts.TopPortsAlias > 0 {
 		return opts, errors.New("use either --top or --top-ports, not both")
 	}
 	if opts.TopPortsAlias > 0 {
 		opts.TopPorts = opts.TopPortsAlias
+	}
+	if opts.PortsFlag != "" && opts.TopPorts > 0 {
+		return opts, errors.New("use either -p or --top/--top-ports, not both")
 	}
 	opts.ScanType = strings.ToLower(strings.TrimSpace(opts.ScanType))
 	if opts.ScanType != "connect" && opts.ScanType != "syn" {
@@ -242,7 +245,7 @@ func printHelp(w *os.File) {
 %sGomap%s - fast TCP/UDP scanner with service detection and low-noise profiles.
 
 %sUsage:%s
-  gomap <host|CIDR> [options]
+  gomap [options] <host|CIDR>
   gomap -h
 
 %sTarget & Scan:%s

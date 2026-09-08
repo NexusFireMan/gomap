@@ -1,10 +1,47 @@
 package app
 
 import (
+	"net"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/NexusFireMan/gomap/v2/pkg/scanner"
 )
+
+func TestTextReportWrittenToOutputFile(t *testing.T) {
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = l.Close() }()
+	port := l.Addr().(*net.TCPAddr).Port
+	path := filepath.Join(t.TempDir(), "report.txt")
+	err = ExecuteScan(ScanRequest{Target: "127.0.0.1", PortsFlag: strconv.Itoa(port), Format: "text", OutputPath: path})
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil || !strings.Contains(string(data), "Host Exposure Summary") || !strings.Contains(string(data), strconv.Itoa(port)) {
+		t.Fatalf("missing text report: %q, %v", data, err)
+	}
+}
+
+func TestInvalidPortsPreserveOutputFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "report.txt")
+	if err := os.WriteFile(path, []byte("previous report"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := ExecuteScan(ScanRequest{Target: "127.0.0.1", PortsFlag: "invalid", Format: "text", OutputPath: path}); err == nil {
+		t.Fatal("expected invalid port error")
+	}
+	data, err := os.ReadFile(path)
+	if err != nil || string(data) != "previous report" {
+		t.Fatalf("existing output was modified: %q, %v", data, err)
+	}
+}
 
 func TestFilterExcludedPorts(t *testing.T) {
 	pm := scanner.NewPortManager()

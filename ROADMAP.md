@@ -5,8 +5,8 @@ GoMap's roadmap focuses on improving reliability, test coverage, documentation, 
 ## Quality and Coverage
 
 - Improve CLI/parser test coverage.
-- Add output format regression tests.
-- Add service detection unit tests.
+- Extend output format regression tests, including write failures.
+- Extend service detection tests to fragmented responses and malformed packets.
 - Raise minimum coverage progressively from 10% to 25%, 40%, and 60%.
 
 ## Documentation and Release Workflow
@@ -17,3 +17,4 @@ GoMap's roadmap focuses on improving reliability, test coverage, documentation, 
 Completed:
 
 - Document APT/GHCR release workflow.
+- Add initial CLI, output format, and service detection regression tests.

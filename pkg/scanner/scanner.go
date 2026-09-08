@@ -14,8 +14,6 @@ import (
 	"sync"
 	"syscall"
 	"time"
-
-	"github.com/stacktitan/smb/smb"
 )
 
 // Scanner handles the port scanning logic
@@ -1857,10 +1855,6 @@ func (s *Scanner) detectSMBVersion(port int) (string, string) {
 		return rawSMB, "raw smb negotiate"
 	}
 
-	if smbLib := s.attemptSMBLibrary(address); smbLib != "" {
-		return smbLib, "smb library"
-	}
-
 	if port == 139 {
 		return "Microsoft Windows netbios-ssn", "NetBIOS session service on tcp/139"
 	}
@@ -2011,27 +2005,6 @@ func (s *Scanner) extractSMB2Dialect(data []byte) string {
 	}
 
 	return "SMB 2.0+"
-}
-
-// attemptSMBLibrary tries to use SMB library for detection
-func (s *Scanner) attemptSMBLibrary(address string) string {
-	if len(s.SourceIPs) > 0 {
-		return ""
-	}
-	opts := smb.Options{
-		Host:     s.Host,
-		Port:     445,
-		User:     "",
-		Password: "",
-	}
-
-	session, err := smb.NewSession(opts, false)
-	if err == nil {
-		defer session.Close()
-		return "Microsoft Windows SMB"
-	}
-
-	return ""
 }
 
 func (s *Scanner) buildHTTPRequest(method, path string) string {

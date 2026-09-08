@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/csv"
 	"encoding/json"
+	"errors"
 	"io"
 	"reflect"
 	"strings"
@@ -12,6 +13,16 @@ import (
 
 	"github.com/NexusFireMan/gomap/v2/pkg/scanner"
 )
+
+type failingWriter struct{}
+
+func (failingWriter) Write([]byte) (int, error) { return 0, io.ErrClosedPipe }
+
+func TestCSVReportsFlushFailure(t *testing.T) {
+	if err := PrintCSVReport(failingWriter{}, nil, nil); !errors.Is(err, io.ErrClosedPipe) {
+		t.Fatalf("expected buffered write failure, got %v", err)
+	}
+}
 
 func sampleResults() ([]string, map[string][]scanner.ScanResult) {
 	targets := []string{"10.0.11.6"}

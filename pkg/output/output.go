@@ -2,6 +2,7 @@ package output
 
 import (
 	"fmt"
+	"io"
 	"regexp"
 	"strings"
 	"unicode/utf8"
@@ -14,6 +15,27 @@ type OutputFormatter struct {
 	IncludeServices bool
 	IncludeDetails  bool
 	IncludeEvidence bool
+	writer          io.Writer
+	writeErr        error
+}
+
+// WriteResults renders a report to a writer and propagates write failures.
+func (of *OutputFormatter) WriteResults(w io.Writer, results []scanner.ScanResult) error {
+	copy := *of
+	copy.writer, copy.writeErr = w, nil
+	copy.PrintResults(results)
+	return copy.writeErr
+}
+
+func (of *OutputFormatter) printf(format string, args ...any) {
+	if of.writeErr != nil {
+		return
+	}
+	w := of.writer
+	if w == nil {
+		w = DefaultWriter()
+	}
+	_, of.writeErr = fmt.Fprintf(w, format, args...)
 }
 
 var ansiPattern = regexp.MustCompile(`\x1b\[[0-9;]*m`)
@@ -66,22 +88,22 @@ func (of *OutputFormatter) PrintResults(results []scanner.ScanResult) {
 
 // printBasic prints results without service information
 func (of *OutputFormatter) printBasic(results []scanner.ScanResult) {
-	fmt.Printf("%s%s%s\n", ColorBold, fmt.Sprintf("%-*s %-*s", portColWidth, "PORT", stateColWidth, "STATE"), ColorReset)
+	of.printf("%s%s%s\n", ColorBold, fmt.Sprintf("%-*s %-*s", portColWidth, "PORT", stateColWidth, "STATE"), ColorReset)
 	for _, result := range results {
-		fmt.Printf("%s %s\n", padANSI(Port(result.Port), portColWidth), padANSI(State("open"), stateColWidth))
+		of.printf("%s %s\n", padANSI(Port(result.Port), portColWidth), padANSI(State("open"), stateColWidth))
 	}
 }
 
 // printWithServices prints results with service and version information
 func (of *OutputFormatter) printWithServices(results []scanner.ScanResult) {
 	if hostnames := detectedHostnames(results); len(hostnames) > 0 {
-		fmt.Printf("%s%s%s\n", ColorBold, "Detected Hostname: "+strings.Join(hostnames, ", "), ColorReset)
+		of.printf("%s%s%s\n", ColorBold, "Detected Hostname: "+strings.Join(hostnames, ", "), ColorReset)
 	}
 
 	if of.IncludeEvidence {
-		fmt.Printf("%s%s%s\n", ColorBold, fmt.Sprintf("%-*s %-*s %-*s %-36s %s", portColWidth, "PORT", stateColWidth, "STATE", serviceColWidth, "SERVICE", "VERSION", "EVIDENCE"), ColorReset)
+		of.printf("%s%s%s\n", ColorBold, fmt.Sprintf("%-*s %-*s %-*s %-36s %s", portColWidth, "PORT", stateColWidth, "STATE", serviceColWidth, "SERVICE", "VERSION", "EVIDENCE"), ColorReset)
 		for _, result := range results {
-			fmt.Printf("%s %s %s %-36s %s\n",
+			of.printf("%s %s %s %-36s %s\n",
 				padANSI(Port(result.Port), portColWidth),
 				padANSI(State("open"), stateColWidth),
 				padANSI(Service(result.ServiceName), serviceColWidth),
@@ -93,9 +115,9 @@ func (of *OutputFormatter) printWithServices(results []scanner.ScanResult) {
 	}
 
 	if of.IncludeDetails {
-		fmt.Printf("%s%s%s\n", ColorBold, fmt.Sprintf("%-*s %-*s %-*s %-36s %-7s %-8s %s", portColWidth, "PORT", stateColWidth, "STATE", serviceColWidth, "SERVICE", "VERSION", "LAT(ms)", "CONF", "EVIDENCE"), ColorReset)
+		of.printf("%s%s%s\n", ColorBold, fmt.Sprintf("%-*s %-*s %-*s %-36s %-7s %-8s %s", portColWidth, "PORT", stateColWidth, "STATE", serviceColWidth, "SERVICE", "VERSION", "LAT(ms)", "CONF", "EVIDENCE"), ColorReset)
 		for _, result := range results {
-			fmt.Printf("%s %s %s %-36s %-7d %-8s %s\n",
+			of.printf("%s %s %s %-36s %-7d %-8s %s\n",
 				padANSI(Port(result.Port), portColWidth),
 				padANSI(State("open"), stateColWidth),
 				padANSI(Service(result.ServiceName), serviceColWidth),
@@ -108,9 +130,9 @@ func (of *OutputFormatter) printWithServices(results []scanner.ScanResult) {
 		return
 	}
 
-	fmt.Printf("%s%s%s\n", ColorBold, fmt.Sprintf("%-*s %-*s %-*s %s", portColWidth, "PORT", stateColWidth, "STATE", serviceColWidth, "SERVICE", "VERSION"), ColorReset)
+	of.printf("%s%s%s\n", ColorBold, fmt.Sprintf("%-*s %-*s %-*s %s", portColWidth, "PORT", stateColWidth, "STATE", serviceColWidth, "SERVICE", "VERSION"), ColorReset)
 	for _, result := range results {
-		fmt.Printf("%s %s %s %s\n",
+		of.printf("%s %s %s %s\n",
 			padANSI(Port(result.Port), portColWidth),
 			padANSI(State("open"), stateColWidth),
 			padANSI(Service(result.ServiceName), serviceColWidth),

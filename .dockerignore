@@ -1,4 +1,7 @@
 .git
+AGENTS.md
+.env
+.env.*
 .github
 bin
 coverage.out

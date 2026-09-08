@@ -5,6 +5,17 @@ import (
 	"testing"
 )
 
+func TestTopPortsAliasValidation(t *testing.T) {
+	for _, args := range [][]string{
+		{"--top-ports", "-1", "127.0.0.1"},
+		{"-p", "80", "--top-ports", "10", "127.0.0.1"},
+	} {
+		if _, err := ParseCLIOptions(args); err == nil {
+			t.Errorf("expected conflict or invalid count for %v", args)
+		}
+	}
+}
+
 func TestParseCLIOptionsTopPortsAlias(t *testing.T) {
 	opts, err := ParseCLIOptions([]string{"--top-ports", "200", "10.0.11.6"})
 	if err != nil {

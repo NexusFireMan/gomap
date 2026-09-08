@@ -21,6 +21,15 @@ Note: this changelog is maintained from this point forward in the project histor
 - Detected hostnames now appear in all text service-detection tables, not only in the `-Dv` evidence view.
 
 ### Fixed
+- Restrict Git self-updates to the GoMap module root on a clean `main` branch and use fast-forward-only pulls; align release automation with the published v2.4.8 baseline.
+- Exclude local agent instructions and environment files from Docker build contexts; send CLI scan errors to stderr.
+- Remove the legacy SMB library fallback, whose unbounded connections could hang or leak on negotiation errors; retain bounded native probes and generic fallback results.
+- Report CSV flush failures, empty-report write failures, and output-file close errors; write text reports to `--out`.
+- Reject oversized IPv6 CIDRs before shifting the host count and preserve IPv6 range endpoints.
+- Validate negative `--top-ports` values and conflicts with `-p`.
+- Require release checksums before extracting downloaded binaries.
+- Serialize temporary-address setup and cleanup; reject IPv4-mapped IPv6 pool entries with incompatible masks.
+- Correct CSV columns, CLI argument order, historical benchmark provenance, JSONL timing, and APT signature verification documentation.
 - **Deep-version evidence quality**: `-Dv` now avoids empty RDP versions, reports `Microsoft Terminal Services` for RDP, extracts RDP negotiation/certificate evidence when available, and uses concrete WinRM/RPC/SMB evidence strings instead of generic probe labels.
 - **Alternate FTP banner detection**: port `2121` now maps to `ftp`, uses the FTP probe path, normalizes generic ProFTPD greetings to `ProFTPD`, and reports silent FTP services as `FTP service (no greeting)` instead of leaving the version empty.
 

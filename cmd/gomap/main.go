@@ -18,7 +18,7 @@ func Run() {
 		if errors.Is(err, errUsage) {
 			os.Exit(1)
 		}
-		fmt.Printf("%s\n", output.StatusError(err.Error()))
+		fmt.Fprintf(os.Stderr, "%s\n", output.StatusError(err.Error()))
 		os.Exit(1)
 	}
 
@@ -84,7 +84,7 @@ func Run() {
 	}
 
 	if err := app.ExecuteScan(req); err != nil {
-		fmt.Printf("%s\n", output.StatusError(err.Error()))
+		fmt.Fprintf(os.Stderr, "%s\n", output.StatusError(err.Error()))
 		os.Exit(1)
 	}
 }
