@@ -50,25 +50,29 @@ Do not run integration tests against systems you are not authorized to scan.
 - Avoid unrelated refactors in feature or bugfix pull requests.
 - Do not commit generated binaries, private notes, credentials, lab logs, or local scan outputs.
 
-## Protected Main Workflow
+## Protected Branch Workflow
 
-The `main` branch is protected by a GitHub Ruleset. Normal work should not be pushed directly to `main`; use a short-lived issue branch and open a pull request instead.
+`main` and `dev` are the two permanent branches. Both require pull requests and passing `Branch Policy`, `Lint`, and `Test` checks; do not push directly, force-push, or delete them. `main` is the stable release branch; `dev` integrates reviewed changes.
 
 Recommended flow:
 
 ```bash
-git checkout main
-git pull origin main
+git checkout dev
+git pull --ff-only origin dev
 git checkout -b issue-<number>-short-description
 
 # make focused changes
 
-git add .
+git add <changed-files>
 git commit -m "type: concise description"
 git push origin issue-<number>-short-description
 ```
 
-Open a pull request into `main` and reference the related issue in the PR body, for example `Closes #8`. Required checks such as `Lint` and `Test` must pass before merge. Prefer squash merge for small issue branches.
+Open the issue branch's PR into `dev`, link the related issue, and prefer squash merge for small changes. Delete the temporary branch after merging. Temporary branches are expected while work is in progress; only `main` and `dev` remain long-lived.
+
+When integration is ready, open a PR from this repository's `dev` into `main`. Include the release summary, validation results, and `Closes #N` references for completed issues (automatic issue closure happens on the default branch). Use a **merge commit**, not squash or rebase, to preserve ancestry between permanent branches. Never delete `dev` after merging.
+
+If `main` has commits missing from `dev`, open a synchronization PR from `main` into `dev` and use a merge commit there too. Prepare hotfixes through the same reviewed flow; do not bypass branch protection.
 
 ## Release Notes
 

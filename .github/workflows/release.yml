@@ -18,6 +18,11 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Verify release commit belongs to main
+        run: |
+          git fetch origin main
+          git merge-base --is-ancestor HEAD origin/main
+
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
