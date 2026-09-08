@@ -1,11 +1,52 @@
 package gomap
 
 import (
+	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"testing"
 )
+
+func TestGitUpdateOnlyRecognizesGoMapRoot(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git unavailable")
+	}
+	dir := t.TempDir()
+	t.Chdir(dir)
+	if out, err := exec.Command("git", "init", "-b", "feature-test").CombinedOutput(); err != nil {
+		t.Fatalf("git init: %s: %v", out, err)
+	}
+	if err := os.WriteFile("go.mod", []byte("module example.invalid/other\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if isGitRepository() {
+		t.Fatal("unrelated repository accepted for update")
+	}
+	if err := os.WriteFile("go.mod", []byte("module "+ModulePath+"\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if !isGitRepository() {
+		t.Fatal("GoMap root not recognized")
+	}
+	if err := updateUsingGit(); err == nil {
+		t.Fatal("feature branch update should fail before pull")
+	}
+}
+
+func TestReleaseDownloadRequiresChecksums(t *testing.T) {
+	for _, url := range []string{"", "https://example.invalid/checksums.txt"} {
+		called := false
+		err := verifyReleaseDownload(filepath.Join(t.TempDir(), "gomap.tar.gz"), "gomap.tar.gz", url, func(string, string) error {
+			called = true
+			return errors.New("download failed")
+		})
+		if err == nil || called != (url != "") {
+			t.Fatalf("url=%q: expected verification failure, got %v (download called=%v)", url, err, called)
+		}
+	}
+}
 
 func TestReadBinaryVersionCurrentFormat(t *testing.T) {
 	if runtime.GOOS == "windows" {

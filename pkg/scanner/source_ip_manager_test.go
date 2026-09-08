@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net"
 	"testing"
+	"time"
 )
 
 type fakeAddressBackend struct {
@@ -56,11 +57,55 @@ func TestParseManagedSourceIPsRejectsDuplicatesAndUnsafeAddresses(t *testing.T) 
 		"192.0.2.0/24",
 		"192.0.2.255/24",
 		"192.0.2.20,",
+		"::ffff:192.0.2.20/120",
 	}
 	for _, spec := range tests {
 		if _, err := parseManagedSourceIPs(spec); err == nil {
 			t.Errorf("expected %q to be rejected", spec)
 		}
+	}
+}
+
+type blockedAddressBackend struct {
+	fakeAddressBackend
+	entered chan struct{}
+	release chan struct{}
+}
+
+func (b *blockedAddressBackend) Add(name string, addr *net.IPNet) error {
+	close(b.entered)
+	<-b.release
+	return b.fakeAddressBackend.Add(name, addr)
+}
+
+func TestCleanupWaitsForInFlightAddressAdd(t *testing.T) {
+	b := &blockedAddressBackend{entered: make(chan struct{}), release: make(chan struct{})}
+	ready := make(chan *ManagedSourceIPs, 1)
+	prepared := make(chan error, 1)
+	go func() {
+		_, err := prepareManagedSourceIPs("fake0", "192.0.2.21/24", b, func(m *ManagedSourceIPs) { ready <- m })
+		prepared <- err
+	}()
+	m := <-ready
+	<-b.entered
+	closed := make(chan error, 1)
+	go func() { closed <- m.Close() }()
+	select {
+	case err := <-closed:
+		close(b.release)
+		<-prepared
+		t.Fatalf("cleanup completed before the pending add: %v", err)
+	case <-time.After(20 * time.Millisecond):
+	}
+	close(b.release)
+	if err := <-prepared; err != nil {
+		t.Fatal(err)
+	}
+	if err := <-closed; err != nil {
+		t.Fatal(err)
+	}
+	if len(b.deleted) != 1 || b.deleted[0].IP.String() != "192.0.2.21" {
+		t.Fatalf("pending address was not cleaned: %v", b.deleted)
 	}
 }
 

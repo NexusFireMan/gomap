@@ -42,16 +42,32 @@ func CheckUpdate() error {
 
 // isGitRepository checks if the current directory is a git repository
 func isGitRepository() bool {
-	cmd := exec.Command("git", "rev-parse", "--git-dir")
-	return cmd.Run() == nil
+	root, err := exec.Command("git", "rev-parse", "--show-toplevel").Output()
+	if err != nil {
+		return false
+	}
+	cwd, err := os.Getwd()
+	if err != nil || filepath.Clean(strings.TrimSpace(string(root))) != filepath.Clean(cwd) {
+		return false
+	}
+	data, err := os.ReadFile("go.mod")
+	return err == nil && strings.HasPrefix(string(data), "module "+ModulePath+"\n")
 }
 
 // updateUsingGit updates the tool using git pull and rebuilds
 func updateUsingGit() error {
+	branch, err := exec.Command("git", "branch", "--show-current").Output()
+	if err != nil || strings.TrimSpace(string(branch)) != "main" {
+		return fmt.Errorf("git update requires the main branch; update your feature branch manually")
+	}
+	status, err := exec.Command("git", "status", "--porcelain").Output()
+	if err != nil || len(strings.TrimSpace(string(status))) != 0 {
+		return fmt.Errorf("git update requires a clean working tree")
+	}
 	fmt.Println(output.Success("✓ Detected git repository. Updating via git..."))
 
 	// Pull latest changes
-	pullCmd := exec.Command("git", "pull", "origin", "main")
+	pullCmd := exec.Command("git", "pull", "--ff-only", "origin", "main")
 	if cmdOutput, err := pullCmd.CombinedOutput(); err != nil {
 		fmt.Printf("%s\n", output.StatusError(fmt.Sprintf("Git pull failed: %s", string(cmdOutput))))
 		return fmt.Errorf("failed to pull from git: %w", err)
@@ -157,13 +173,8 @@ func updateUsingReleaseAsset() error {
 		return fmt.Errorf("failed to download release asset: %w", err)
 	}
 
-	if checksumURL != "" {
-		checksumPath := filepath.Join(tmpDir, "checksums.txt")
-		if err := downloadFile(checksumURL, checksumPath); err == nil {
-			if err := verifyChecksum(archivePath, archiveName, checksumPath); err != nil {
-				return fmt.Errorf("checksum verification failed: %w", err)
-			}
-		}
+	if err := verifyReleaseDownload(archivePath, archiveName, checksumURL, downloadFile); err != nil {
+		return err
 	}
 
 	binPath := filepath.Join(tmpDir, "gomap")
@@ -186,6 +197,20 @@ func updateUsingReleaseAsset() error {
 	}
 
 	fmt.Println(output.StatusOK("gomap has been updated to the latest release binary"))
+	return nil
+}
+
+func verifyReleaseDownload(archivePath, archiveName, checksumURL string, download func(string, string) error) error {
+	if checksumURL == "" {
+		return fmt.Errorf("release is missing checksums.txt")
+	}
+	checksumPath := filepath.Join(filepath.Dir(archivePath), "checksums.txt")
+	if err := download(checksumURL, checksumPath); err != nil {
+		return fmt.Errorf("cannot download release checksums: %w", err)
+	}
+	if err := verifyChecksum(archivePath, archiveName, checksumPath); err != nil {
+		return fmt.Errorf("checksum verification failed: %w", err)
+	}
 	return nil
 }
 

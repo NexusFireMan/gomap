@@ -1,6 +1,7 @@
 package app
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"net"
@@ -58,15 +59,6 @@ func ExecuteScan(req ScanRequest) (resultErr error) {
 
 	destWriter := output.DefaultWriter()
 	var outFile *os.File
-	if req.OutputPath != "" {
-		var err error
-		outFile, err = os.Create(req.OutputPath)
-		if err != nil {
-			return fmt.Errorf("cannot create output file: %w", err)
-		}
-		defer func() { _ = outFile.Close() }()
-		destWriter = outFile
-	}
 
 	portManager := scanner.NewPortManager()
 	var (
@@ -104,6 +96,14 @@ func ExecuteScan(req ScanRequest) (resultErr error) {
 	targets, err := scanner.ParseTargets(req.Target)
 	if err != nil {
 		return fmt.Errorf("invalid target specification: %w", err)
+	}
+	if req.OutputPath != "" {
+		outFile, err = os.Create(req.OutputPath)
+		if err != nil {
+			return fmt.Errorf("cannot create output file: %w", err)
+		}
+		defer func() { resultErr = errors.Join(resultErr, outFile.Close()) }()
+		destWriter = outFile
 	}
 	if req.RandomIP && req.SourceInterface == "" && !scanner.IsCIDR(req.Target) && !machineOutput {
 		fmt.Printf("%s\n", output.StatusWarn("--random-ip is most useful with CIDR targets; using local /24 approximation per host."))
@@ -169,21 +169,25 @@ func ExecuteScan(req ScanRequest) (resultErr error) {
 		if len(targets) == 0 {
 			if machineOutput {
 				empty := map[string][]scanner.ScanResult{}
+				var renderErr error
 				switch req.Format {
 				case "json":
-					_ = output.PrintJSONReport(destWriter, req.Target, portsToScan, targets, empty, req.ServiceDetect, 0)
+					renderErr = output.PrintJSONReport(destWriter, req.Target, portsToScan, targets, empty, req.ServiceDetect, 0)
 				case "jsonl":
-					_ = output.PrintJSONLReport(destWriter, req.Target, targets, empty)
+					renderErr = output.PrintJSONLReport(destWriter, req.Target, targets, empty)
 				case "csv":
-					_ = output.PrintCSVReport(destWriter, empty, targets)
+					renderErr = output.PrintCSVReport(destWriter, empty, targets)
+				}
+				if renderErr != nil {
+					return fmt.Errorf("failed to render %s output: %w", req.Format, renderErr)
 				}
 				if req.OutputPath != "" {
 					fmt.Printf("%s\n", output.StatusOK(fmt.Sprintf("Saved %s output to %s", strings.ToUpper(req.Format), req.OutputPath)))
 				}
 				return nil
 			}
-			fmt.Printf("%s\n", output.StatusWarn("No active hosts found in the specified range."))
-			return nil
+			_, err := fmt.Fprintf(destWriter, "%s\n", output.StatusWarn("No active hosts found in the specified range."))
+			return err
 		}
 
 		if !machineOutput {
@@ -296,18 +300,24 @@ func ExecuteScan(req ScanRequest) (resultErr error) {
 		return nil
 	}
 
+	var textReport bytes.Buffer
 	totalOpen := 0
 	for _, targetIP := range targets {
 		if results, exists := allResults[targetIP]; exists {
 			totalOpen += len(results)
 			if len(targets) > 1 {
-				fmt.Printf("\n%s\n", output.Highlight(fmt.Sprintf("═══ %s ═══", output.Host(targetIP))))
+				fmt.Fprintf(&textReport, "\n%s\n", output.Highlight(fmt.Sprintf("═══ %s ═══", output.Host(targetIP))))
 			}
-			formatter.PrintResults(results)
+			if err := formatter.WriteResults(&textReport, results); err != nil {
+				return err
+			}
 		}
 	}
-	printHostSummaries(targets, allResults)
-	fmt.Printf("\n%s\n", output.StatusOK(fmt.Sprintf("Completed scan in %s | hosts: %d | open ports: %d", scanDuration.Round(time.Millisecond), len(targets), totalOpen)))
+	textReport.WriteString(hostSummaries(targets, allResults))
+	fmt.Fprintf(&textReport, "\n%s\n", output.StatusOK(fmt.Sprintf("Completed scan in %s | hosts: %d | open ports: %d", scanDuration.Round(time.Millisecond), len(targets), totalOpen)))
+	if _, err := destWriter.Write(textReport.Bytes()); err != nil {
+		return fmt.Errorf("failed to render text output: %w", err)
+	}
 	return nil
 }
 
@@ -331,8 +341,9 @@ func filterExcludedPorts(pm *scanner.PortManager, ports []int, excludeSpec strin
 	return filtered, nil
 }
 
-func printHostSummaries(targets []string, allResults map[string][]scanner.ScanResult) {
-	fmt.Printf("\n%s\n", output.Bold("Host Exposure Summary"))
+func hostSummaries(targets []string, allResults map[string][]scanner.ScanResult) string {
+	var report strings.Builder
+	fmt.Fprintf(&report, "\n%s\n", output.Bold("Host Exposure Summary"))
 	for _, host := range targets {
 		results := allResults[host]
 		open := len(results)
@@ -343,13 +354,14 @@ func printHostSummaries(targets []string, allResults map[string][]scanner.ScanRe
 		if len(critical) > 0 {
 			criticalStr = strings.Join(critical, ", ")
 		}
-		fmt.Printf("- %s | open ports: %d | critical: %s | exposure: %s\n",
+		fmt.Fprintf(&report, "- %s | open ports: %d | critical: %s | exposure: %s\n",
 			host,
 			open,
 			criticalStr,
 			exposure,
 		)
 	}
+	return report.String()
 }
 
 func criticalServices(results []scanner.ScanResult) []string {

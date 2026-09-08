@@ -46,7 +46,7 @@ nfpms:
     package_name: gomap
     file_name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     homepage: https://github.com/NexusFireMan/gomap
-    description: Fast TCP scanner with service detection, stealth profiles, and native SYN scanning.
+    description: TCP/UDP scanner for authorized reconnaissance with service detection, low-noise profiles, and native SYN scanning.
     maintainer: NexusFireMan
     license: MIT
     formats:

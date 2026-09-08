@@ -26,6 +26,7 @@ type ManagedSourceIPs struct {
 	added         []*net.IPNet
 	closeOnce     sync.Once
 	closeErr      error
+	setupMu       sync.Mutex
 	signalMu      sync.Mutex
 	signalStop    func()
 }
@@ -39,14 +40,14 @@ func PrepareManagedSourceIPs(interfaceName, spec string) (*ManagedSourceIPs, err
 	if err != nil {
 		return nil, err
 	}
-	return prepareManagedSourceIPs(interfaceName, spec, backend, true)
+	return prepareManagedSourceIPs(interfaceName, spec, backend, (*ManagedSourceIPs).InstallSignalCleanup)
 }
 
 func prepareManagedSourceIPsWithBackend(interfaceName, spec string, backend interfaceAddressBackend) (*ManagedSourceIPs, error) {
-	return prepareManagedSourceIPs(interfaceName, spec, backend, false)
+	return prepareManagedSourceIPs(interfaceName, spec, backend, nil)
 }
 
-func prepareManagedSourceIPs(interfaceName, spec string, backend interfaceAddressBackend, installSignalHandler bool) (*ManagedSourceIPs, error) {
+func prepareManagedSourceIPs(interfaceName, spec string, backend interfaceAddressBackend, onPrepare func(*ManagedSourceIPs)) (*ManagedSourceIPs, error) {
 	interfaceName = strings.TrimSpace(interfaceName)
 	if interfaceName == "" {
 		return nil, errors.New("source interface cannot be empty")
@@ -66,8 +67,11 @@ func prepareManagedSourceIPs(interfaceName, spec string, backend interfaceAddres
 		ips:           make([]net.IP, 0, len(requested)),
 		added:         make([]*net.IPNet, 0, len(requested)),
 	}
-	if installSignalHandler {
-		managed.InstallSignalCleanup()
+	// Cleanup must wait until every successful add is recorded, including an
+	// in-flight netlink operation when a termination signal arrives.
+	managed.setupMu.Lock()
+	if onPrepare != nil {
+		onPrepare(managed)
 	}
 	for _, addr := range requested {
 		managed.ips = append(managed.ips, append(net.IP(nil), addr.IP...))
@@ -75,12 +79,14 @@ func prepareManagedSourceIPs(interfaceName, spec string, backend interfaceAddres
 			continue
 		}
 		if err := backend.Add(interfaceName, addr); err != nil {
+			managed.setupMu.Unlock()
 			rollbackErr := managed.Close()
 			return nil, errors.Join(fmt.Errorf("cannot add source IP %s to %s: %w", addr, interfaceName, err), rollbackErr)
 		}
 		managed.added = append(managed.added, cloneIPNet(addr))
 		existing = append(existing, cloneIPNet(addr))
 	}
+	managed.setupMu.Unlock()
 	return managed, nil
 }
 
@@ -112,7 +118,10 @@ func parseManagedSourceIPs(spec string) ([]*net.IPNet, error) {
 		if err != nil || !prefix.IsValid() {
 			return nil, fmt.Errorf("invalid source IP %q", value)
 		}
-		addr := prefix.Addr().Unmap()
+		if prefix.Addr().Is4In6() {
+			return nil, fmt.Errorf("IPv4-mapped IPv6 source IP %q is unsupported; use IPv4 notation", value)
+		}
+		addr := prefix.Addr()
 		if addr.IsUnspecified() || addr.IsMulticast() || addr.IsLinkLocalUnicast() {
 			return nil, fmt.Errorf("source IP %q is not usable for managed rotation", value)
 		}
@@ -162,6 +171,8 @@ func (m *ManagedSourceIPs) AddedCount() int {
 // Close removes only addresses successfully added by this manager.
 func (m *ManagedSourceIPs) Close() error {
 	m.closeOnce.Do(func() {
+		m.setupMu.Lock()
+		defer m.setupMu.Unlock()
 		var cleanupErrs []error
 		for i := len(m.added) - 1; i >= 0; i-- {
 			if err := m.backend.Delete(m.interfaceName, m.added[i]); err != nil {

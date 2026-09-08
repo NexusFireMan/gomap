@@ -63,7 +63,7 @@ Archive formats:
 
 Each archive includes:
 
-- `gomap`
+- `gomap` (`gomap.exe` on Windows)
 - `README.md`
 - `CHANGELOG.md`
 
@@ -220,7 +220,10 @@ Example verification commands:
 ```bash
 gh release view vX.Y.Z --repo NexusFireMan/gomap
 docker pull ghcr.io/nexusfireman/gomap:vX.Y.Z
-curl -fsSL https://nexusfireman.github.io/gomap/dists/stable/InRelease | gpg --show-keys
+curl -fsSLo InRelease https://nexusfireman.github.io/gomap/dists/stable/InRelease
+gpgv --keyring /usr/share/keyrings/gomap-archive-keyring.gpg InRelease
 ```
 
 Use authorized lab systems for installation checks.
+
+The signature check assumes the trusted repository keyring was installed first. `InRelease` is signed metadata, not a public key. The self-updater requires a downloaded, matching checksum before extracting a release binary; a failure can trigger the documented `go install` fallback.

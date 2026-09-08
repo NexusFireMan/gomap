@@ -57,20 +57,20 @@ func ExpandCIDR(cidr string) ([]string, error) {
 	// Calculate number of hosts
 	ones, bits := ipnet.Mask.Size()
 	hostBits := bits - ones
-	numHosts := 1 << uint(hostBits)
 
 	// For large CIDR blocks, limit the expansion
 	maxHosts := 65536 // 65K hosts max (256^2)
-	if numHosts > maxHosts {
-		return nil, fmt.Errorf("CIDR range too large (%d hosts). Maximum: %d hosts. Use a smaller range", numHosts, maxHosts)
+	if hostBits > 16 {
+		return nil, fmt.Errorf("CIDR range too large. Maximum: %d addresses. Use a smaller range", maxHosts)
 	}
+	numHosts := 1 << uint(hostBits)
 
 	var ips []string
 	ip = ipnet.IP.Mask(ipnet.Mask)
 
 	for i := 0; i < numHosts; i++ {
 		// Skip network address and broadcast address for non-/31 and non-/32 networks
-		if hostBits > 1 && (i == 0 || i == numHosts-1) {
+		if bits == 32 && hostBits > 1 && (i == 0 || i == numHosts-1) {
 			incrementIP(ip)
 			continue
 		}

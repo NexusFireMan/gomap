@@ -243,7 +243,7 @@ Host Exposure Summary
 
 ```text
 Usage:
-  gomap <host|CIDR> [options]
+  gomap [options] <host|CIDR>
 
 Main options:
   -p                ports to scan (example: 80,443 or 1-1024 or - for all)
@@ -302,12 +302,19 @@ When `-s` is enabled, gomap combines port-based hints and protocol/banner parsin
 - HTTP/HTTPS server family/version where available.
 - SSH/FTP/PostgreSQL/Redis/MySQL and other protocol banners.
 - SMB-oriented identification for `microsoft-ds` targets.
+- SMB probes use bounded native connections; an unanswered negotiation produces a generic service hint rather than an OS assertion.
 - TLS handshake metadata where applicable (`tls_version`, `tls_cipher`, ALPN, certificate issuer).
 - Generic active probes for open ports without a known port mapping, useful when services run on non-standard ports.
 
 `-Dv` enables the same service/version output as `-s`, shows a compact evidence column in text output, and adds a bounded deep-version pass for open ports whose first result is generic, weak, or empty. It is intended as GoMap's fast native version-detection profile for authorized lab/internal reconnaissance: more focused than the default `-s`, but still controlled so it does not turn a quick scan into a long script scan.
 
 Important: banner-based detection is heuristic. Always validate critical findings with a second tool.
+
+Operational limits:
+- Service names inferred only from ports do not prove a product or operating system. A missing banner may reflect filtering, a silent service, or a timeout.
+- `--rate` limits port-scan scheduling per host; it is not a global limit for discovery, retries, or additional service probes.
+- Protocol detection still needs broader coverage for fragmented TCP responses. Raw SYN discovery and privileged interface changes require separate lab validation.
+- IPv4 CIDRs omit network/broadcast addresses except for /31 and /32; IPv6 ranges preserve endpoints. Expansion is limited to 65,536 addresses per CIDR.
 
 Non-standard port note:
 - For unknown open TCP ports, `-s` may spend a few extra seconds sending lightweight generic probes (`GET`, `HELP`, `FEAT`, `CAPA`, IMAP capability) to identify moved services.
@@ -338,7 +345,7 @@ sudo gomap --random-ip --source-interface eth0 \
   -p 22,80,443 192.0.2.50
 ```
 
-GoMap records which addresses it added and removes only those addresses after the scan. Existing interface addresses are never removed. Partial setup failures are rolled back, and cleanup also runs for `Ctrl+C` and `SIGTERM`. `SIGKILL` cannot be intercepted by any process, so avoid terminating managed scans with `kill -9`.
+GoMap records successful address additions and attempts to remove them after the scan, on setup failure, or on `Ctrl+C` and `SIGTERM`. Cleanup waits for in-flight additions and reports removal errors. Pre-existing addresses are skipped during setup. Cleanup cannot be guaranteed after `SIGKILL`, a system crash, or concurrent external changes to the interface. Do not run overlapping managed pools on the same interface; verify interface state after an abnormal termination.
 
 The managed pool accepts at most 64 explicit addresses. Replace the documentation-only addresses above with addresses allocated to you and routed on that interface. GoMap cannot determine whether another device owns an address, so the operator remains responsible for preventing address conflicts. Managed source pools are intentionally unavailable for raw SYN scans; use the default connect scan or UDP mode.
 
@@ -352,7 +359,7 @@ Benchmark executed on **May 13, 2026** against an authorized Hack The Box lab ta
 
 - Scanner host: Kali Linux, kernel `6.19.14+kali-amd64`
 - Go toolchain: `go1.26.2 linux/amd64`
-- GoMap binary: local build from the current working tree
+- GoMap binary: historical local build used for the May 13 benchmark; the exact commit was not recorded
 - Target: `10.129.109.169` (private HTB lab address)
 - Profile: CONNECT scan with service/version detection
 - Quick profile command: `gomap -s 10.129.109.169`
@@ -432,6 +439,7 @@ Notes:
 ### Text (`--format text`, default)
 
 - Aligned table per host.
+- `--out` writes the report and summary to a file; progress messages may still appear on the terminal.
 - Optional `--details` adds `LAT(ms)`, `CONF`, `EVIDENCE`.
 - Final `Host Exposure Summary` with open ports, critical services, and exposure level.
 
@@ -445,13 +453,13 @@ Single report document with metadata:
 
 ### JSONL (`--format jsonl`)
 
-One JSON record per open port, suitable for streaming pipelines.
+One JSON record per open port, emitted after scanning completes. Consumers can process records line by line; this is not live result streaming.
 
 ### CSV (`--format csv`)
 
 One row per open port with columns:
 
-`host,port,state,service,version,tls,tls_version,tls_cipher,tls_alpn,tls_server_name,tls_issuer,latency_ms,confidence,evidence,detection_path`
+`host,port,state,service,version,hostname,tls,tls_version,tls_cipher,tls_alpn,tls_server_name,tls_issuer,latency_ms,confidence,evidence,detection_path`
 
 ## Responsible Use
 
