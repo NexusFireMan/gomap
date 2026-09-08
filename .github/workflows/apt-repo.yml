@@ -20,13 +20,15 @@ concurrency:
 jobs:
   publish:
     name: Publish APT Repository
-    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success')
     runs-on: ubuntu-latest
     env:
       PAGES_BASE_URL: https://nexusfireman.github.io/gomap
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: main
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
