@@ -439,11 +439,11 @@ func (s *Scanner) grabBanner(conn net.Conn, port int, result *ScanResult) {
 	mappedFTP := normalizeVersionProbeService(mappedService) == "ftp"
 
 	if !s.GhostMode && port == 3306 {
-		if version := detectMySQLHandshakeFromConn(conn, s.boundedServiceTimeout(1200*time.Millisecond, 2500*time.Millisecond)); version != "" {
+		if version, evidence := detectMySQLGreetingFromConn(conn, s.boundedServiceTimeout(1200*time.Millisecond, 2500*time.Millisecond)); version != "" {
 			result.ServiceName = "mysql"
 			result.Version = version
 			result.Confidence = "high"
-			result.Evidence = "mysql handshake"
+			result.Evidence = evidence
 			result.DetectionPath = "protocol-fingerprint"
 			return
 		}
@@ -477,7 +477,16 @@ func (s *Scanner) grabBanner(conn net.Conn, port int, result *ScanResult) {
 
 	// For HTTP ports, send active request first
 	if shouldParseAsHTTP(port) && !s.GhostMode {
-		banner = s.grabHTTPBanner(port)
+		var fp *tlsFingerprint
+		banner, fp = s.grabHTTPBannerWithTLS(port)
+		if fp != nil {
+			result.TLS = true
+			result.TLSVersion = fp.Version
+			result.TLSCipher = fp.Cipher
+			result.TLSALPN = fp.ALPN
+			result.TLSServerName = fp.SNI
+			result.TLSIssuer = fp.Issuer
+		}
 	}
 
 	if banner == "" && !s.GhostMode && s.DeepVersion && mappedFTP {
@@ -545,6 +554,14 @@ func (s *Scanner) grabBanner(conn net.Conn, port int, result *ScanResult) {
 	// If we still have no banner, use default service name
 	if banner == "" {
 		mappedService := s.PortManager.GetServiceName(port, "")
+		if result.TLS {
+			result.ServiceName = "tls"
+			result.Version = strings.TrimSpace(result.TLSVersion + " " + result.TLSCipher)
+			result.Confidence = "high"
+			result.Evidence = "tls handshake; no application banner"
+			result.DetectionPath = "tls-fingerprint"
+			return
+		}
 		if !s.GhostMode && shouldAttemptTLSFingerprint(port, mappedService) {
 			if fp, ok := s.detectTLSFingerprint(port); ok {
 				result.TLS = true
@@ -649,7 +666,10 @@ func (s *Scanner) grabBanner(conn net.Conn, port int, result *ScanResult) {
 				result.Evidence = "deep version probe (generic)"
 			}
 		}
-		if !s.GhostMode && shouldAttemptTLSFingerprint(port, result.ServiceName) {
+		if result.TLS && result.ServiceName == "http" {
+			result.ServiceName = "https"
+		}
+		if !result.TLS && !s.GhostMode && shouldAttemptTLSFingerprint(port, result.ServiceName) {
 			if fp, ok := s.detectTLSFingerprint(port); ok {
 				result.TLS = true
 				result.TLSVersion = fp.Version
@@ -815,6 +835,15 @@ func (s *Scanner) tryPassiveBanner(conn net.Conn) string {
 
 // grabHTTPBanner attempts to grab HTTP banner and all headers
 func (s *Scanner) grabHTTPBanner(port int) string {
+	banner, _ := s.grabHTTPBannerWithTLS(port)
+	return banner
+}
+
+func (s *Scanner) grabHTTPBannerWithTLS(port int) (string, *tlsFingerprint) {
+	return s.grabHTTPBannerTransport(port, shouldUseTLSForHTTP(port))
+}
+
+func (s *Scanner) grabHTTPBannerTransport(port int, useTLS bool) (string, *tlsFingerprint) {
 	address := net.JoinHostPort(s.Host, fmt.Sprintf("%d", port))
 	timeout := s.currentTimeout()
 	if timeout < 750*time.Millisecond {
@@ -823,34 +852,37 @@ func (s *Scanner) grabHTTPBanner(port int) string {
 
 	var conn net.Conn
 	var err error
+	var fp *tlsFingerprint
 
 	// Try TLS first on common HTTPS ports for realistic service/version discovery.
-	if shouldUseTLSForHTTP(port) {
+	if useTLS {
 		tlsConn, tlsErr := s.dialTLS(address, timeout, &tls.Config{
 			InsecureSkipVerify: true, // Banner grabbing only
 			ServerName:         s.Host,
 		})
 		if tlsErr == nil {
 			conn = tlsConn
+			state := tlsFingerprintFromState(tlsConn.ConnectionState(), s.Host)
+			fp = &state
 		}
 	}
 
 	if conn == nil {
 		conn, err = s.dialTCP(address, timeout)
 		if err != nil {
-			return ""
+			return "", nil
 		}
 	}
 	defer func() { _ = conn.Close() }()
 
 	if err := conn.SetDeadline(time.Now().Add(timeout)); err != nil {
-		return ""
+		return "", fp
 	}
 	if _, err := io.WriteString(conn, s.buildHTTPRequest("GET", "/")); err != nil {
-		return ""
+		return "", fp
 	}
 	data, _ := io.ReadAll(io.LimitReader(conn, 64*1024))
-	return string(data)
+	return string(data), fp
 }
 
 // tryServiceProbe sends minimal protocol-specific probes to improve detection when passive banners are absent
@@ -1087,6 +1119,9 @@ func normalizeVersionProbeService(serviceName string) string {
 }
 
 func evidenceFromBanner(banner string) string {
+	if evidence := httpBannerEvidence(banner); evidence != "" {
+		return evidence
+	}
 	for _, line := range strings.Split(banner, "\n") {
 		line = sanitizeVersionString(line)
 		if line == "" {
@@ -1561,13 +1596,34 @@ func parseDNSVersionBindResponse(data []byte) string {
 	return ""
 }
 
-func detectMySQLHandshakeFromConn(conn net.Conn, timeout time.Duration) string {
+func detectMySQLGreetingFromConn(conn net.Conn, timeout time.Duration) (string, string) {
 	_ = conn.SetReadDeadline(time.Now().Add(timeout))
 	buf, err := readMySQLPacket(conn)
 	if err != nil {
-		return ""
+		return "", ""
 	}
-	return parseMySQLHandshakePacket(buf)
+	return parseMySQLInitialPacket(buf)
+}
+
+func parseMySQLInitialPacket(packet []byte) (string, string) {
+	if version := parseMySQLHandshakePacket(packet); version != "" {
+		return version, "mysql handshake: " + version
+	}
+	if len(packet) < 8 || packet[3] != 0 || packet[4] != 0xff || mysqlPayloadLength(packet) != len(packet)-4 {
+		return "", ""
+	}
+	message := packet[7:]
+	if message[0] == '#' {
+		if len(message) < 7 {
+			return "", ""
+		}
+		message = message[6:]
+	}
+	text := sanitizeVersionString(string(message))
+	if text == "" {
+		return "", ""
+	}
+	return "MySQL (connection rejected)", fmt.Sprintf("MySQL ERR %d: %s", binary.LittleEndian.Uint16(packet[5:7]), text)
 }
 
 func parseMySQLHandshakePacket(packet []byte) string {
@@ -1859,7 +1915,7 @@ func (s *Scanner) detectSMBVersion(port int) (string, string) {
 
 func shouldUseTLSForHTTP(port int) bool {
 	switch port {
-	case 443, 5986, 6443, 7443, 8443, 9443:
+	case 443, 5986, 6443, 7443, 8181, 8443, 9443:
 		return true
 	default:
 		return false

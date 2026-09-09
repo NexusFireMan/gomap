@@ -307,6 +307,8 @@ When `-s` is enabled, gomap combines port-based hints and protocol/banner parsin
 - SMB probes use bounded native connections; an unanswered negotiation produces a generic service hint rather than an OS assertion.
 - Native SMB negotiation reports an offered dialect (SMB 2.0.2 through 3.0.2), not the server's highest supported dialect or its operating system. Port 139 remains a low-confidence hint when no NetBIOS session is established.
 - TLS handshake metadata where applicable (`tls_version`, `tls_cipher`, ALPN, certificate issuer).
+- HTTPS probing includes TCP/8181 and reuses the successful HTTP TLS handshake metadata. Elasticsearch root JSON is checked before generic HTTP identification.
+- Deep HTTP evidence includes available `Server` and `Location` headers; redirects are reported, not followed. MySQL rejection packets expose their error code/message without inventing a server version.
 - Generic active probes for open ports without a known port mapping, useful when services run on non-standard ports.
 
 `-Dv` enables the same service/version output as `-s`, shows a compact evidence column in text output, and adds a bounded deep-version pass for open ports whose first result is generic, weak, or empty. It is intended as GoMap's fast native version-detection profile for authorized lab/internal reconnaissance: more focused than the default `-s`, but still controlled so it does not turn a quick scan into a long script scan.
@@ -315,6 +317,7 @@ Important: banner-based detection is heuristic. Always validate critical finding
 
 Operational limits:
 - Service names inferred only from ports do not prove a product or operating system. A missing banner may reflect filtering, a silent service, or a timeout.
+- Repeated unauthenticated connections can trigger server-side connection-error limits. MySQL errors such as 1129 (blocked host) and 1130 (host denied) are reported; GoMap does not authenticate or reset server limits automatically.
 - `--rate` limits port-scan scheduling per host; it is not a global limit for discovery, retries, or additional service probes.
 - Raw SYN discovery and privileged interface changes require separate lab validation.
 - MySQL, DNS/TCP, ONC RPC, AJP and SMB reads handle fragmented frames with bounded buffers. HTTP banner collection is limited to 64 KiB; other text and binary probes still need broader fragmentation testing.

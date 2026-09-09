@@ -23,6 +23,8 @@ Note: this changelog is maintained from this point forward in the project histor
 - Detected hostnames now appear in all text service-detection tables, not only in the `-Dv` evidence view.
 
 ### Fixed
+- Preserve native MySQL rejection codes/messages instead of reporting a missing greeting; identify HTTPS on TCP/8181 and reuse HTTP TLS metadata without a second handshake.
+- Identify Elasticsearch root JSON before generic HTTP parsing, including chunked responses; show HTTP Server/Location headers and JSON version evidence in deep output without following redirects.
 - Bound HTTP banner collection to 64 KiB and handle fragmented MySQL, DNS/TCP, ONC RPC, AJP and SMB frames; reject incomplete MySQL greetings and invalid RPC verifier lengths.
 - Correct AJP CPONG magic and native SMB negotiation framing/dialect offsets; avoid treating unconfirmed SMB/RPC port hints as high-confidence protocol evidence.
 - Validate SYN response source addresses, acknowledgements and TCP header lengths; avoid mistaking TCP port bytes for an IPv4 header.

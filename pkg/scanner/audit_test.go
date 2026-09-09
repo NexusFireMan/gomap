@@ -216,10 +216,12 @@ func BenchmarkDiscoveryWorkers(b *testing.B) {
 }
 
 func FuzzBinaryParsers(f *testing.F) {
+	f.Add(mysqlErrorFixture("Host 'fixture' is not allowed"))
 	f.Add(mysqlFixture())
 	f.Add([]byte{0xff, 0xff, 0xff, 0xff})
 	f.Fuzz(func(t *testing.T, data []byte) {
 		_ = parseMySQLHandshakePacket(data)
+		_, _ = parseMySQLInitialPacket(data)
 		_, _ = parseONCRPCReply(data, 123)
 		_ = parseDNSVersionBindResponse(data)
 		_, _, _ = parseTCPResponsePacket(data)

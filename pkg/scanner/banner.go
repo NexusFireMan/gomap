@@ -11,6 +11,9 @@ import (
 func parseBanner(banner string) (service, version string) {
 	// First check if it's HTTP - we need full banner for this
 	if strings.Contains(banner, "HTTP/") {
+		if s, v := parseSearchHTTP(banner); s != "" {
+			return s, v
+		}
 		if s, v := parseHTTP(banner); s != "" {
 			return s, v
 		}
