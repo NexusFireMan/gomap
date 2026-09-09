@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	out "github.com/NexusFireMan/gomap/v2/pkg/output"
 )
@@ -144,6 +145,9 @@ func normalizeOptions(opts CLIOptions) (CLIOptions, error) {
 	if opts.JSONFlag && opts.CSVFlag {
 		return opts, errors.New("choose only one machine output format: --json or --csv")
 	}
+	if opts.TopPorts < 0 {
+		return opts, errors.New("--top must be a positive number")
+	}
 	if opts.TopPortsAlias < 0 {
 		return opts, errors.New("--top-ports must be a positive number")
 	}
@@ -162,9 +166,6 @@ func normalizeOptions(opts CLIOptions) (CLIOptions, error) {
 	}
 	if opts.UDPFlag && opts.ScanType == "syn" {
 		return opts, errors.New("-u cannot be combined with --scan-type syn")
-	}
-	if opts.TopPorts < 0 {
-		return opts, errors.New("--top must be a positive number")
 	}
 	if opts.Rate < 0 {
 		return opts, errors.New("--rate cannot be negative")
@@ -186,6 +187,12 @@ func normalizeOptions(opts CLIOptions) (CLIOptions, error) {
 	}
 	if opts.MaxTimeoutMS < 0 {
 		return opts, errors.New("--max-timeout cannot be negative")
+	}
+	const maxMilliseconds = int64((1<<63 - 1) / time.Millisecond)
+	for name, value := range map[string]int{"timeout": opts.TimeoutMS, "max-timeout": opts.MaxTimeoutMS, "backoff-ms": opts.BackoffMS} {
+		if int64(value) > maxMilliseconds {
+			return opts, fmt.Errorf("--%s exceeds the supported duration", name)
+		}
 	}
 	if opts.OutPath != "" && strings.TrimSpace(opts.OutPath) == "" {
 		return opts, errors.New("invalid --out file path")

@@ -77,14 +77,12 @@ func TestParseTCPResponsePacketTCPOnly(t *testing.T) {
 	}
 }
 
-func TestParseTCPResponsePacketIPv4PlusTCP(t *testing.T) {
+func TestParseTCPResponsePacketDoesNotGuessIPHeaderFromPort(t *testing.T) {
 	pkt := make([]byte, 40)
-	pkt[0] = (4 << 4) | 5 // IPv4 + IHL=20 bytes
-	pkt[9] = 6            // TCP
-	binary.BigEndian.PutUint16(pkt[20:22], 5985)
-	binary.BigEndian.PutUint16(pkt[22:24], 40123)
-	pkt[32] = 5 << 4
-	pkt[33] = tcpFlagRst | tcpFlagAck
+	binary.BigEndian.PutUint16(pkt[0:2], 0x4500)
+	binary.BigEndian.PutUint16(pkt[2:4], 40123)
+	pkt[12] = 10 << 4
+	pkt[13] = tcpFlagRst | tcpFlagAck
 
 	resp, ok, err := parseTCPResponsePacket(pkt)
 	if err != nil {
@@ -93,7 +91,7 @@ func TestParseTCPResponsePacketIPv4PlusTCP(t *testing.T) {
 	if !ok {
 		t.Fatal("expected packet to be parsed")
 	}
-	if resp.srcPort != 5985 || resp.dstPort != 40123 {
+	if resp.srcPort != 0x4500 || resp.dstPort != 40123 {
 		t.Fatalf("unexpected ports: %+v", resp)
 	}
 	if resp.flags != (tcpFlagRst | tcpFlagAck) {

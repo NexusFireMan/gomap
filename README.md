@@ -15,7 +15,7 @@
 
 [![CI](https://github.com/NexusFireMan/gomap/actions/workflows/ci.yml/badge.svg)](https://github.com/NexusFireMan/gomap/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/NexusFireMan/gomap?display_name=tag)](https://github.com/NexusFireMan/gomap/releases)
-[![Go](https://img.shields.io/badge/Go-1.24%2B-00ADD8?logo=go&logoColor=white)](https://go.dev/)
+[![Go](https://img.shields.io/badge/Go-1.26.8%2B-00ADD8?logo=go&logoColor=white)](https://go.dev/)
 [![Docker](https://img.shields.io/badge/Docker-GHCR-2496ED?logo=docker&logoColor=white)](https://github.com/NexusFireMan/gomap/pkgs/container/gomap)
 [![CLI](https://img.shields.io/badge/Interface-CLI-2C2C2C)](https://github.com/NexusFireMan/gomap)
 [![License](https://img.shields.io/github/license/NexusFireMan/gomap)](https://github.com/NexusFireMan/gomap/blob/main/LICENSE)
@@ -65,6 +65,8 @@ A fast TCP/UDP port scanner written in Go, with optional service/version detecti
 ## Installation
 
 ### Build from source
+
+Use Go 1.26.8 or newer. CI and release builds follow `go.mod`; the Docker builder uses the same baseline to avoid shipping older standard-library security defects.
 
 ```bash
 git clone https://github.com/NexusFireMan/gomap.git
@@ -303,6 +305,7 @@ When `-s` is enabled, gomap combines port-based hints and protocol/banner parsin
 - SSH/FTP/PostgreSQL/Redis/MySQL and other protocol banners.
 - SMB-oriented identification for `microsoft-ds` targets.
 - SMB probes use bounded native connections; an unanswered negotiation produces a generic service hint rather than an OS assertion.
+- Native SMB negotiation reports an offered dialect (SMB 2.0.2 through 3.0.2), not the server's highest supported dialect or its operating system. Port 139 remains a low-confidence hint when no NetBIOS session is established.
 - TLS handshake metadata where applicable (`tls_version`, `tls_cipher`, ALPN, certificate issuer).
 - Generic active probes for open ports without a known port mapping, useful when services run on non-standard ports.
 
@@ -313,7 +316,9 @@ Important: banner-based detection is heuristic. Always validate critical finding
 Operational limits:
 - Service names inferred only from ports do not prove a product or operating system. A missing banner may reflect filtering, a silent service, or a timeout.
 - `--rate` limits port-scan scheduling per host; it is not a global limit for discovery, retries, or additional service probes.
-- Protocol detection still needs broader coverage for fragmented TCP responses. Raw SYN discovery and privileged interface changes require separate lab validation.
+- Raw SYN discovery and privileged interface changes require separate lab validation.
+- MySQL, DNS/TCP, ONC RPC, AJP and SMB reads handle fragmented frames with bounded buffers. HTTP banner collection is limited to 64 KiB; other text and binary probes still need broader fragmentation testing.
+- Duplicate targets and ports are scanned once. CIDR discovery uses a bounded worker pool and preserves target order, including when applying `--max-hosts` afterward.
 - IPv4 CIDRs omit network/broadcast addresses except for /31 and /32; IPv6 ranges preserve endpoints. Expansion is limited to 65,536 addresses per CIDR.
 
 Non-standard port note:

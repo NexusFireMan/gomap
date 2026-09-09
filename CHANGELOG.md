@@ -14,6 +14,7 @@ Note: this changelog is maintained from this point forward in the project histor
 - Added Windows hostname reporting for `-Dv` when native probes expose a reliable host name, such as the RDP certificate common name.
 
 ### Changed
+- Require Go 1.26.8 for source, CI and release builds and align the Docker builder; Go 1.24.9 exposed reachable standard-library vulnerability advisories during the core audit.
 - Adopt protected `dev` integration and merge-commit promotion into `main`, with CI on both branches. Replace Release Please with explicit maintainer tags; retain binary, GHCR, and APT publishing with main-branch release checks.
 - Source-IP rotation can now use an explicit temporary pool instead of requiring administrators to add and remove every interface alias manually.
 - Clarified the difference between real socket source binding and the backward-compatible HTTP header behavior of `--random-ip`.
@@ -22,6 +23,13 @@ Note: this changelog is maintained from this point forward in the project histor
 - Detected hostnames now appear in all text service-detection tables, not only in the `-Dv` evidence view.
 
 ### Fixed
+- Bound HTTP banner collection to 64 KiB and handle fragmented MySQL, DNS/TCP, ONC RPC, AJP and SMB frames; reject incomplete MySQL greetings and invalid RPC verifier lengths.
+- Correct AJP CPONG magic and native SMB negotiation framing/dialect offsets; avoid treating unconfirmed SMB/RPC port hints as high-confidence protocol evidence.
+- Validate SYN response source addresses, acknowledgements and TCP header lengths; avoid mistaking TCP port bytes for an IPv4 header.
+- Deduplicate targets and port specifications, support mixed port lists/ranges, bound discovery worker creation and preserve discovery order.
+- Neutralize remote terminal control characters and align colored detail columns; parse HTTP Server headers case-insensitively without reading them from the response body.
+- Use unique temporary files for unprivileged atomic binary replacement and reject CLI duration overflow and negative top-port aliases.
+- Reuse compiled SSH parser expressions, with deterministic regression, fuzz and microbenchmark coverage for core audit findings.
 - Restrict Git self-updates to the GoMap module root on a clean `main` branch and use fast-forward-only pulls; align release automation with the published v2.4.8 baseline.
 - Exclude local agent instructions and environment files from Docker build contexts; send CLI scan errors to stderr.
 - Remove the legacy SMB library fallback, whose unbounded connections could hang or leak on negotiation errors; retain bounded native probes and generic fallback results.

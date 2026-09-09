@@ -6,8 +6,43 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 )
+
+func TestAtomicReplaceDoesNotFollowPredictableTempSymlink(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink privilege varies on Windows")
+	}
+	dir := t.TempDir()
+	src, dst, victim := filepath.Join(dir, "source"), filepath.Join(dir, "gomap"), filepath.Join(dir, "victim")
+	for path, data := range map[string]string{src: "new binary", dst: "old binary", victim: "keep"} {
+		if err := os.WriteFile(path, []byte(data), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.Symlink(victim, dst+".new"); err != nil {
+		t.Fatal(err)
+	}
+	if err := replaceBinaryAtomically(src, dst); err != nil {
+		t.Fatal(err)
+	}
+	for path, want := range map[string]string{dst: "new binary", victim: "keep"} {
+		got, err := os.ReadFile(path)
+		if err != nil || string(got) != want {
+			t.Fatalf("%s: %q %v", path, got, err)
+		}
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range entries {
+		if strings.HasPrefix(entry.Name(), ".gomap-update-") {
+			t.Fatal("temporary file leaked")
+		}
+	}
+}
 
 func TestGitUpdateOnlyRecognizesGoMapRoot(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {

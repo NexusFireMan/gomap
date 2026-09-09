@@ -1,14 +1,15 @@
 package scanner
 
 import (
+	cryptorand "crypto/rand"
 	"crypto/tls"
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"io"
 	"math/rand/v2"
 	"net"
 	"net/netip"
-	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -137,13 +138,15 @@ func (s *Scanner) Configure(cfg ScanConfig) {
 
 // Scan performs the port scanning operation
 func (s *Scanner) Scan(ports []int, detectServices bool) []ScanResult {
+	ports = uniquePortsOrdered(ports)
 	if s.GhostMode {
 		rand.Shuffle(len(ports), func(i, j int) {
 			ports[i], ports[j] = ports[j], ports[i]
 		})
 	}
 
-	portsChan := make(chan int, s.NumWorkers)
+	workers := max(1, min(s.NumWorkers, len(ports)))
+	portsChan := make(chan int, workers)
 	resultsChan := make(chan ScanResult, len(ports))
 	var rateLimiter <-chan time.Time
 	if s.Rate > 0 {
@@ -157,7 +160,7 @@ func (s *Scanner) Scan(ports []int, detectServices bool) []ScanResult {
 	}
 	var wg sync.WaitGroup
 
-	for i := 0; i < s.NumWorkers; i++ {
+	for i := 0; i < workers; i++ {
 		wg.Add(1)
 		go func(workerID int) {
 			defer wg.Done()
@@ -368,6 +371,9 @@ func mergeOpenResult(a, b ScanResult) ScanResult {
 	if b.Version != "" {
 		out.Version = b.Version
 	}
+	if b.Hostname != "" {
+		out.Hostname = b.Hostname
+	}
 	if b.Confidence != "" {
 		out.Confidence = b.Confidence
 	}
@@ -528,6 +534,9 @@ func (s *Scanner) grabBanner(conn net.Conn, port int, result *ScanResult) {
 			result.Version = smbInfo
 			result.Confidence = "high"
 			result.Evidence = method
+			if method != "raw smb negotiate" {
+				result.Confidence = "low"
+			}
 			result.DetectionPath = "smb-specialized"
 			return
 		}
@@ -558,8 +567,8 @@ func (s *Scanner) grabBanner(conn net.Conn, port int, result *ScanResult) {
 		result.ServiceName = mappedService
 		if result.ServiceName == "msrpc" {
 			result.Version = "Microsoft Windows RPC"
-			result.Confidence = "medium"
-			result.Evidence = "DCE/RPC Endpoint Mapper on tcp/135"
+			result.Confidence = "low"
+			result.Evidence = fmt.Sprintf("port map on tcp/%d; no DCE/RPC response", port)
 			result.DetectionPath = "portmap+heuristic"
 			return
 		}
@@ -834,23 +843,14 @@ func (s *Scanner) grabHTTPBanner(port int) string {
 	}
 	defer func() { _ = conn.Close() }()
 
-	_, _ = conn.Write([]byte(s.buildHTTPRequest("GET", "/")))
-	_ = conn.SetReadDeadline(time.Now().Add(timeout))
-
-	var allData strings.Builder
-	buffer := make([]byte, 1024)
-
-	for {
-		n, err := conn.Read(buffer)
-		if err != nil {
-			break
-		}
-		if n > 0 {
-			allData.Write(buffer[:n])
-		}
+	if err := conn.SetDeadline(time.Now().Add(timeout)); err != nil {
+		return ""
 	}
-
-	return allData.String()
+	if _, err := io.WriteString(conn, s.buildHTTPRequest("GET", "/")); err != nil {
+		return ""
+	}
+	data, _ := io.ReadAll(io.LimitReader(conn, 64*1024))
+	return string(data)
 }
 
 // tryServiceProbe sends minimal protocol-specific probes to improve detection when passive banners are absent
@@ -1369,12 +1369,11 @@ func (s *Scanner) oncRPCNullCall(port int, program, version uint32) (accepted, r
 		return false, false
 	}
 
-	buf := make([]byte, 512)
-	n, err := conn.Read(buf)
-	if err != nil || n < 28 {
+	buf, err := readRPCRecord(conn)
+	if err != nil {
 		return false, false
 	}
-	return parseONCRPCReply(buf[:n], xid)
+	return parseONCRPCReply(buf, xid)
 }
 
 func buildONCRPCNullCall(xid, program, version uint32) []byte {
@@ -1400,7 +1399,7 @@ func parseONCRPCReply(data []byte, xid uint32) (accepted, valid bool) {
 	if len(data) < 28 {
 		return false, false
 	}
-	if binary.BigEndian.Uint32(data[0:4])&0x7fffffff == 0 {
+	if binary.BigEndian.Uint32(data[0:4]) != uint32(len(data)-4)|0x80000000 {
 		return false, false
 	}
 	payload := data[4:]
@@ -1417,7 +1416,11 @@ func parseONCRPCReply(data []byte, xid uint32) (accepted, valid bool) {
 		return false, true
 	}
 
-	verifierLen := int(binary.BigEndian.Uint32(payload[16:20]))
+	verifierSize := binary.BigEndian.Uint32(payload[16:20])
+	if uint64(verifierSize) > uint64(len(payload)-24) {
+		return false, false
+	}
+	verifierLen := int(verifierSize)
 	acceptOffset := 20 + roundUp4(verifierLen)
 	if acceptOffset+4 > len(payload) {
 		return false, false
@@ -1448,16 +1451,12 @@ func (s *Scanner) detectAJP(port int) bool {
 	// AJP13 CPING packet: 0x1234 + len=1 + payload=0x0a
 	cping := []byte{0x12, 0x34, 0x00, 0x01, 0x0a}
 	_ = conn.SetDeadline(time.Now().Add(timeout))
-	_, _ = conn.Write(cping)
-
-	buf := make([]byte, 32)
-	n, err := conn.Read(buf)
-	if err != nil || n < 5 {
+	if _, err := conn.Write(cping); err != nil {
 		return false
 	}
-
-	// Expected CPONG response payload 0x09 with AJP magic.
-	return buf[0] == 0x12 && buf[1] == 0x34 && buf[4] == 0x09
+	buf := make([]byte, 5)
+	_, err = io.ReadFull(conn, buf)
+	return err == nil && string(buf) == "AB\x00\x01\x09"
 }
 
 func (s *Scanner) probeAJP(port int) string {
@@ -1486,12 +1485,11 @@ func (s *Scanner) detectDNSVersionTCP(port int) string {
 		return ""
 	}
 
-	buf := make([]byte, 512)
-	n, err := conn.Read(buf)
-	if err != nil || n < 14 {
+	buf, err := readDNSMessage(conn)
+	if err != nil {
 		return ""
 	}
-	return parseDNSVersionBindResponse(buf[:n])
+	return parseDNSVersionBindResponse(buf)
 }
 
 func buildDNSVersionBindQuery() []byte {
@@ -1565,25 +1563,23 @@ func parseDNSVersionBindResponse(data []byte) string {
 
 func detectMySQLHandshakeFromConn(conn net.Conn, timeout time.Duration) string {
 	_ = conn.SetReadDeadline(time.Now().Add(timeout))
-	buf := make([]byte, 512)
-	n, err := conn.Read(buf)
-	if err != nil || n < 7 {
+	buf, err := readMySQLPacket(conn)
+	if err != nil {
 		return ""
 	}
-
-	return parseMySQLHandshakePacket(buf[:n])
+	return parseMySQLHandshakePacket(buf)
 }
 
 func parseMySQLHandshakePacket(packet []byte) string {
 	// MySQL packet: [3-byte len][1-byte seq][protocol=0x0a][version string...]
-	if len(packet) < 7 || packet[4] != 0x0a {
+	if len(packet) < 7 || packet[3] != 0 || packet[4] != 0x0a || mysqlPayloadLength(packet) != len(packet)-4 {
 		return ""
 	}
 
 	payload := string(packet[5:])
 	end := strings.IndexByte(payload, 0x00)
 	if end <= 0 {
-		return "MySQL"
+		return ""
 	}
 	v := payload[:end]
 	if strings.Contains(strings.ToLower(v), "mariadb") {
@@ -1849,15 +1845,15 @@ func winRMVersionFromServerHeader(server string) string {
 
 // detectSMBVersion attempts to detect SMB version through multiple methods
 func (s *Scanner) detectSMBVersion(port int) (string, string) {
+	if port == 139 {
+		return "NetBIOS session service (unconfirmed)", "port map on tcp/139; no SMB session established"
+	}
 	address := net.JoinHostPort(s.Host, fmt.Sprintf("%d", port))
 
 	if rawSMB := s.attemptRawSMBDetection(address); rawSMB != "" {
 		return rawSMB, "raw smb negotiate"
 	}
 
-	if port == 139 {
-		return "Microsoft Windows netbios-ssn", "NetBIOS session service on tcp/139"
-	}
 	return "SMB service", "SMB negotiate attempted; no dialect returned"
 }
 
@@ -1878,81 +1874,44 @@ func (s *Scanner) attemptRawSMBDetection(address string) string {
 	}
 	defer func() { _ = conn.Close() }()
 
-	// Send SMB2 negotiate request (SMB2 protocol)
-	// This will trigger SMB servers to respond with their capabilities
-	smbNegotiate := []byte{
-		0x00, 0x00, 0x00, 0x54, // Length
-		0xFF, 0x53, 0x4D, 0x42, // SMB signature
-		0x00, 0x00, 0x00, 0x00, // Reserved
-		0x00, 0x00, 0x00, 0x00, // Flags
-		0x00, 0x00, 0x00, 0x00, // Flags2
-		0x00, 0x00, 0x00, 0x00, // PIDHigh
-		0x00, 0x00, 0x00, 0x00, // Signature
-		0x00, 0x00, 0x00, 0x00, // Reserved
-		0x00, 0x00, // TreeID
-		0x00, 0x00, // ProcessID
-		0x00, 0x00, // UserID
-		0x00, 0x00, // MultiplexID
-		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	_ = conn.SetDeadline(time.Now().Add(s.Timeout))
+	if _, err := conn.Write(buildSMBNegotiate()); err != nil {
+		return ""
 	}
-
-	_ = conn.SetWriteDeadline(time.Now().Add(s.Timeout))
-	_, _ = conn.Write(smbNegotiate)
-
-	_ = conn.SetReadDeadline(time.Now().Add(s.Timeout))
-	buffer := make([]byte, 2048)
-	n, err := conn.Read(buffer)
-
-	if err == nil && n > 0 {
-		return s.analyzeSMBResponse(buffer[:n])
+	header := make([]byte, 4)
+	if _, err := io.ReadFull(conn, header); err != nil || header[0] != 0 {
+		return ""
 	}
-
-	return ""
+	frame, err := readFrameBody(conn, header, int(binary.BigEndian.Uint32(header)), 64*1024)
+	if err != nil {
+		return ""
+	}
+	return s.analyzeSMBResponse(frame[4:])
 }
 
-// analyzeSMBResponse analyzes the SMB server response for version and OS info
+func buildSMBNegotiate() []byte {
+	// SMB 3.1.1 requires negotiate contexts; offer only dialects supported by this probe.
+	dialects := []uint16{0x0202, 0x0210, 0x0300, 0x0302}
+	packet := make([]byte, 4+64+36+2*len(dialects))
+	binary.BigEndian.PutUint32(packet, uint32(len(packet)-4))
+	copy(packet[4:], "\xfeSMB")
+	binary.LittleEndian.PutUint16(packet[8:], 64)
+	binary.LittleEndian.PutUint16(packet[18:], 1) // Credit request.
+	body := packet[68:]
+	binary.LittleEndian.PutUint16(body, 36)
+	binary.LittleEndian.PutUint16(body[2:], uint16(len(dialects)))
+	binary.LittleEndian.PutUint16(body[4:], 1) // Signing enabled.
+	_, _ = cryptorand.Read(body[12:28])
+	for i, dialect := range dialects {
+		binary.LittleEndian.PutUint16(body[36+2*i:], dialect)
+	}
+	return packet
+}
+
+// analyzeSMBResponse validates the protocol before interpreting a negotiated dialect.
 func (s *Scanner) analyzeSMBResponse(data []byte) string {
 	if len(data) < 4 {
 		return ""
-	}
-
-	lowerData := strings.ToLower(string(data))
-
-	// Look for version strings in the response
-	if strings.Contains(lowerData, "samba") {
-		// Extract Samba version
-		sambaRegex := regexp.MustCompile(`(?i)samba\s+smbd?\s+([\d\.]+)`)
-		if match := sambaRegex.FindStringSubmatch(string(data)); match != nil {
-			return "Samba " + match[1]
-		}
-		// Generic Samba detection
-		if strings.Contains(lowerData, "3.") {
-			return "Samba 3.X"
-		} else if strings.Contains(lowerData, "4.") {
-			return "Samba 4.X"
-		}
-		return "Samba"
-	}
-
-	// Windows version detection from server string
-	if strings.Contains(lowerData, "windows") {
-		if strings.Contains(lowerData, "2008 r2") || strings.Contains(lowerData, "2008r2") {
-			return "Windows Server 2008 R2"
-		} else if strings.Contains(lowerData, "2008") {
-			return "Windows Server 2008"
-		} else if strings.Contains(lowerData, "2012 r2") || strings.Contains(lowerData, "2012r2") {
-			return "Windows Server 2012 R2"
-		} else if strings.Contains(lowerData, "2012") {
-			return "Windows Server 2012"
-		} else if strings.Contains(lowerData, "2016") {
-			return "Windows Server 2016"
-		} else if strings.Contains(lowerData, "2019") {
-			return "Windows Server 2019"
-		} else if strings.Contains(lowerData, "windows 10") {
-			return "Windows 10"
-		} else if strings.Contains(lowerData, "windows 7") {
-			return "Windows 7"
-		}
 	}
 
 	// Check for SMB2/3 signature (0xFE + "SMB")
@@ -1962,14 +1921,12 @@ func (s *Scanner) analyzeSMBResponse(data []byte) string {
 	b3 := data[3]
 
 	if b0 == 0xFE && b1 == 0x53 && b2 == 0x4D && b3 == 0x42 {
-		if len(data) >= 38 {
-			return s.extractSMB2Dialect(data)
-		}
-		return "SMB 2.0+"
+		return s.extractSMB2Dialect(data)
 	}
 
 	// Check for SMB1 signature (0xFF + "SMB")
-	if b0 == 0xFF && b1 == 0x53 && b2 == 0x4D && b3 == 0x42 {
+	if b0 == 0xFF && b1 == 0x53 && b2 == 0x4D && b3 == 0x42 && len(data) >= 35 &&
+		data[4] == 0x72 && data[9]&0x80 != 0 && binary.LittleEndian.Uint32(data[5:9]) == 0 {
 		return "SMB 1.0 (legacy)"
 	}
 
@@ -1978,12 +1935,14 @@ func (s *Scanner) analyzeSMBResponse(data []byte) string {
 
 // extractSMB2Dialect detects specific SMB2/3 dialect
 func (s *Scanner) extractSMB2Dialect(data []byte) string {
-	if len(data) < 38 {
-		return "SMB 2.0+"
+	if len(data) < 128 || binary.LittleEndian.Uint16(data[4:6]) != 64 ||
+		binary.LittleEndian.Uint32(data[8:12]) != 0 || binary.LittleEndian.Uint16(data[12:14]) != 0 ||
+		binary.LittleEndian.Uint32(data[16:20])&1 == 0 || binary.LittleEndian.Uint16(data[64:66]) != 65 {
+		return ""
 	}
 
-	// Dialect revision at offset 36-37 (little endian)
-	dialectRevision := uint16(data[36]) | (uint16(data[37]) << 8)
+	// DialectRevision follows the 64-byte SMB2 header and four response body bytes.
+	dialectRevision := binary.LittleEndian.Uint16(data[68:70])
 
 	switch dialectRevision {
 	case 0x0202:
@@ -1994,17 +1953,8 @@ func (s *Scanner) extractSMB2Dialect(data []byte) string {
 		return "SMB 3.0"
 	case 0x0302:
 		return "SMB 3.0.2"
-	case 0x0310:
-		return "SMB 3.1.0"
-	case 0x0311:
-		return "SMB 3.1.1"
-	default:
-		if dialectRevision >= 0x0202 && dialectRevision <= 0x0311 {
-			return fmt.Sprintf("SMB %d.%d", (dialectRevision >> 8), (dialectRevision & 0xFF))
-		}
 	}
-
-	return "SMB 2.0+"
+	return ""
 }
 
 func (s *Scanner) buildHTTPRequest(method, path string) string {
