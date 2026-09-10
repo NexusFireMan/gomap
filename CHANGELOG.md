@@ -23,6 +23,7 @@ Note: this changelog is maintained from this point forward in the project histor
 - Detected hostnames now appear in all text service-detection tables, not only in the `-Dv` evidence view.
 
 ### Fixed
+- Preserve text banner bytes returned together with EOF or read errors, avoid repeating failed protocol fingerprint probes for unparsed banners, and retain the evidence that supplied an enriched version.
 - Preserve CONNECT diagnostics (refusals, unresolved ports, recovered ports, attempts and last errors) in JSON; warn on inconclusive discovery and mark text exposure as indeterminate instead of implying missing ports are closed. JSONL/CSV retain open-port rows and emit warnings on stderr.
 - Bound configured CONNECT retry concurrency to eight (or fewer when workers are lower) and share the per-host rate limiter with initial attempts; reuse the successful connection for banner detection.
 - Let the first requested TCP connection attempt finish before releasing the remaining CONNECT workers, avoiding an immediate cold-path connection burst without extra probes or waiting for service banners. Configured retries now apply only to transient connection errors, not explicit refusals or permission errors.

@@ -696,6 +696,7 @@ func (s *Scanner) grabBanner(conn net.Conn, port int, result *ScanResult) {
 				serviceName = ftpService
 				if ftpVersion != "" && (version == "" || !isWeakFTPVersion(ftpVersion)) {
 					version = ftpVersion
+					banner = ftpBanner
 				}
 			}
 		}
@@ -707,6 +708,7 @@ func (s *Scanner) grabBanner(conn net.Conn, port int, result *ScanResult) {
 				serviceName = deepService
 				if deepVersion != "" && (version == "" || isWeakVersion(version)) {
 					version = deepVersion
+					banner = deepBanner
 				}
 			}
 		}
@@ -793,16 +795,6 @@ func (s *Scanner) grabBanner(conn net.Conn, port int, result *ScanResult) {
 				}
 			}
 		}
-		if !s.GhostMode {
-			if service, ver, confidence, evidence, path, ok := s.tryProtocolFingerprint(port); ok {
-				result.ServiceName = service
-				result.Version = ver
-				result.Confidence = confidence
-				result.Evidence = evidence
-				result.DetectionPath = path
-				return
-			}
-		}
 		result.ServiceName = s.PortManager.GetServiceName(port, "")
 		if result.ServiceName != "" {
 			result.Confidence = "low"
@@ -853,8 +845,8 @@ func (s *Scanner) probeTextServiceOnConn(conn net.Conn, payload string) string {
 		return ""
 	}
 	buf := make([]byte, 4096)
-	n, err := conn.Read(buf)
-	if err != nil || n == 0 {
+	n, _ := conn.Read(buf)
+	if n == 0 {
 		return ""
 	}
 	return string(buf[:n])
@@ -912,8 +904,8 @@ func (s *Scanner) tryPassiveBanner(conn net.Conn) string {
 		passiveTimeout = 900 * time.Millisecond
 	}
 	_ = conn.SetReadDeadline(time.Now().Add(passiveTimeout))
-	n, err := conn.Read(buffer)
-	if err == nil && n > 0 {
+	n, _ := conn.Read(buffer)
+	if n > 0 {
 		return string(buffer[:n])
 	}
 	return ""
@@ -1037,7 +1029,7 @@ func (s *Scanner) probeFTP(port int) string {
 	buf := make([]byte, 2048)
 	var response strings.Builder
 
-	if n, err := conn.Read(buf); err == nil && n > 0 {
+	if n, _ := conn.Read(buf); n > 0 {
 		response.Write(buf[:n])
 		response.WriteByte('\n')
 	}
@@ -1047,7 +1039,7 @@ func (s *Scanner) probeFTP(port int) string {
 		if _, err := conn.Write([]byte(payload)); err != nil {
 			break
 		}
-		if n, err := conn.Read(buf); err == nil && n > 0 {
+		if n, _ := conn.Read(buf); n > 0 {
 			response.Write(buf[:n])
 			response.WriteByte('\n')
 		}
@@ -1080,14 +1072,14 @@ func (s *Scanner) probeMailService(port int, payload string, useTLS bool) string
 	var response strings.Builder
 	buf := make([]byte, 4096)
 
-	if n, err := conn.Read(buf); err == nil && n > 0 {
+	if n, _ := conn.Read(buf); n > 0 {
 		response.Write(buf[:n])
 		response.WriteByte('\n')
 	}
 
 	if payload != "" {
 		_, _ = conn.Write([]byte(payload))
-		if n, err := conn.Read(buf); err == nil && n > 0 {
+		if n, _ := conn.Read(buf); n > 0 {
 			response.Write(buf[:n])
 			response.WriteByte('\n')
 		}
@@ -1263,14 +1255,14 @@ func (s *Scanner) probeTextService(port int, payload string) string {
 	buf := make([]byte, 2048)
 
 	// Read initial greeting if present
-	if n, err := conn.Read(buf); err == nil && n > 0 {
+	if n, _ := conn.Read(buf); n > 0 {
 		response.Write(buf[:n])
 	}
 
 	_, _ = conn.Write([]byte(payload))
 
 	// Read probe response
-	if n, err := conn.Read(buf); err == nil && n > 0 {
+	if n, _ := conn.Read(buf); n > 0 {
 		response.WriteByte('\n')
 		response.Write(buf[:n])
 	}
@@ -1320,8 +1312,8 @@ func (s *Scanner) probeTextServiceWriteFirstWithTimeout(port int, payload string
 	_, _ = conn.Write([]byte(payload))
 
 	buf := make([]byte, 2048)
-	n, err := conn.Read(buf)
-	if err != nil || n == 0 {
+	n, _ := conn.Read(buf)
+	if n == 0 {
 		return ""
 	}
 	return string(buf[:n])

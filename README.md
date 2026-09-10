@@ -323,7 +323,7 @@ Operational limits:
 - Inconclusive CONNECT scans show a warning and `indeterminate (observed: ...)` text exposure. JSONL/CSV keep one record per open port and report the warning on stderr; use JSON for per-port failure details. A finished scan with unresolved ports still exits successfully; callers requiring completeness must inspect `unresolved_ports`.
 - Service names inferred only from ports do not prove a product or operating system. A missing banner may reflect filtering, a silent service, or a timeout.
 - Repeated unauthenticated connections can trigger server-side connection-error limits. MySQL errors such as 1129 (blocked host) and 1130 (host denied) are reported; GoMap does not authenticate or reset server limits automatically.
-- `--rate` limits port-scan scheduling per host; it is not a global limit for discovery, retries, or additional service probes.
+- `--rate` limits initial CONNECT attempts and configured CONNECT retries per host; it is not a global limit for host discovery or additional service probes.
 - Raw SYN discovery and privileged interface changes require separate lab validation.
 - MySQL, DNS/TCP, ONC RPC, AJP and SMB reads handle fragmented frames with bounded buffers. HTTP banner collection is limited to 64 KiB; other text and binary probes still need broader fragmentation testing.
 - Duplicate targets and ports are scanned once. CIDR discovery uses a bounded worker pool and preserves target order, including when applying `--max-hosts` afterward.
