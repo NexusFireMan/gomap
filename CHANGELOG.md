@@ -23,6 +23,7 @@ Note: this changelog is maintained from this point forward in the project histor
 - Detected hostnames now appear in all text service-detection tables, not only in the `-Dv` evidence view.
 
 ### Fixed
+- Let the first requested TCP connection attempt finish before releasing the remaining CONNECT workers, avoiding an immediate cold-path connection burst without extra probes or waiting for service banners. Configured retries now apply only to transient connection errors, not explicit refusals or permission errors.
 - Preserve native MySQL rejection codes/messages instead of reporting a missing greeting; identify HTTPS on TCP/8181 and reuse HTTP TLS metadata without a second handshake.
 - Identify Elasticsearch root JSON before generic HTTP parsing, including chunked responses; show HTTP Server/Location headers and JSON version evidence in deep output without following redirects.
 - Bound HTTP banner collection to 64 KiB and handle fragmented MySQL, DNS/TCP, ONC RPC, AJP and SMB frames; reject incomplete MySQL greetings and invalid RPC verifier lengths.

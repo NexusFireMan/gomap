@@ -79,7 +79,7 @@ func ParseCLIOptions(args []string) (CLIOptions, error) {
 	fs.IntVar(&opts.MaxHosts, "max-hosts", 0, "maximum number of hosts to scan after discovery (0 = unlimited)")
 	fs.IntVar(&opts.TimeoutMS, "timeout", 0, "connection timeout per attempt in milliseconds (default: auto by mode)")
 	fs.IntVar(&opts.Workers, "workers", 0, "number of concurrent workers (default: auto by mode)")
-	fs.IntVar(&opts.Retries, "retries", 0, "retry attempts per port on timeout/error")
+	fs.IntVar(&opts.Retries, "retries", 0, "retry attempts per port on timeout/transient connection error")
 	fs.IntVar(&opts.BackoffMS, "backoff-ms", 25, "base backoff in milliseconds between retries")
 	fs.IntVar(&opts.MaxTimeoutMS, "max-timeout", 0, "maximum adaptive timeout in milliseconds (0 = automatic)")
 	fs.BoolVar(&opts.AdaptiveTimeout, "adaptive-timeout", true, "enable adaptive timeout tuning during scan")
@@ -271,7 +271,7 @@ func printHelp(w *os.File) {
   --workers <N>              concurrent workers (auto by mode if 0)
   --rate <N>                 max ports/second per host (0 = unlimited)
   --timeout <ms>             dial timeout per attempt
-  --retries <N>              retries per port
+  --retries <N>              retries per port on transient connection errors
   --backoff-ms <ms>          exponential backoff base between retries
   --adaptive-timeout         dynamic timeout tuning (default: true)
   --max-timeout <ms>         adaptive timeout upper bound

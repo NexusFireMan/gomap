@@ -138,7 +138,16 @@ func (s *Scanner) Configure(cfg ScanConfig) {
 
 // Scan performs the port scanning operation
 func (s *Scanner) Scan(ports []int, detectServices bool) []ScanResult {
+	return s.scanPortsWithDial(ports, detectServices, s.dialTCP)
+}
+
+type tcpDialFunc func(string, time.Duration) (net.Conn, error)
+
+func (s *Scanner) scanPortsWithDial(ports []int, detectServices bool, dial tcpDialFunc) []ScanResult {
 	ports = uniquePortsOrdered(ports)
+	if len(ports) == 0 {
+		return nil
+	}
 	if s.GhostMode {
 		rand.Shuffle(len(ports), func(i, j int) {
 			ports[i], ports[j] = ports[j], ports[i]
@@ -159,11 +168,23 @@ func (s *Scanner) Scan(ports []int, detectServices bool) []ScanResult {
 		rateLimiter = ticker.C
 	}
 	var wg sync.WaitGroup
+	firstDialDone := make(chan struct{})
+	var firstDial sync.Once
+	primingDial := func(address string, timeout time.Duration) (net.Conn, error) {
+		conn, err := dial(address, timeout)
+		firstDial.Do(func() { close(firstDialDone) })
+		return conn, err
+	}
 
 	for i := 0; i < workers; i++ {
 		wg.Add(1)
 		go func(workerID int) {
 			defer wg.Done()
+			// Let one real dial resolve the initial network path before the parallel burst.
+			// Release on any outcome, before banner reads, including a filtered/closed first port.
+			if workerID != 0 {
+				<-firstDialDone
+			}
 			for port := range portsChan {
 				if s.GhostMode {
 					s.addJitter()
@@ -171,7 +192,7 @@ func (s *Scanner) Scan(ports []int, detectServices bool) []ScanResult {
 				if rateLimiter != nil {
 					<-rateLimiter
 				}
-				resultsChan <- s.scanPort(port, detectServices)
+				resultsChan <- s.scanPortWithDial(port, detectServices, primingDial)
 			}
 		}(i)
 	}
@@ -198,8 +219,8 @@ func (s *Scanner) Scan(ports []int, detectServices bool) []ScanResult {
 	return dedupeOpenResults(openPorts)
 }
 
-// scanPort scans a single port
-func (s *Scanner) scanPort(port int, detectServices bool) ScanResult {
+// scanPortWithDial scans one port and preserves the successful connection for detection.
+func (s *Scanner) scanPortWithDial(port int, detectServices bool, dial tcpDialFunc) ScanResult {
 	address := net.JoinHostPort(s.Host, fmt.Sprintf("%d", port))
 	start := time.Now()
 
@@ -210,9 +231,12 @@ func (s *Scanner) scanPort(port int, detectServices bool) ScanResult {
 
 	for attempt := 0; attempt <= s.Retries; attempt++ {
 		attemptStart := time.Now()
-		conn, err = s.dialTCP(address, s.currentTimeout())
+		conn, err = dial(address, s.currentTimeout())
 		s.recordDialOutcome(err, time.Since(attemptStart))
 		if err == nil {
+			break
+		}
+		if !isRetryableDialError(err) {
 			break
 		}
 		if attempt < s.Retries && !s.GhostMode {
@@ -337,6 +361,21 @@ func isDialTimeoutError(err error) bool {
 		return true
 	}
 	return errors.Is(err, syscall.ETIMEDOUT)
+}
+
+func isRetryableDialError(err error) bool {
+	if isDialTimeoutError(err) {
+		return true
+	}
+	for _, transient := range []error{
+		syscall.ECONNRESET, syscall.ECONNABORTED, syscall.EHOSTUNREACH, syscall.ENETUNREACH,
+		syscall.ENOBUFS, syscall.EMFILE, syscall.ENFILE, syscall.EAGAIN, syscall.EADDRNOTAVAIL,
+	} {
+		if errors.Is(err, transient) {
+			return true
+		}
+	}
+	return false
 }
 
 func dedupeOpenResults(results []ScanResult) []ScanResult {

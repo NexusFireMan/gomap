@@ -262,7 +262,7 @@ Performance/robustness:
   --workers         concurrent workers (default: auto by mode)
   --rate            max scan rate in ports/second per host (0 = unlimited)
   --timeout         per-attempt dial timeout in ms (default: auto by mode)
-  --retries         retries per port on timeout/error
+  --retries         retries per port on timeout/transient connection error
   --backoff-ms      base exponential backoff between retries
   --adaptive-timeout enable dynamic timeout tuning (default: true)
   --max-timeout     adaptive timeout ceiling in ms
@@ -316,6 +316,8 @@ When `-s` is enabled, gomap combines port-based hints and protocol/banner parsin
 Important: banner-based detection is heuristic. Always validate critical findings with a second tool.
 
 Operational limits:
+- CONNECT completes one requested connection attempt before releasing the remaining workers; this avoids the initial parallel burst without adding probes. Banner reads do not block that release. A silent first port can add one attempt's wait before parallel scanning starts.
+- `--retries` applies to timeouts and transient connection errors, not explicit connection refusals or permission errors. Its default remains zero; bounded scans can still miss temporarily unavailable services.
 - Service names inferred only from ports do not prove a product or operating system. A missing banner may reflect filtering, a silent service, or a timeout.
 - Repeated unauthenticated connections can trigger server-side connection-error limits. MySQL errors such as 1129 (blocked host) and 1130 (host denied) are reported; GoMap does not authenticate or reset server limits automatically.
 - `--rate` limits port-scan scheduling per host; it is not a global limit for discovery, retries, or additional service probes.
