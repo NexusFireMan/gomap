@@ -739,7 +739,12 @@ func (s *Scanner) grabBanner(conn net.Conn, port int, result *ScanResult) {
 			result.Evidence = "protocol banner"
 		} else {
 			result.Confidence = "medium"
-			result.Evidence = "protocol banner (generic)"
+			if fallback := unparsedVersionForPort(port); fallback != "" {
+				result.Version = fallback
+				result.Evidence = "protocol response received but not recognized"
+			} else {
+				result.Evidence = "protocol banner (generic)"
+			}
 		}
 		if s.DeepVersion {
 			if evidence := evidenceFromBanner(banner); evidence != "" {
@@ -801,14 +806,30 @@ func (s *Scanner) grabBanner(conn net.Conn, port int, result *ScanResult) {
 		}
 		result.ServiceName = s.PortManager.GetServiceName(port, "")
 		if result.ServiceName != "" {
+			if version := unparsedVersionForPort(port); version != "" {
+				result.Version = version
+				result.Evidence = "protocol response received but not recognized"
+			} else {
+				result.Evidence = "port map (unparsed banner)"
+			}
 			result.Confidence = "low"
-			result.Evidence = "port map (unparsed banner)"
 			result.DetectionPath = "portmap-fallback"
 		} else {
 			result.Confidence = "low"
 			result.Evidence = fmt.Sprintf("tcp/%d open; no recognizable protocol response", port)
 			result.DetectionPath = "open-port-fallback"
 		}
+	}
+}
+
+func unparsedVersionForPort(port int) string {
+	switch port {
+	case 4848:
+		return "HTTP service (unparsed response)"
+	case 7676:
+		return "JMS service (unparsed response)"
+	default:
+		return ""
 	}
 }
 
@@ -872,6 +893,10 @@ func noGreetingVersionForPort(port int) string {
 		return "IMAP service (no greeting)"
 	case 3389:
 		return "Microsoft Terminal Services"
+	case 4848:
+		return "HTTP service (no response)"
+	case 7676:
+		return "JMS service (no greeting)"
 	default:
 		return ""
 	}
@@ -889,6 +914,10 @@ func noGreetingEvidenceForPort(port int) string {
 		return "port open; no imap greeting"
 	case 3389:
 		return "RDP TCP/3389 open; no negotiation response"
+	case 4848:
+		return "port open; no HTTP response"
+	case 7676:
+		return "port open; no JMS greeting"
 	default:
 		return "port open; no greeting"
 	}
@@ -1375,12 +1404,18 @@ func (s *Scanner) tryProtocolFingerprint(port int) (service, version, confidence
 			return "ajp13", "Apache JServ Protocol (AJP/1.3)", "high", "ajp cping/cpong", "protocol-fingerprint", true
 		}
 	}
-	if port > 1024 {
+	if shouldProbeDynamicONCRPC(port) {
 		if service, version, ok := s.detectDynamicONCRPCService(port); ok {
 			return service, version, "high", rpcAcceptedEvidence(rpcProgramForService(service), rpcVersionFromServiceVersion(service, version), port), "protocol-fingerprint", true
 		}
 	}
 	return "", "", "", "", "", false
+}
+
+// Dynamic ONC/RPC commonly uses registered high-port ranges. Avoid probing
+// every application port with an RPC call before its own protocol.
+func shouldProbeDynamicONCRPC(port int) bool {
+	return port >= 32768
 }
 
 type oncRPCProbe struct {
