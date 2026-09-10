@@ -144,9 +144,20 @@ func (s *Scanner) Scan(ports []int, detectServices bool) []ScanResult {
 type tcpDialFunc func(string, time.Duration) (net.Conn, error)
 
 func (s *Scanner) scanPortsWithDial(ports []int, detectServices bool, dial tcpDialFunc) []ScanResult {
+	results, _ := s.scanPortsReportWithDial(ports, detectServices, dial)
+	return results
+}
+
+// ScanWithDiagnostics retains inconclusive CONNECT outcomes without reporting them as closed.
+func (s *Scanner) ScanWithDiagnostics(ports []int, detectServices bool) ([]ScanResult, ConnectDiagnostics) {
+	return s.scanPortsReportWithDial(ports, detectServices, s.dialTCP)
+}
+
+func (s *Scanner) scanPortsReportWithDial(ports []int, detectServices bool, dial tcpDialFunc) ([]ScanResult, ConnectDiagnostics) {
 	ports = uniquePortsOrdered(ports)
+	diagnostics := ConnectDiagnostics{AttemptedPorts: len(ports)}
 	if len(ports) == 0 {
-		return nil
+		return nil, diagnostics
 	}
 	if s.GhostMode {
 		rand.Shuffle(len(ports), func(i, j int) {
@@ -156,7 +167,13 @@ func (s *Scanner) scanPortsWithDial(ports []int, detectServices bool, dial tcpDi
 
 	workers := max(1, min(s.NumWorkers, len(ports)))
 	portsChan := make(chan int, workers)
-	resultsChan := make(chan ScanResult, len(ports))
+	type portOutcome struct {
+		result    ScanResult
+		lastError error
+		attempts  int
+	}
+	resultsChan := make(chan portOutcome, len(ports))
+	retrySlots := make(chan struct{}, min(8, workers))
 	var rateLimiter <-chan time.Time
 	if s.Rate > 0 {
 		interval := time.Second / time.Duration(s.Rate)
@@ -192,7 +209,24 @@ func (s *Scanner) scanPortsWithDial(ports []int, detectServices bool, dial tcpDi
 				if rateLimiter != nil {
 					<-rateLimiter
 				}
-				resultsChan <- s.scanPortWithDial(port, detectServices, primingDial)
+				var lastError error
+				attempts := 0
+				result := s.scanPortWithDial(port, detectServices, func(address string, timeout time.Duration) (net.Conn, error) {
+					if attempts > 0 {
+						retrySlots <- struct{}{}
+						defer func() { <-retrySlots }()
+						if rateLimiter != nil {
+							<-rateLimiter
+						}
+					}
+					attempts++
+					conn, err := primingDial(address, timeout)
+					if err != nil {
+						lastError = err
+					}
+					return conn, err
+				})
+				resultsChan <- portOutcome{result, lastError, attempts}
 			}
 		}(i)
 	}
@@ -206,17 +240,36 @@ func (s *Scanner) scanPortsWithDial(ports []int, detectServices bool, dial tcpDi
 	close(resultsChan)
 
 	var openPorts []ScanResult
-	for result := range resultsChan {
+	for outcome := range resultsChan {
+		result := outcome.result
 		if result.IsOpen {
 			openPorts = append(openPorts, result)
 		}
+		if outcome.lastError == nil {
+			continue
+		}
+		kind := dialErrorKind(outcome.lastError)
+		if !result.IsOpen && kind == "refused" {
+			diagnostics.RefusedPorts++
+			continue
+		}
+		if result.IsOpen {
+			diagnostics.RecoveredPorts++
+		} else {
+			diagnostics.UnresolvedPorts++
+		}
+		diagnostics.Issues = append(diagnostics.Issues, ConnectionIssue{
+			Port: result.Port, Attempts: outcome.attempts, Kind: kind,
+			Error: outcome.lastError.Error(), Recovered: result.IsOpen,
+		})
 	}
 
 	sort.Slice(openPorts, func(i, j int) bool {
 		return openPorts[i].Port < openPorts[j].Port
 	})
 
-	return dedupeOpenResults(openPorts)
+	sort.Slice(diagnostics.Issues, func(i, j int) bool { return diagnostics.Issues[i].Port < diagnostics.Issues[j].Port })
+	return dedupeOpenResults(openPorts), diagnostics
 }
 
 // scanPortWithDial scans one port and preserves the successful connection for detection.
@@ -364,18 +417,12 @@ func isDialTimeoutError(err error) bool {
 }
 
 func isRetryableDialError(err error) bool {
-	if isDialTimeoutError(err) {
+	switch dialErrorKind(err) {
+	case "timeout", "unreachable", "reset", "local_resource":
 		return true
+	default:
+		return false
 	}
-	for _, transient := range []error{
-		syscall.ECONNRESET, syscall.ECONNABORTED, syscall.EHOSTUNREACH, syscall.ENETUNREACH,
-		syscall.ENOBUFS, syscall.EMFILE, syscall.ENFILE, syscall.EAGAIN, syscall.EADDRNOTAVAIL,
-	} {
-		if errors.Is(err, transient) {
-			return true
-		}
-	}
-	return false
 }
 
 func dedupeOpenResults(results []ScanResult) []ScanResult {
