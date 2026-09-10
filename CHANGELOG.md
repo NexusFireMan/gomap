@@ -7,6 +7,8 @@ Note: this changelog is maintained from this point forward in the project histor
 ## Unreleased
 
 ### Added
+- Native Java RMI transport detection on TCP/1099 and TCP/8686 using JRMP acknowledgment and ping, without remote method calls or object deserialization.
+- Native DCE/RPC bind acknowledgment validation on mapped RPC ports and unmapped dynamic ports (49152-65535), with accepted/rejected context evidence instead of OS inference.
 - Managed Linux source-IP pools through `--source-ips`, with native netlink setup, per-connection rotation, rollback, and automatic cleanup on normal exit, `Ctrl+C`, or `SIGTERM`.
 - Real TCP, TLS, and UDP source-address selection with `--random-ip --source-interface <NIC>`, limited to addresses already assigned to the selected interface.
 - Documented the maintainer release workflow for tags, GitHub Releases, binaries, Debian packages, GHCR images, checksums, and the signed GitHub Pages APT repository.

@@ -1321,7 +1321,17 @@ func (s *Scanner) probeTextServiceWriteFirstWithTimeout(port int, payload string
 
 // tryProtocolFingerprint performs protocol-aware detection for services that often need active handshakes.
 func (s *Scanner) tryProtocolFingerprint(port int) (service, version, confidence, evidence, path string, ok bool) {
+	mapped := s.PortManager.GetServiceName(port, "")
+	if mapped == "msrpc" || (port >= 49152 && mapped == "") {
+		if evidence, detected := s.detectDCERPC(port); detected {
+			return "msrpc", "DCE/RPC 5.0", "high", evidence, "protocol-fingerprint", true
+		}
+	}
 	switch port {
+	case 1099, 8686:
+		if s.detectRMI(port) {
+			return "java-rmi", "Java RMI (JRMP)", "high", "JRMP StreamProtocol acknowledged; PingAck", "protocol-fingerprint", true
+		}
 	case 53:
 		if version = s.detectDNSVersionTCP(port); version != "" {
 			return "domain", version, "high", "dns chaos version.bind", "protocol-fingerprint", true

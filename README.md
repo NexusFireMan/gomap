@@ -302,6 +302,8 @@ Maintenance:
 When `-s` is enabled, gomap combines port-based hints and protocol/banner parsing to infer:
 
 - HTTP/HTTPS server family/version where available.
+- Java RMI on TCP/1099 and TCP/8686 through JRMP acknowledgment and transport ping; no remote method invocation or deserialization.
+- DCE/RPC bind acknowledgment on mapped RPC ports and unmapped TCP/49152-65535. A rejected interface context confirms RPC, not support for that interface. `DCE/RPC 5.0` is the wire protocol version, not a Windows version.
 - SSH/FTP/PostgreSQL/Redis/MySQL and other protocol banners.
 - SMB-oriented identification for `microsoft-ds` targets.
 - SMB probes use bounded native connections; an unanswered negotiation produces a generic service hint rather than an OS assertion.
