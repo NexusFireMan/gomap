@@ -684,6 +684,10 @@ func (s *Scanner) grabBanner(conn net.Conn, port int, result *ScanResult) {
 			}
 			result.Confidence = "low"
 			result.DetectionPath = "portmap"
+		} else {
+			result.Confidence = "low"
+			result.Evidence = fmt.Sprintf("tcp/%d open; no recognizable protocol response", port)
+			result.DetectionPath = "open-port-fallback"
 		}
 		return
 	}
@@ -800,6 +804,10 @@ func (s *Scanner) grabBanner(conn net.Conn, port int, result *ScanResult) {
 			result.Confidence = "low"
 			result.Evidence = "port map (unparsed banner)"
 			result.DetectionPath = "portmap-fallback"
+		} else {
+			result.Confidence = "low"
+			result.Evidence = fmt.Sprintf("tcp/%d open; no recognizable protocol response", port)
+			result.DetectionPath = "open-port-fallback"
 		}
 	}
 }
@@ -1273,15 +1281,9 @@ func (s *Scanner) probeTextService(port int, payload string) string {
 // tryGenericServiceProbes improves detection for services exposed on non-standard ports.
 func (s *Scanner) tryGenericServiceProbes(port int) string {
 	probes := []string{
-		"GET / HTTP/1.0\r\n\r\n",
 		s.buildHTTPRequest("GET", "/"),
 		"\r\n",
-		"HELP\n",
 		"HELP\r\n",
-		"SYST\r\n",
-		"FEAT\r\n",
-		"CAPA\r\n",
-		"a001 CAPABILITY\r\n",
 	}
 
 	for _, payload := range probes {
@@ -1295,7 +1297,7 @@ func (s *Scanner) tryGenericServiceProbes(port int) string {
 }
 
 func (s *Scanner) probeTextServiceWriteFirst(port int, payload string) string {
-	return s.probeTextServiceWriteFirstWithTimeout(port, payload, 1500*time.Millisecond, 0)
+	return s.probeTextServiceWriteFirstWithTimeout(port, payload, 500*time.Millisecond, 900*time.Millisecond)
 }
 
 func (s *Scanner) probeTextServiceWriteFirstWithTimeout(port int, payload string, minTimeout, maxTimeout time.Duration) string {

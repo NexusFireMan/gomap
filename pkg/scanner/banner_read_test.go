@@ -112,3 +112,15 @@ func TestEnrichedFTPVersionRetainsSupportingEvidence(t *testing.T) {
 		t.Fatalf("enriched version lost its evidence: %+v", r)
 	}
 }
+
+func TestOpenUnknownPortReportsExplicitEvidence(t *testing.T) {
+	s := NewScanner("fixture.invalid", true)
+	r := ScanResult{Port: 65000, IsOpen: true}
+	s.grabBanner(&finalBannerConn{err: io.EOF}, 65000, &r)
+	if r.ServiceName != "" || r.Confidence != "low" {
+		t.Fatalf("unexpected unknown-port classification: %+v", r)
+	}
+	if r.Evidence != "tcp/65000 open; no recognizable protocol response" || r.DetectionPath != "open-port-fallback" {
+		t.Fatalf("missing unknown-port evidence: %+v", r)
+	}
+}
