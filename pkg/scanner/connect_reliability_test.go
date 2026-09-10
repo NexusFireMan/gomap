@@ -73,6 +73,17 @@ func TestConnectStartupWaitsForFirstDial(t *testing.T) {
 	}
 }
 
+func TestConnectTimeoutDoesNotFollowFilteredPortBackoff(t *testing.T) {
+	s := NewScanner("fixture.invalid", false)
+	s.Timeout = 500 * time.Millisecond
+	s.MinAdaptiveTimeout = s.Timeout
+	s.MaxAdaptiveTimeout = 4 * time.Second
+	s.failureStreak = 20
+	if got, want := s.connectTimeout(), 600*time.Millisecond; got != want {
+		t.Fatalf("connect timeout = %s, want %s", got, want)
+	}
+}
+
 func errorText(err error) string {
 	if err == nil {
 		return "success"

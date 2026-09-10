@@ -62,7 +62,9 @@ type ScanConfig struct {
 
 // NewScanner creates a new Scanner instance
 func NewScanner(host string, ghostMode bool) *Scanner {
-	numWorkers := 200
+	// Keep connect scans responsive across full 1-65535 ranges while the
+	// retry semaphore still bounds recovery bursts separately.
+	numWorkers := 400
 	timeout := 500 * time.Millisecond
 
 	if ghostMode {
@@ -284,7 +286,7 @@ func (s *Scanner) scanPortWithDial(port int, detectServices bool, dial tcpDialFu
 
 	for attempt := 0; attempt <= s.Retries; attempt++ {
 		attemptStart := time.Now()
-		conn, err = dial(address, s.currentTimeout())
+		conn, err = dial(address, s.connectTimeout())
 		s.recordDialOutcome(err, time.Since(attemptStart))
 		if err == nil {
 			break
@@ -331,6 +333,19 @@ func (s *Scanner) scanPortWithDial(port int, detectServices bool, dial tcpDialFu
 
 	s.grabBanner(conn, port, &result)
 	return result
+}
+
+// connectTimeout prevents a run dominated by filtered ports from progressively
+// expanding every dial timeout. Service probes continue to use currentTimeout.
+func (s *Scanner) connectTimeout() time.Duration {
+	timeout := s.currentTimeout()
+	if s.AdaptiveTimeout && s.Timeout > 0 {
+		ceiling := s.Timeout + 100*time.Millisecond
+		if timeout > ceiling {
+			return ceiling
+		}
+	}
+	return timeout
 }
 
 func (s *Scanner) currentTimeout() time.Duration {
