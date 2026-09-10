@@ -36,20 +36,24 @@ func (s *Scanner) detectTLSFingerprint(port int) (tlsFingerprint, bool) {
 	defer func() { _ = conn.Close() }()
 	_ = conn.SetDeadline(time.Now().Add(timeout))
 
-	state := conn.ConnectionState()
+	return tlsFingerprintFromState(conn.ConnectionState(), cfg.ServerName), true
+}
+
+func tlsFingerprintFromState(state tls.ConnectionState, serverName string) tlsFingerprint {
+	var fp tlsFingerprint
 	fp.Version = tlsVersionString(state.Version)
 	fp.Cipher = tls.CipherSuiteName(state.CipherSuite)
 	if state.NegotiatedProtocol != "" {
 		fp.ALPN = state.NegotiatedProtocol
 	}
-	fp.SNI = cfg.ServerName
+	fp.SNI = serverName
 	if len(state.PeerCertificates) > 0 {
 		issuer := strings.TrimSpace(state.PeerCertificates[0].Issuer.CommonName)
 		if issuer != "" {
 			fp.Issuer = issuer
 		}
 	}
-	return fp, true
+	return fp
 }
 
 func tlsVersionString(v uint16) string {
@@ -72,7 +76,7 @@ func inferTLServiceByPort(port int, currentService string) string {
 		return currentService
 	}
 	switch port {
-	case 443, 8443, 9443:
+	case 443, 8181, 8443, 9443:
 		return "https"
 	case 993:
 		return "imaps"
@@ -94,7 +98,7 @@ func inferTLServiceByPort(port int, currentService string) string {
 
 func shouldAttemptTLSFingerprint(port int, mappedService string) bool {
 	switch port {
-	case 443, 465, 563, 636, 853, 989, 990, 992, 993, 995, 5986, 6443, 8443, 9443, 10443:
+	case 443, 465, 563, 636, 853, 989, 990, 992, 993, 995, 5986, 6443, 8181, 8443, 9443, 10443:
 		return true
 	}
 

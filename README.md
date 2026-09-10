@@ -15,7 +15,7 @@
 
 [![CI](https://github.com/NexusFireMan/gomap/actions/workflows/ci.yml/badge.svg)](https://github.com/NexusFireMan/gomap/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/NexusFireMan/gomap?display_name=tag)](https://github.com/NexusFireMan/gomap/releases)
-[![Go](https://img.shields.io/badge/Go-1.24%2B-00ADD8?logo=go&logoColor=white)](https://go.dev/)
+[![Go](https://img.shields.io/badge/Go-1.26.8%2B-00ADD8?logo=go&logoColor=white)](https://go.dev/)
 [![Docker](https://img.shields.io/badge/Docker-GHCR-2496ED?logo=docker&logoColor=white)](https://github.com/NexusFireMan/gomap/pkgs/container/gomap)
 [![CLI](https://img.shields.io/badge/Interface-CLI-2C2C2C)](https://github.com/NexusFireMan/gomap)
 [![License](https://img.shields.io/github/license/NexusFireMan/gomap)](https://github.com/NexusFireMan/gomap/blob/main/LICENSE)
@@ -65,6 +65,8 @@ A fast TCP/UDP port scanner written in Go, with optional service/version detecti
 ## Installation
 
 ### Build from source
+
+Use Go 1.26.8 or newer. CI and release builds follow `go.mod`; the Docker builder uses the same baseline to avoid shipping older standard-library security defects.
 
 ```bash
 git clone https://github.com/NexusFireMan/gomap.git
@@ -260,7 +262,7 @@ Performance/robustness:
   --workers         concurrent workers (default: auto by mode)
   --rate            max scan rate in ports/second per host (0 = unlimited)
   --timeout         per-attempt dial timeout in ms (default: auto by mode)
-  --retries         retries per port on timeout/error
+  --retries         retries per port on timeout/transient connection error
   --backoff-ms      base exponential backoff between retries
   --adaptive-timeout enable dynamic timeout tuning (default: true)
   --max-timeout     adaptive timeout ceiling in ms
@@ -300,10 +302,15 @@ Maintenance:
 When `-s` is enabled, gomap combines port-based hints and protocol/banner parsing to infer:
 
 - HTTP/HTTPS server family/version where available.
+- Java RMI on TCP/1099 and TCP/8686 through JRMP acknowledgment and transport ping; no remote method invocation or deserialization.
+- DCE/RPC bind acknowledgment on mapped RPC ports and unmapped TCP/49152-65535. A rejected interface context confirms RPC, not support for that interface. `DCE/RPC 5.0` is the wire protocol version, not a Windows version.
 - SSH/FTP/PostgreSQL/Redis/MySQL and other protocol banners.
 - SMB-oriented identification for `microsoft-ds` targets.
 - SMB probes use bounded native connections; an unanswered negotiation produces a generic service hint rather than an OS assertion.
+- Native SMB negotiation reports an offered dialect (SMB 2.0.2 through 3.0.2), not the server's highest supported dialect or its operating system. Port 139 remains a low-confidence hint when no NetBIOS session is established.
 - TLS handshake metadata where applicable (`tls_version`, `tls_cipher`, ALPN, certificate issuer).
+- HTTPS probing includes TCP/8181 and reuses the successful HTTP TLS handshake metadata. Elasticsearch root JSON is checked before generic HTTP identification.
+- Deep HTTP evidence includes available `Server` and `Location` headers; redirects are reported, not followed. MySQL rejection packets expose their error code/message without inventing a server version.
 - Generic active probes for open ports without a known port mapping, useful when services run on non-standard ports.
 
 `-Dv` enables the same service/version output as `-s`, shows a compact evidence column in text output, and adds a bounded deep-version pass for open ports whose first result is generic, weak, or empty. It is intended as GoMap's fast native version-detection profile for authorized lab/internal reconnaissance: more focused than the default `-s`, but still controlled so it does not turn a quick scan into a long script scan.
@@ -311,9 +318,17 @@ When `-s` is enabled, gomap combines port-based hints and protocol/banner parsin
 Important: banner-based detection is heuristic. Always validate critical findings with a second tool.
 
 Operational limits:
+- CONNECT completes one requested connection attempt before releasing the remaining workers; this avoids the initial parallel burst without adding probes. Banner reads do not block that release. A silent first port can add one attempt's wait before parallel scanning starts.
+- `--retries` applies to timeouts and transient connection errors, not explicit connection refusals or permission errors. Its default remains zero; bounded scans can still miss temporarily unavailable services.
+- Configured CONNECT retries use at most eight concurrent connections (never more than the worker count) and share `--rate` with initial attempts. A successful retry retains its connection for banner detection. Many filtered ports can still make retries expensive; inspect diagnostics before retrying a full range.
+- JSON host entries include `connect_diagnostics` when CONNECT was used: attempted/refused/unresolved/recovered counts and per-port issues with attempts, last error and recovery status. Refused ports are aggregated; timeouts and other unresolved errors are not treated as confirmed closed. These diagnostics do not establish SYN/UDP completeness.
+- Inconclusive CONNECT scans show a warning and `indeterminate (observed: ...)` text exposure. JSONL/CSV keep one record per open port and report the warning on stderr; use JSON for per-port failure details. A finished scan with unresolved ports still exits successfully; callers requiring completeness must inspect `unresolved_ports`.
 - Service names inferred only from ports do not prove a product or operating system. A missing banner may reflect filtering, a silent service, or a timeout.
-- `--rate` limits port-scan scheduling per host; it is not a global limit for discovery, retries, or additional service probes.
-- Protocol detection still needs broader coverage for fragmented TCP responses. Raw SYN discovery and privileged interface changes require separate lab validation.
+- Repeated unauthenticated connections can trigger server-side connection-error limits. MySQL errors such as 1129 (blocked host) and 1130 (host denied) are reported; GoMap does not authenticate or reset server limits automatically.
+- `--rate` limits initial CONNECT attempts and configured CONNECT retries per host; it is not a global limit for host discovery or additional service probes.
+- Raw SYN discovery and privileged interface changes require separate lab validation.
+- MySQL, DNS/TCP, ONC RPC, AJP and SMB reads handle fragmented frames with bounded buffers. HTTP banner collection is limited to 64 KiB; other text and binary probes still need broader fragmentation testing.
+- Duplicate targets and ports are scanned once. CIDR discovery uses a bounded worker pool and preserves target order, including when applying `--max-hosts` afterward.
 - IPv4 CIDRs omit network/broadcast addresses except for /31 and /32; IPv6 ranges preserve endpoints. Expansion is limited to 65,536 addresses per CIDR.
 
 Non-standard port note:

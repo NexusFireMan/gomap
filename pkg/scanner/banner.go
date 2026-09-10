@@ -11,6 +11,9 @@ import (
 func parseBanner(banner string) (service, version string) {
 	// First check if it's HTTP - we need full banner for this
 	if strings.Contains(banner, "HTTP/") {
+		if s, v := parseSearchHTTP(banner); s != "" {
+			return s, v
+		}
 		if s, v := parseHTTP(banner); s != "" {
 			return s, v
 		}
@@ -106,6 +109,9 @@ func sanitizeBanner(banner string) string {
 	return result
 }
 
+var sshBannerRE = regexp.MustCompile(`^SSH-([\d\.]+)-(.+)$`)
+var openSSHImplementationRE = regexp.MustCompile(`OpenSSH[\s_]+([\d\.]+)(?:p(\d+))?([^\r\n]*)`)
+
 // parseSSH extracts SSH version information
 func parseSSH(banner string) (string, string) {
 	if !strings.Contains(banner, "SSH") {
@@ -113,8 +119,7 @@ func parseSSH(banner string) (string, string) {
 	}
 
 	// SSH Protocol detection: SSH-2.0-OpenSSH_7.4p1 or SSH-1.99-OpenSSH_3.9p1
-	sshRegex := regexp.MustCompile(`^SSH-([\d\.]+)-(.+)$`)
-	if match := sshRegex.FindStringSubmatch(banner); match != nil {
+	if match := sshBannerRE.FindStringSubmatch(banner); match != nil {
 		protocol := match[1]
 		implementation := match[2]
 		implementation = strings.TrimSpace(implementation)
@@ -136,8 +141,7 @@ func parseSSH(banner string) (string, string) {
 		// Try to extract specific implementation
 		if strings.Contains(implementation, "OpenSSH") {
 			// Extract version details
-			opensshRegex := regexp.MustCompile(`OpenSSH[\s_]+([\d\.]+)(?:p(\d+))?([^\r\n]*)`)
-			if match := opensshRegex.FindStringSubmatch(implementation); match != nil {
+			if match := openSSHImplementationRE.FindStringSubmatch(implementation); match != nil {
 				version := match[1]
 				patch := match[2]
 				extra := strings.TrimSpace(match[3])
@@ -492,7 +496,8 @@ func cleanFTPBannerText(text string) string {
 // parseHTTP extracts HTTP server information with version
 func parseHTTP(banner string) (string, string) {
 	// Check if it starts with HTTP response
-	if !strings.Contains(banner, "HTTP/") {
+	banner = strings.TrimSpace(banner)
+	if !strings.HasPrefix(banner, "HTTP/") {
 		return "", ""
 	}
 
@@ -502,6 +507,9 @@ func parseHTTP(banner string) (string, string) {
 	// First pass: Get status line and Server header
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
+		if line == "" {
+			break
+		}
 		lowerLine := strings.ToLower(line)
 
 		// Extract HTTP status line
@@ -511,10 +519,7 @@ func parseHTTP(banner string) (string, string) {
 
 		// Match "Server:" header
 		if strings.HasPrefix(lowerLine, "server:") {
-			serverHeader = strings.TrimPrefix(line, "Server:")
-			if serverHeader == "" {
-				serverHeader = strings.TrimPrefix(line, "server:")
-			}
+			serverHeader = line[len("server:"):]
 			serverHeader = strings.TrimSpace(serverHeader)
 			serverHeader = strings.ReplaceAll(serverHeader, "\r", "")
 			break

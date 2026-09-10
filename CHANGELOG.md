@@ -7,6 +7,8 @@ Note: this changelog is maintained from this point forward in the project histor
 ## Unreleased
 
 ### Added
+- Native Java RMI transport detection on TCP/1099 and TCP/8686 using JRMP acknowledgment and ping, without remote method calls or object deserialization.
+- Native DCE/RPC bind acknowledgment validation on mapped RPC ports and unmapped dynamic ports (49152-65535), with accepted/rejected context evidence instead of OS inference.
 - Managed Linux source-IP pools through `--source-ips`, with native netlink setup, per-connection rotation, rollback, and automatic cleanup on normal exit, `Ctrl+C`, or `SIGTERM`.
 - Real TCP, TLS, and UDP source-address selection with `--random-ip --source-interface <NIC>`, limited to addresses already assigned to the selected interface.
 - Documented the maintainer release workflow for tags, GitHub Releases, binaries, Debian packages, GHCR images, checksums, and the signed GitHub Pages APT repository.
@@ -14,6 +16,7 @@ Note: this changelog is maintained from this point forward in the project histor
 - Added Windows hostname reporting for `-Dv` when native probes expose a reliable host name, such as the RDP certificate common name.
 
 ### Changed
+- Require Go 1.26.8 for source, CI and release builds and align the Docker builder; Go 1.24.9 exposed reachable standard-library vulnerability advisories during the core audit.
 - Adopt protected `dev` integration and merge-commit promotion into `main`, with CI on both branches. Replace Release Please with explicit maintainer tags; retain binary, GHCR, and APT publishing with main-branch release checks.
 - Source-IP rotation can now use an explicit temporary pool instead of requiring administrators to add and remove every interface alias manually.
 - Clarified the difference between real socket source binding and the backward-compatible HTTP header behavior of `--random-ip`.
@@ -22,6 +25,21 @@ Note: this changelog is maintained from this point forward in the project histor
 - Detected hostnames now appear in all text service-detection tables, not only in the `-Dv` evidence view.
 
 ### Fixed
+- Keep CONNECT discovery responsive on full port ranges by bounding adaptive connection timeouts and using a higher, controlled default worker count; service probe timeouts remain adaptive.
+- Bound generic service discovery to three short probes and report explicit evidence for open ports with no recognizable protocol response.
+- Preserve text banner bytes returned together with EOF or read errors, avoid repeating failed protocol fingerprint probes for unparsed banners, and retain the evidence that supplied an enriched version.
+- Preserve CONNECT diagnostics (refusals, unresolved ports, recovered ports, attempts and last errors) in JSON; warn on inconclusive discovery and mark text exposure as indeterminate instead of implying missing ports are closed. JSONL/CSV retain open-port rows and emit warnings on stderr.
+- Bound configured CONNECT retry concurrency to eight (or fewer when workers are lower) and share the per-host rate limiter with initial attempts; reuse the successful connection for banner detection.
+- Let the first requested TCP connection attempt finish before releasing the remaining CONNECT workers, avoiding an immediate cold-path connection burst without extra probes or waiting for service banners. Configured retries now apply only to transient connection errors, not explicit refusals or permission errors.
+- Preserve native MySQL rejection codes/messages instead of reporting a missing greeting; identify HTTPS on TCP/8181 and reuse HTTP TLS metadata without a second handshake.
+- Identify Elasticsearch root JSON before generic HTTP parsing, including chunked responses; show HTTP Server/Location headers and JSON version evidence in deep output without following redirects.
+- Bound HTTP banner collection to 64 KiB and handle fragmented MySQL, DNS/TCP, ONC RPC, AJP and SMB frames; reject incomplete MySQL greetings and invalid RPC verifier lengths.
+- Correct AJP CPONG magic and native SMB negotiation framing/dialect offsets; avoid treating unconfirmed SMB/RPC port hints as high-confidence protocol evidence.
+- Validate SYN response source addresses, acknowledgements and TCP header lengths; avoid mistaking TCP port bytes for an IPv4 header.
+- Deduplicate targets and port specifications, support mixed port lists/ranges, bound discovery worker creation and preserve discovery order.
+- Neutralize remote terminal control characters and align colored detail columns; parse HTTP Server headers case-insensitively without reading them from the response body.
+- Use unique temporary files for unprivileged atomic binary replacement and reject CLI duration overflow and negative top-port aliases.
+- Reuse compiled SSH parser expressions, with deterministic regression, fuzz and microbenchmark coverage for core audit findings.
 - Restrict Git self-updates to the GoMap module root on a clean `main` branch and use fast-forward-only pulls; align release automation with the published v2.4.8 baseline.
 - Exclude local agent instructions and environment files from Docker build contexts; send CLI scan errors to stderr.
 - Remove the legacy SMB library fallback, whose unbounded connections could hang or leak on negotiation errors; retain bounded native probes and generic fallback results.
