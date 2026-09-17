@@ -146,6 +146,7 @@ func initServiceMap() map[int]string {
 		3306:  "mysql",
 		33060: "mysqlx",
 		3389:  "ms-wbt-server",
+		3920:  "ssl",
 		4848:  "http",
 		5432:  "postgresql",
 		5900:  "vnc",

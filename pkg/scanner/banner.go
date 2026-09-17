@@ -79,6 +79,10 @@ func parseBanner(banner string) (service, version string) {
 		return service, version
 	}
 
+	if service, version := parseIRC(banner); service != "" {
+		return service, version
+	}
+
 	if service, version := parseSMB(banner); service != "" {
 		return service, version
 	}
@@ -778,7 +782,10 @@ func parseElasticsearch(banner string) (string, string) {
 
 // parseJMS extracts JMS/OpenMQ version information
 func parseJMS(banner string) (string, string) {
-	if !strings.Contains(banner, "imqbroker") {
+	lowerBanner := strings.ToLower(banner)
+	if !strings.Contains(lowerBanner, "imqbroker") &&
+		!strings.Contains(lowerBanner, "openmq") &&
+		!strings.Contains(lowerBanner, "java message service") {
 		return "", ""
 	}
 
@@ -786,8 +793,12 @@ func parseJMS(banner string) (string, string) {
 	if match := jmsRegex.FindStringSubmatch(banner); match != nil {
 		return "jms", fmt.Sprintf("OpenMQ %s.%s", match[1], match[2])
 	}
+	versionRegex := regexp.MustCompile(`(?i)(?:openmq|java message service|imqbroker)[^\d]{0,16}(\d+(?:\.\d+)+|\d{3})`)
+	if match := versionRegex.FindStringSubmatch(banner); match != nil {
+		return "jms", "Java Message Service " + match[1]
+	}
 
-	return "jms", ""
+	return "jms", "Java Message Service"
 }
 
 // parseGlassFish extracts GlassFish server information
@@ -796,7 +807,24 @@ func parseGlassFish(banner string) (string, string) {
 	if match := glassfishRegex.FindStringSubmatch(banner); match != nil {
 		return "http", fmt.Sprintf("GlassFish %s", match[1])
 	}
+	if strings.Contains(strings.ToLower(banner), "glassfish") {
+		return "http", "GlassFish Server"
+	}
 	return "", ""
+}
+
+func parseIRC(banner string) (string, string) {
+	lowerBanner := strings.ToLower(banner)
+	if !strings.Contains(lowerBanner, "unreal") &&
+		!strings.Contains(lowerBanner, "ircd") &&
+		!strings.Contains(lowerBanner, "notice auth") &&
+		!regexp.MustCompile(`(?m)^:\S+\s+001\s`).MatchString(banner) {
+		return "", ""
+	}
+	if match := regexp.MustCompile(`(?i)unreal(?:ircd)?[\s/-]*([\d.]+(?:[-\w.]*)?)`).FindStringSubmatch(banner); match != nil {
+		return "irc", "UnrealIRCd " + match[1]
+	}
+	return "irc", "IRC service"
 }
 
 // parseSMB extracts SMB/Windows version information

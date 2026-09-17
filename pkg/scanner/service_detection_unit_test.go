@@ -124,6 +124,9 @@ func TestUnparsedKnownServiceHasUsefulVersionFallback(t *testing.T) {
 	if got := unparsedVersionForPort(8686); got != "" {
 		t.Fatalf("unexpected fallback for RMI port: %q", got)
 	}
+	if got := NewPortManager().GetServiceName(3920, ""); got != "ssl" {
+		t.Fatalf("unexpected 3920 service mapping: %q", got)
+	}
 }
 
 func TestNoGreetingDetectionMetadata(t *testing.T) {
@@ -139,6 +142,7 @@ func TestNoGreetingDetectionMetadata(t *testing.T) {
 		{143, "IMAP service (no greeting)", "port open; no imap greeting"},
 		{2525, "SMTP service (no greeting)", "port open; no smtp greeting"},
 		{3389, "Microsoft Terminal Services", "RDP TCP/3389 open; no negotiation response"},
+		{3920, "TLS service (no handshake)", "port open; no TLS handshake"},
 	}
 
 	for _, tt := range tests {

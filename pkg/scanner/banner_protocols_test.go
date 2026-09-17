@@ -55,6 +55,21 @@ func TestParseBannerPrefersSMTPBeforeGenericFTP220(t *testing.T) {
 	}
 }
 
+func TestParseJMSGlassFishAndIRCProducts(t *testing.T) {
+	if service, version := parseJMS("OpenMQ Java Message Service 301"); service != "jms" || version != "Java Message Service 301" {
+		t.Fatalf("unexpected JMS parse: %q/%q", service, version)
+	}
+	if service, version := parseGlassFish("Oracle Glassfish Application Server"); service != "http" || version != "GlassFish Server" {
+		t.Fatalf("unexpected GlassFish parse: %q/%q", service, version)
+	}
+	if service, version := parseIRC(":irc.example NOTICE AUTH :*** UnrealIRCd 6.1.0"); service != "irc" || version != "UnrealIRCd 6.1.0" {
+		t.Fatalf("unexpected IRC parse: %q/%q", service, version)
+	}
+	if service, version := parseIRC(":server 004 gomap Unreal3.2.10.4"); service != "irc" || version != "UnrealIRCd 3.2.10.4" {
+		t.Fatalf("unexpected numeric IRC parse: %q/%q", service, version)
+	}
+}
+
 func TestParseFTPKnownVersions(t *testing.T) {
 	tests := []struct {
 		banner  string

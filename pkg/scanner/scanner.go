@@ -916,6 +916,8 @@ func noGreetingVersionForPort(port int) string {
 		return "HTTP service (no response)"
 	case 7676:
 		return "JMS service (no greeting)"
+	case 3920:
+		return "TLS service (no handshake)"
 	default:
 		return ""
 	}
@@ -937,6 +939,8 @@ func noGreetingEvidenceForPort(port int) string {
 		return "port open; no HTTP response"
 	case 7676:
 		return "port open; no JMS greeting"
+	case 3920:
+		return "port open; no TLS handshake"
 	default:
 		return "port open; no greeting"
 	}
@@ -1381,6 +1385,15 @@ func (s *Scanner) tryProtocolFingerprint(port int) (service, version, confidence
 	case 1099, 8686:
 		if s.detectRMI(port) {
 			return "java-rmi", "Java RMI (JRMP)", "high", "JRMP StreamProtocol acknowledged; PingAck", "protocol-fingerprint", true
+		}
+	case 6667, 6697:
+		if response := s.probeTextService(port, "NICK gomap\r\nUSER gomap 0 * :GoMap\r\n"); response != "" {
+			if service, version := parseBanner(response); service == "irc" {
+				if version == "" {
+					version = "IRC service"
+				}
+				return service, version, "high", "IRC protocol response", "protocol-fingerprint", true
+			}
 		}
 	case 53:
 		if version = s.detectDNSVersionTCP(port); version != "" {
@@ -2059,7 +2072,7 @@ func (s *Scanner) detectSMBVersion(port int) (string, string) {
 
 func shouldUseTLSForHTTP(port int) bool {
 	switch port {
-	case 443, 5986, 6443, 7443, 8181, 8443, 9443:
+	case 3920, 443, 4848, 5986, 6443, 7443, 8181, 8443, 9443:
 		return true
 	default:
 		return false

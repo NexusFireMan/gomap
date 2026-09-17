@@ -7,6 +7,8 @@ Note: this changelog is maintained from this point forward in the project histor
 ## Unreleased
 
 ### Added
+- Added native TLS/GlassFish, OpenMQ/JMS, and IRC/UnrealIRCd fingerprints for common non-standard service ports.
+- Added native fingerprints for TLS-wrapped application ports, GlassFish/OpenMQ service banners, and IRC product banners such as UnrealIRCd.
 - Native Java RMI transport detection on TCP/1099 and TCP/8686 using JRMP acknowledgment and ping, without remote method calls or object deserialization.
 - Native DCE/RPC bind acknowledgment validation on mapped RPC ports and unmapped dynamic ports (49152-65535), with accepted/rejected context evidence instead of OS inference.
 - Managed Linux source-IP pools through `--source-ips`, with native netlink setup, per-connection rotation, rollback, and automatic cleanup on normal exit, `Ctrl+C`, or `SIGTERM`.
@@ -16,6 +18,7 @@ Note: this changelog is maintained from this point forward in the project histor
 - Added Windows hostname reporting for `-Dv` when native probes expose a reliable host name, such as the RDP certificate common name.
 
 ### Changed
+- Map TCP/3920 to the `ssl` service so an open endpoint without a completed handshake is reported explicitly instead of as an unidentified service.
 - Render open ports without a recognized protocol as `unknown` with explicit low-confidence TCP evidence, so service tables do not contain visually empty rows.
 - Require Go 1.26.8 for source, CI and release builds and align the Docker builder; Go 1.24.9 exposed reachable standard-library vulnerability advisories during the core audit.
 - Adopt protected `dev` integration and merge-commit promotion into `main`, with CI on both branches. Replace Release Please with explicit maintainer tags; retain binary, GHCR, and APT publishing with main-branch release checks.
