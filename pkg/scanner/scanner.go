@@ -62,9 +62,9 @@ type ScanConfig struct {
 
 // NewScanner creates a new Scanner instance
 func NewScanner(host string, ghostMode bool) *Scanner {
-	// Keep connect scans responsive across full 1-65535 ranges while the
-	// retry semaphore still bounds recovery bursts separately.
-	numWorkers := 400
+	// Keep connect scans responsive without overwhelming small lab services;
+	// the retry semaphore bounds recovery bursts separately.
+	numWorkers := 200
 	timeout := 500 * time.Millisecond
 
 	if ghostMode {
