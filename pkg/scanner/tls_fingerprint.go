@@ -76,8 +76,10 @@ func inferTLServiceByPort(port int, currentService string) string {
 		return currentService
 	}
 	switch port {
-	case 443, 8181, 8443, 9443:
+	case 443, 4848, 8181, 8443, 9443:
 		return "https"
+	case 3920:
+		return "ssl"
 	case 993:
 		return "imaps"
 	case 995:
@@ -98,7 +100,7 @@ func inferTLServiceByPort(port int, currentService string) string {
 
 func shouldAttemptTLSFingerprint(port int, mappedService string) bool {
 	switch port {
-	case 443, 465, 563, 636, 853, 989, 990, 992, 993, 995, 5986, 6443, 8181, 8443, 9443, 10443:
+	case 3920, 443, 465, 563, 636, 853, 989, 990, 992, 993, 995, 4848, 5986, 6443, 8181, 8443, 9443, 10443:
 		return true
 	}
 
