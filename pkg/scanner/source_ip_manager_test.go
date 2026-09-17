@@ -3,9 +3,37 @@ package scanner
 import (
 	"errors"
 	"net"
+	"sync"
 	"testing"
 	"time"
 )
+
+func TestManagedCleanupConcurrentAndDefensive(t *testing.T) {
+	backend := &fakeAddressBackend{}
+	managed, err := prepareManagedSourceIPsWithBackend("fake0", "192.0.2.20/24,192.0.2.21/24", backend)
+	if err != nil {
+		t.Fatal(err)
+	}
+	copied := managed.IPs()
+	copied[0][0] = 0
+	if managed.IPs()[0].String() != "192.0.2.20" {
+		t.Fatal("exposed internal address storage")
+	}
+	var wg sync.WaitGroup
+	for i := 0; i < 16; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := managed.Close(); err != nil {
+				t.Error(err)
+			}
+		}()
+	}
+	wg.Wait()
+	if len(backend.deleted) != 2 {
+		t.Fatalf("expected each address removed once: %v", backend.deleted)
+	}
+}
 
 type fakeAddressBackend struct {
 	existing  []*net.IPNet

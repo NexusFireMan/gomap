@@ -29,7 +29,7 @@ func TestParseMySQLHandshake(t *testing.T) {
 
 func TestParseMySQLHandshakePacket(t *testing.T) {
 	packet := []byte{
-		0x1f, 0x00, 0x00, 0x00,
+		0x10, 0x00, 0x00, 0x00,
 		0x0a, '8', '.', '0', '.', '2', '7', '-', '0', 'u', 'b', 'u', 'n', 't', 'u', 0x00,
 	}
 	got := parseMySQLHandshakePacket(packet)

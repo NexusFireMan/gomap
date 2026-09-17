@@ -22,13 +22,15 @@ func GetTopUDPPorts() []int {
 
 // ScanUDP probes UDP ports and returns only ports that send a UDP response.
 func (s *Scanner) ScanUDP(ports []int, detectServices bool) []ScanResult {
+	ports = uniquePortsOrdered(ports)
 	if s.GhostMode {
 		rand.Shuffle(len(ports), func(i, j int) {
 			ports[i], ports[j] = ports[j], ports[i]
 		})
 	}
 
-	portsChan := make(chan int, s.NumWorkers)
+	workers := max(1, min(s.NumWorkers, len(ports)))
+	portsChan := make(chan int, workers)
 	resultsChan := make(chan ScanResult, len(ports))
 	var rateLimiter <-chan time.Time
 	if s.Rate > 0 {
@@ -42,7 +44,7 @@ func (s *Scanner) ScanUDP(ports []int, detectServices bool) []ScanResult {
 	}
 
 	var wg sync.WaitGroup
-	for i := 0; i < s.NumWorkers; i++ {
+	for i := 0; i < workers; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()

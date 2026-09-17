@@ -31,15 +31,7 @@ func (pm *PortManager) GetPortsToScan(portsStr string) ([]int, error) {
 
 // ParsePorts parses a port specification string
 func (pm *PortManager) ParsePorts(portsStr string) ([]int, error) {
-	if strings.Contains(portsStr, "-") {
-		return pm.parsePortRange(portsStr)
-	}
-
-	if strings.Contains(portsStr, ",") {
-		return pm.parsePortList(portsStr)
-	}
-
-	return pm.parseSinglePort(portsStr)
+	return pm.parsePortList(portsStr)
 }
 
 // parsePortRange parses a port range (e.g., "1-1024")
@@ -76,16 +68,20 @@ func (pm *PortManager) parsePortList(portsStr string) ([]int, error) {
 	parts := strings.Split(portsStr, ",")
 
 	for _, part := range parts {
-		port, err := strconv.Atoi(strings.TrimSpace(part))
+		part = strings.TrimSpace(part)
+		var parsed []int
+		var err error
+		if strings.Contains(part, "-") {
+			parsed, err = pm.parsePortRange(part)
+		} else {
+			parsed, err = pm.parseSinglePort(part)
+		}
 		if err != nil {
 			return nil, err
 		}
-		if port < 1 || port > 65535 {
-			return nil, fmt.Errorf("invalid port number: %d", port)
-		}
-		ports = append(ports, port)
+		ports = append(ports, parsed...)
 	}
-	return ports, nil
+	return uniquePortsOrdered(ports), nil
 }
 
 // parseSinglePort parses a single port number
@@ -150,6 +146,7 @@ func initServiceMap() map[int]string {
 		3306:  "mysql",
 		33060: "mysqlx",
 		3389:  "ms-wbt-server",
+		3920:  "ssl",
 		4848:  "http",
 		5432:  "postgresql",
 		5900:  "vnc",

@@ -223,6 +223,7 @@ func ExecuteScan(req ScanRequest) (resultErr error) {
 		formatter = output.NewEvidenceOutputFormatter()
 	}
 	allResults := make(map[string][]scanner.ScanResult)
+	connectDiagnostics := make(map[string]scanner.ConnectDiagnostics)
 	scanStart := time.Now()
 
 	var timeoutDuration time.Duration
@@ -266,12 +267,16 @@ func ExecuteScan(req ScanRequest) (resultErr error) {
 				if !machineOutput {
 					fmt.Printf("%s\n", output.StatusWarn(fmt.Sprintf("SYN scan unavailable on %s (%v). Falling back to connect scan.", targetIP, synErr)))
 				}
-				openResults = s.Scan(portsToScan, req.ServiceDetect)
+				var diag scanner.ConnectDiagnostics
+				openResults, diag = s.ScanWithDiagnostics(portsToScan, req.ServiceDetect)
+				connectDiagnostics[targetIP] = diag
 			} else {
 				openResults = scanner.BuildResultsFromKnownOpenPorts(s, synOpenPorts, req.ServiceDetect)
 			}
 		} else {
-			openResults = s.Scan(portsToScan, req.ServiceDetect)
+			var diag scanner.ConnectDiagnostics
+			openResults, diag = s.ScanWithDiagnostics(portsToScan, req.ServiceDetect)
+			connectDiagnostics[targetIP] = diag
 		}
 		if len(openResults) > 0 {
 			allResults[targetIP] = openResults
@@ -280,10 +285,15 @@ func ExecuteScan(req ScanRequest) (resultErr error) {
 	scanDuration := time.Since(scanStart)
 
 	if machineOutput {
+		if warnings := connectWarnings(targets, connectDiagnostics); warnings != "" {
+			if _, err := fmt.Fprint(os.Stderr, warnings); err != nil {
+				return fmt.Errorf("failed to write connection diagnostics: %w", err)
+			}
+		}
 		var renderErr error
 		switch req.Format {
 		case "json":
-			renderErr = output.PrintJSONReport(destWriter, req.Target, portsToScan, targets, allResults, req.ServiceDetect, scanDuration)
+			renderErr = output.PrintJSONReport(destWriter, req.Target, portsToScan, targets, allResults, req.ServiceDetect, scanDuration, connectDiagnostics)
 		case "jsonl":
 			renderErr = output.PrintJSONLReport(destWriter, req.Target, targets, allResults)
 		case "csv":
@@ -313,8 +323,17 @@ func ExecuteScan(req ScanRequest) (resultErr error) {
 			}
 		}
 	}
-	textReport.WriteString(hostSummaries(targets, allResults))
-	fmt.Fprintf(&textReport, "\n%s\n", output.StatusOK(fmt.Sprintf("Completed scan in %s | hosts: %d | open ports: %d", scanDuration.Round(time.Millisecond), len(targets), totalOpen)))
+	textReport.WriteString(connectWarnings(targets, connectDiagnostics))
+	textReport.WriteString(hostSummaries(targets, allResults, connectDiagnostics))
+	unresolved := 0
+	for _, diag := range connectDiagnostics {
+		unresolved += diag.UnresolvedPorts
+	}
+	if unresolved > 0 {
+		fmt.Fprintf(&textReport, "\n%s\n", output.StatusWarn(fmt.Sprintf("Scan finished in %s | hosts: %d | open ports: %d | unresolved TCP ports: %d", scanDuration.Round(time.Millisecond), len(targets), totalOpen, unresolved)))
+	} else {
+		fmt.Fprintf(&textReport, "\n%s\n", output.StatusOK(fmt.Sprintf("Completed scan in %s | hosts: %d | open ports: %d", scanDuration.Round(time.Millisecond), len(targets), totalOpen)))
+	}
 	if _, err := destWriter.Write(textReport.Bytes()); err != nil {
 		return fmt.Errorf("failed to render text output: %w", err)
 	}
@@ -341,7 +360,7 @@ func filterExcludedPorts(pm *scanner.PortManager, ports []int, excludeSpec strin
 	return filtered, nil
 }
 
-func hostSummaries(targets []string, allResults map[string][]scanner.ScanResult) string {
+func hostSummaries(targets []string, allResults map[string][]scanner.ScanResult, diagnostics ...map[string]scanner.ConnectDiagnostics) string {
 	var report strings.Builder
 	fmt.Fprintf(&report, "\n%s\n", output.Bold("Host Exposure Summary"))
 	for _, host := range targets {
@@ -349,6 +368,9 @@ func hostSummaries(targets []string, allResults map[string][]scanner.ScanResult)
 		open := len(results)
 		critical := criticalServices(results)
 		exposure := exposureLevel(open, len(critical))
+		if len(diagnostics) > 0 && diagnostics[0][host].UnresolvedPorts > 0 {
+			exposure = "indeterminate (observed: " + exposure + ")"
+		}
 
 		criticalStr := "none"
 		if len(critical) > 0 {
@@ -360,6 +382,33 @@ func hostSummaries(targets []string, allResults map[string][]scanner.ScanResult)
 			criticalStr,
 			exposure,
 		)
+	}
+	return report.String()
+}
+
+func connectWarnings(targets []string, diagnostics map[string]scanner.ConnectDiagnostics) string {
+	var report strings.Builder
+	for _, host := range targets {
+		diag := diagnostics[host]
+		if diag.UnresolvedPorts == 0 {
+			continue
+		}
+		counts := make(map[string]int)
+		for _, issue := range diag.Issues {
+			if !issue.Recovered {
+				counts[issue.Kind]++
+			}
+		}
+		var kinds []string
+		for kind := range counts {
+			kinds = append(kinds, kind)
+		}
+		sort.Strings(kinds)
+		var parts []string
+		for _, kind := range kinds {
+			parts = append(parts, fmt.Sprintf("%s=%d", kind, counts[kind]))
+		}
+		fmt.Fprintf(&report, "TCP discovery inconclusive on %s: %d unresolved ports (%s); these are not confirmed closed.\n", host, diag.UnresolvedPorts, strings.Join(parts, ", "))
 	}
 	return report.String()
 }

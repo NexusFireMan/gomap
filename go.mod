@@ -1,6 +1,6 @@
 module github.com/NexusFireMan/gomap/v2
 
-go 1.24.9
+go 1.26.8
 
 require github.com/vishvananda/netlink v1.3.1
 

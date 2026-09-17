@@ -453,8 +453,14 @@ func tryUpdateActiveBinary(binaryPath string) error {
 		return nil
 	}
 
-	activePath, _ = filepath.EvalSymlinks(activePath)
-	binaryPath, _ = filepath.EvalSymlinks(binaryPath)
+	activePath, err = filepath.EvalSymlinks(activePath)
+	if err != nil {
+		return err
+	}
+	binaryPath, err = filepath.EvalSymlinks(binaryPath)
+	if err != nil {
+		return err
+	}
 
 	if activePath == binaryPath {
 		return nil
@@ -476,34 +482,29 @@ func tryUpdateActiveBinary(binaryPath string) error {
 	return fmt.Errorf("could not replace active gomap binary at %s", activePath)
 }
 
-// copyFile copies a file from src to dst
-func copyFile(src, dst string) error {
-	input, err := os.ReadFile(src)
+func replaceBinaryAtomically(src, dst string) error {
+	input, err := os.Open(src)
 	if err != nil {
 		return err
 	}
-
-	if err := os.WriteFile(dst, input, 0755); err != nil {
+	defer func() { _ = input.Close() }()
+	outputFile, err := os.CreateTemp(filepath.Dir(dst), ".gomap-update-*")
+	if err != nil {
 		return err
 	}
-
-	return nil
-}
-
-func replaceBinaryAtomically(src, dst string) error {
-	tmp := dst + ".new"
-	if err := copyFile(src, tmp); err != nil {
+	tmp := outputFile.Name()
+	defer func() { _ = os.Remove(tmp) }()
+	defer func() { _ = outputFile.Close() }()
+	if _, err := io.Copy(outputFile, input); err != nil {
 		return err
 	}
-	if err := os.Chmod(tmp, 0755); err != nil {
-		_ = os.Remove(tmp)
+	if err := outputFile.Chmod(0755); err != nil {
 		return err
 	}
-	if err := os.Rename(tmp, dst); err != nil {
-		_ = os.Remove(tmp)
+	if err := outputFile.Close(); err != nil {
 		return err
 	}
-	return nil
+	return os.Rename(tmp, dst)
 }
 
 func replaceBinaryAtomicallyWithSudo(src, dst string) error {

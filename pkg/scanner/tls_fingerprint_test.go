@@ -21,6 +21,8 @@ func TestInferTLServiceByPort(t *testing.T) {
 		out  string
 	}{
 		{443, "", "https"},
+		{4848, "http", "https"},
+		{3920, "", "ssl"},
 		{5986, "", "winrm"},
 		{993, "", "imaps"},
 		{8443, "http", "https"},
@@ -39,6 +41,9 @@ func TestShouldAttemptTLSFingerprint(t *testing.T) {
 	}
 	if !shouldAttemptTLSFingerprint(5986, "winrm") {
 		t.Fatal("expected tls fingerprint on 5986")
+	}
+	if !shouldAttemptTLSFingerprint(3920, "ssl") || !shouldAttemptTLSFingerprint(4848, "http") {
+		t.Fatal("expected tls fingerprints on non-standard TLS ports")
 	}
 	if shouldAttemptTLSFingerprint(445, "microsoft-ds") {
 		t.Fatal("did not expect tls fingerprint on 445")

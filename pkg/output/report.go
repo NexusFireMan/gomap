@@ -12,9 +12,10 @@ import (
 )
 
 type hostReport struct {
-	Host      string               `json:"host"`
-	OpenPorts int                  `json:"open_ports"`
-	Results   []scanner.ScanResult `json:"results"`
+	Host               string                      `json:"host"`
+	OpenPorts          int                         `json:"open_ports"`
+	Results            []scanner.ScanResult        `json:"results"`
+	ConnectDiagnostics *scanner.ConnectDiagnostics `json:"connect_diagnostics,omitempty"`
 }
 
 type scanReport struct {
@@ -54,7 +55,7 @@ type jsonlRecord struct {
 const reportSchemaVersion = "1.0.0"
 
 // PrintJSONReport prints the scan results in a machine-friendly JSON document.
-func PrintJSONReport(w io.Writer, target string, ports []int, targets []string, allResults map[string][]scanner.ScanResult, serviceScan bool, duration time.Duration) error {
+func PrintJSONReport(w io.Writer, target string, ports []int, targets []string, allResults map[string][]scanner.ScanResult, serviceScan bool, duration time.Duration, diagnostics ...map[string]scanner.ConnectDiagnostics) error {
 	report := scanReport{
 		SchemaVersion:  reportSchemaVersion,
 		GeneratedAt:    time.Now().UTC().Format(time.RFC3339),
@@ -69,11 +70,17 @@ func PrintJSONReport(w io.Writer, target string, ports []int, targets []string, 
 	for _, host := range targets {
 		results := allResults[host]
 		report.TotalOpenPorts += len(results)
-		report.Hosts = append(report.Hosts, hostReport{
+		hostEntry := hostReport{
 			Host:      host,
 			OpenPorts: len(results),
 			Results:   results,
-		})
+		}
+		if len(diagnostics) > 0 {
+			if diag, ok := diagnostics[0][host]; ok {
+				hostEntry.ConnectDiagnostics = &diag
+			}
+		}
+		report.Hosts = append(report.Hosts, hostEntry)
 	}
 
 	enc := json.NewEncoder(w)

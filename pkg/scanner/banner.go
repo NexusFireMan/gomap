@@ -11,6 +11,9 @@ import (
 func parseBanner(banner string) (service, version string) {
 	// First check if it's HTTP - we need full banner for this
 	if strings.Contains(banner, "HTTP/") {
+		if s, v := parseSearchHTTP(banner); s != "" {
+			return s, v
+		}
 		if s, v := parseHTTP(banner); s != "" {
 			return s, v
 		}
@@ -76,6 +79,10 @@ func parseBanner(banner string) (service, version string) {
 		return service, version
 	}
 
+	if service, version := parseIRC(banner); service != "" {
+		return service, version
+	}
+
 	if service, version := parseSMB(banner); service != "" {
 		return service, version
 	}
@@ -106,6 +113,9 @@ func sanitizeBanner(banner string) string {
 	return result
 }
 
+var sshBannerRE = regexp.MustCompile(`^SSH-([\d\.]+)-(.+)$`)
+var openSSHImplementationRE = regexp.MustCompile(`OpenSSH[\s_]+([\d\.]+)(?:p(\d+))?([^\r\n]*)`)
+
 // parseSSH extracts SSH version information
 func parseSSH(banner string) (string, string) {
 	if !strings.Contains(banner, "SSH") {
@@ -113,8 +123,7 @@ func parseSSH(banner string) (string, string) {
 	}
 
 	// SSH Protocol detection: SSH-2.0-OpenSSH_7.4p1 or SSH-1.99-OpenSSH_3.9p1
-	sshRegex := regexp.MustCompile(`^SSH-([\d\.]+)-(.+)$`)
-	if match := sshRegex.FindStringSubmatch(banner); match != nil {
+	if match := sshBannerRE.FindStringSubmatch(banner); match != nil {
 		protocol := match[1]
 		implementation := match[2]
 		implementation = strings.TrimSpace(implementation)
@@ -136,8 +145,7 @@ func parseSSH(banner string) (string, string) {
 		// Try to extract specific implementation
 		if strings.Contains(implementation, "OpenSSH") {
 			// Extract version details
-			opensshRegex := regexp.MustCompile(`OpenSSH[\s_]+([\d\.]+)(?:p(\d+))?([^\r\n]*)`)
-			if match := opensshRegex.FindStringSubmatch(implementation); match != nil {
+			if match := openSSHImplementationRE.FindStringSubmatch(implementation); match != nil {
 				version := match[1]
 				patch := match[2]
 				extra := strings.TrimSpace(match[3])
@@ -492,7 +500,8 @@ func cleanFTPBannerText(text string) string {
 // parseHTTP extracts HTTP server information with version
 func parseHTTP(banner string) (string, string) {
 	// Check if it starts with HTTP response
-	if !strings.Contains(banner, "HTTP/") {
+	banner = strings.TrimSpace(banner)
+	if !strings.HasPrefix(banner, "HTTP/") {
 		return "", ""
 	}
 
@@ -502,6 +511,9 @@ func parseHTTP(banner string) (string, string) {
 	// First pass: Get status line and Server header
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
+		if line == "" {
+			break
+		}
 		lowerLine := strings.ToLower(line)
 
 		// Extract HTTP status line
@@ -511,10 +523,7 @@ func parseHTTP(banner string) (string, string) {
 
 		// Match "Server:" header
 		if strings.HasPrefix(lowerLine, "server:") {
-			serverHeader = strings.TrimPrefix(line, "Server:")
-			if serverHeader == "" {
-				serverHeader = strings.TrimPrefix(line, "server:")
-			}
+			serverHeader = line[len("server:"):]
 			serverHeader = strings.TrimSpace(serverHeader)
 			serverHeader = strings.ReplaceAll(serverHeader, "\r", "")
 			break
@@ -773,7 +782,10 @@ func parseElasticsearch(banner string) (string, string) {
 
 // parseJMS extracts JMS/OpenMQ version information
 func parseJMS(banner string) (string, string) {
-	if !strings.Contains(banner, "imqbroker") {
+	lowerBanner := strings.ToLower(banner)
+	if !strings.Contains(lowerBanner, "imqbroker") &&
+		!strings.Contains(lowerBanner, "openmq") &&
+		!strings.Contains(lowerBanner, "java message service") {
 		return "", ""
 	}
 
@@ -781,8 +793,12 @@ func parseJMS(banner string) (string, string) {
 	if match := jmsRegex.FindStringSubmatch(banner); match != nil {
 		return "jms", fmt.Sprintf("OpenMQ %s.%s", match[1], match[2])
 	}
+	versionRegex := regexp.MustCompile(`(?i)(?:openmq|java message service|imqbroker)[^\d]{0,16}(\d+(?:\.\d+)+|\d{3})`)
+	if match := versionRegex.FindStringSubmatch(banner); match != nil {
+		return "jms", "Java Message Service " + match[1]
+	}
 
-	return "jms", ""
+	return "jms", "Java Message Service"
 }
 
 // parseGlassFish extracts GlassFish server information
@@ -791,7 +807,24 @@ func parseGlassFish(banner string) (string, string) {
 	if match := glassfishRegex.FindStringSubmatch(banner); match != nil {
 		return "http", fmt.Sprintf("GlassFish %s", match[1])
 	}
+	if strings.Contains(strings.ToLower(banner), "glassfish") {
+		return "http", "GlassFish Server"
+	}
 	return "", ""
+}
+
+func parseIRC(banner string) (string, string) {
+	lowerBanner := strings.ToLower(banner)
+	if !strings.Contains(lowerBanner, "unreal") &&
+		!strings.Contains(lowerBanner, "ircd") &&
+		!strings.Contains(lowerBanner, "notice auth") &&
+		!regexp.MustCompile(`(?m)^:\S+\s+001\s`).MatchString(banner) {
+		return "", ""
+	}
+	if match := regexp.MustCompile(`(?i)unreal(?:ircd)?[\s/-]*([\d.]+(?:[-\w.]*)?)`).FindStringSubmatch(banner); match != nil {
+		return "irc", "UnrealIRCd " + match[1]
+	}
+	return "irc", "IRC service"
 }
 
 // parseSMB extracts SMB/Windows version information
