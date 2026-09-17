@@ -700,6 +700,8 @@ func (s *Scanner) grabBanner(conn net.Conn, port int, result *ScanResult) {
 			result.Confidence = "low"
 			result.DetectionPath = "portmap"
 		} else {
+			result.ServiceName = "unknown"
+			result.Version = "TCP service (no recognizable response)"
 			result.Confidence = "low"
 			result.Evidence = fmt.Sprintf("tcp/%d open; no recognizable protocol response", port)
 			result.DetectionPath = "open-port-fallback"
@@ -830,6 +832,8 @@ func (s *Scanner) grabBanner(conn net.Conn, port int, result *ScanResult) {
 			result.Confidence = "low"
 			result.DetectionPath = "portmap-fallback"
 		} else {
+			result.ServiceName = "unknown"
+			result.Version = "TCP service (no recognizable response)"
 			result.Confidence = "low"
 			result.Evidence = fmt.Sprintf("tcp/%d open; no recognizable protocol response", port)
 			result.DetectionPath = "open-port-fallback"

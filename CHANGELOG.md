@@ -16,6 +16,7 @@ Note: this changelog is maintained from this point forward in the project histor
 - Added Windows hostname reporting for `-Dv` when native probes expose a reliable host name, such as the RDP certificate common name.
 
 ### Changed
+- Render open ports without a recognized protocol as `unknown` with explicit low-confidence TCP evidence, so service tables do not contain visually empty rows.
 - Require Go 1.26.8 for source, CI and release builds and align the Docker builder; Go 1.24.9 exposed reachable standard-library vulnerability advisories during the core audit.
 - Adopt protected `dev` integration and merge-commit promotion into `main`, with CI on both branches. Replace Release Please with explicit maintainer tags; retain binary, GHCR, and APT publishing with main-branch release checks.
 - Source-IP rotation can now use an explicit temporary pool instead of requiring administrators to add and remove every interface alias manually.
