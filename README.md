@@ -256,6 +256,7 @@ Main options:
   --exclude-ports   remove ports from final scan set
   -s                enable service/version detection
   -Dv               deeper bounded service/version detection
+  -De               exhaustive bounded service detection (implies -Dv)
   -g                ghost mode: controlled-rate low-noise profile
   -nd               disable host discovery for CIDR targets
 
@@ -316,6 +317,8 @@ When `-s` is enabled, gomap combines port-based hints and protocol/banner parsin
 - Generic active probes for open ports without a known port mapping, useful when services run on non-standard ports. An open port that remains unrecognized is reported as `unknown` with low confidence; it is not treated as closed.
 
 `-Dv` enables the same service/version output as `-s`, shows a compact evidence column in text output, and adds a bounded deep-version pass for open ports whose first result is generic, weak, or empty. It is intended as GoMap's fast native version-detection profile for authorized lab/internal reconnaissance: more focused than the default `-s`, but still controlled so it does not turn a quick scan into a long script scan.
+
+`-De` (or `--exhaustive-services`) enables `-Dv` and adds a second, bounded probe matrix for open ports that remain unidentified after the normal service pass. It checks common text protocol interactions on non-standard ports, including SMTP, POP3, Redis, IMAP, and IRC. The profile is opt-in because silent ports can add latency; an unrecognized response remains `unknown` rather than being assigned an unsupported product or version.
 
 Important: banner-based detection is heuristic. Always validate critical findings with a second tool.
 

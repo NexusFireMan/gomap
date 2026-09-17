@@ -116,3 +116,15 @@ func TestKnownAlternateFTPPortUsesFTPProbe(t *testing.T) {
 		t.Fatal("did not expect arbitrary ports to use the FTP probe directly")
 	}
 }
+
+func TestExhaustiveServiceProbePayloadsAreBounded(t *testing.T) {
+	probes := exhaustiveServiceProbePayloads()
+	if len(probes) != 5 {
+		t.Fatalf("expected five bounded exhaustive probes, got %d", len(probes))
+	}
+	for _, probe := range probes {
+		if len(probe) == 0 {
+			t.Fatal("exhaustive service probe must not be empty")
+		}
+	}
+}

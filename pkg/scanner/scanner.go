@@ -35,6 +35,7 @@ type Scanner struct {
 	RandomIP           bool
 	SourceIPs          []net.IP
 	DeepVersion        bool
+	Exhaustive         bool
 	targetPrefix       netip.Prefix
 
 	adaptiveMu    sync.Mutex
@@ -58,6 +59,7 @@ type ScanConfig struct {
 	SourceIPs       []net.IP
 	TargetCIDR      string
 	DeepVersion     bool
+	Exhaustive      bool
 }
 
 // NewScanner creates a new Scanner instance
@@ -114,6 +116,7 @@ func (s *Scanner) Configure(cfg ScanConfig) {
 	s.RandomIP = cfg.RandomIP
 	s.SourceIPs = append([]net.IP(nil), cfg.SourceIPs...)
 	s.DeepVersion = cfg.DeepVersion
+	s.Exhaustive = cfg.Exhaustive
 	if s.RandomIP {
 		s.targetPrefix = parseTargetPrefix(cfg.TargetCIDR, s.Host)
 	}
@@ -631,6 +634,9 @@ func (s *Scanner) grabBanner(conn net.Conn, port int, result *ScanResult) {
 	}
 	if banner == "" && !s.GhostMode && s.PortManager.GetServiceName(port, "") == "" {
 		banner = s.tryGenericServiceProbes(port)
+	}
+	if banner == "" && !s.GhostMode && s.Exhaustive && s.PortManager.GetServiceName(port, "") == "" {
+		banner = s.tryExhaustiveServiceProbes(port)
 	}
 
 	// Special handling for SMB/NetBIOS session service.
@@ -1346,6 +1352,30 @@ func (s *Scanner) tryGenericServiceProbes(port int) string {
 		}
 	}
 	return ""
+}
+
+// tryExhaustiveServiceProbes adds a small, explicit probe matrix for silent
+// or relocated services. It is opt-in because each probe opens a new bounded
+// connection and can add latency on hosts with many open ports.
+func (s *Scanner) tryExhaustiveServiceProbes(port int) string {
+	for _, payload := range exhaustiveServiceProbePayloads() {
+		if response := s.probeTextServiceWriteFirstWithTimeout(port, payload, 350*time.Millisecond, 700*time.Millisecond); response != "" {
+			if service, _ := parseBanner(response); service != "" {
+				return response
+			}
+		}
+	}
+	return ""
+}
+
+func exhaustiveServiceProbePayloads() []string {
+	return []string{
+		"EHLO gomap.local\r\n",
+		"CAPA\r\n",
+		"INFO\r\n",
+		"a001 CAPABILITY\r\n",
+		"NICK gomap\r\nUSER gomap 0 * :GoMap\r\n",
+	}
 }
 
 func (s *Scanner) probeTextServiceWriteFirst(port int, payload string) string {
