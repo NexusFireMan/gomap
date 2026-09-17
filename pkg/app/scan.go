@@ -26,6 +26,7 @@ type ScanRequest struct {
 	MaxHosts        int
 	ServiceDetect   bool
 	DeepVersion     bool
+	Exhaustive      bool
 	GhostMode       bool
 	NoDiscovery     bool
 	Format          string
@@ -55,6 +56,9 @@ func ExecuteScan(req ScanRequest) (resultErr error) {
 	}
 	if req.DeepVersion {
 		scanLabel += "+DV"
+	}
+	if req.Exhaustive {
+		scanLabel += "+EXH"
 	}
 
 	destWriter := output.DefaultWriter()
@@ -253,6 +257,7 @@ func ExecuteScan(req ScanRequest) (resultErr error) {
 			SourceIPs:       sourceIPs,
 			TargetCIDR:      cidrForHeaders,
 			DeepVersion:     req.DeepVersion,
+			Exhaustive:      req.Exhaustive,
 		})
 		var openResults []scanner.ScanResult
 		if req.UDP {

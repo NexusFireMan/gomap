@@ -19,6 +19,7 @@ type CLIOptions struct {
 	ExcludePorts    string
 	ServiceFlag     bool
 	DeepVersionFlag bool
+	ExhaustiveFlag  bool
 	GhostFlag       bool
 	UpdateFlag      bool
 	RemoveFlag      bool
@@ -63,6 +64,8 @@ func ParseCLIOptions(args []string) (CLIOptions, error) {
 	fs.StringVar(&opts.ExcludePorts, "exclude-ports", "", "exclude ports (e.g., 80,443 or 1-1024)")
 	fs.BoolVar(&opts.ServiceFlag, "s", false, "detect services and versions")
 	fs.BoolVar(&opts.DeepVersionFlag, "Dv", false, "enable deeper bounded service/version detection")
+	fs.BoolVar(&opts.ExhaustiveFlag, "De", false, "enable exhaustive bounded service detection")
+	fs.BoolVar(&opts.ExhaustiveFlag, "exhaustive-services", false, "enable exhaustive bounded service detection")
 	fs.BoolVar(&opts.GhostFlag, "g", false, "ghost mode - controlled-rate low-noise scan profile")
 	fs.BoolVar(&opts.NoDiscovery, "nd", false, "disable host discovery (scan all hosts in CIDR even if inactive)")
 	fs.BoolVar(&opts.UpdateFlag, "up", false, "update gomap to the latest version")
@@ -118,6 +121,10 @@ func normalizeOptions(opts CLIOptions) (CLIOptions, error) {
 	opts.FormatFlag = strings.ToLower(strings.TrimSpace(opts.FormatFlag))
 	if opts.DeepVersionFlag {
 		opts.ServiceFlag = true
+	}
+	if opts.ExhaustiveFlag {
+		opts.ServiceFlag = true
+		opts.DeepVersionFlag = true
 	}
 
 	if opts.JSONFlag {
@@ -264,6 +271,7 @@ func printHelp(w *os.File) {
   --exclude-ports <ports>    remove ports from final scan set
   -s                         enable service/version detection
   -Dv                        deeper bounded service/version detection
+  -De, --exhaustive-services exhaustive bounded service detection
   -g                         ghost mode (controlled-rate low-noise profile)
   -nd                        disable CIDR host discovery
 
