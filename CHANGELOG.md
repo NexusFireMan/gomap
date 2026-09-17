@@ -8,6 +8,7 @@ Note: this changelog is maintained from this point forward in the project histor
 
 ### Added
 - Add opt-in `-De`/`--exhaustive-services` profile for bounded native probes on unidentified open ports.
+- Expand exhaustive detection with bounded non-standard TLS, RTSP, and SIP probes, plus Elasticsearch transport fallback labeling.
 - Added native TLS/GlassFish, OpenMQ/JMS, and IRC/UnrealIRCd fingerprints for common non-standard service ports.
 - Added native fingerprints for TLS-wrapped application ports, GlassFish/OpenMQ service banners, and IRC product banners such as UnrealIRCd.
 - Native Java RMI transport detection on TCP/1099 and TCP/8686 using JRMP acknowledgment and ping, without remote method calls or object deserialization.

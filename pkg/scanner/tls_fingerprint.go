@@ -17,12 +17,13 @@ type tlsFingerprint struct {
 }
 
 func (s *Scanner) detectTLSFingerprint(port int) (tlsFingerprint, bool) {
+	return s.detectTLSFingerprintWithTimeout(port, 1600*time.Millisecond, 4*time.Second)
+}
+
+func (s *Scanner) detectTLSFingerprintWithTimeout(port int, minTimeout, maxTimeout time.Duration) (tlsFingerprint, bool) {
 	var fp tlsFingerprint
 	address := net.JoinHostPort(s.Host, fmt.Sprintf("%d", port))
-	timeout := s.ioTimeout(1600 * time.Millisecond)
-	if timeout < 1600*time.Millisecond {
-		timeout = 1600 * time.Millisecond
-	}
+	timeout := s.boundedServiceTimeout(minTimeout, maxTimeout)
 
 	cfg := &tls.Config{
 		InsecureSkipVerify: true,

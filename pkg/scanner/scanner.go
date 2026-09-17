@@ -636,6 +636,20 @@ func (s *Scanner) grabBanner(conn net.Conn, port int, result *ScanResult) {
 		banner = s.tryGenericServiceProbes(port)
 	}
 	if banner == "" && !s.GhostMode && s.Exhaustive && s.PortManager.GetServiceName(port, "") == "" {
+		if fp, ok := s.detectTLSFingerprintWithTimeout(port, 450*time.Millisecond, 900*time.Millisecond); ok {
+			result.TLS = true
+			result.TLSVersion = fp.Version
+			result.TLSCipher = fp.Cipher
+			result.TLSALPN = fp.ALPN
+			result.TLSServerName = fp.SNI
+			result.TLSIssuer = fp.Issuer
+			result.ServiceName = "tls"
+			result.Version = strings.TrimSpace(strings.Join([]string{fp.Version, fp.Cipher}, " "))
+			result.Confidence = "high"
+			result.Evidence = "tls handshake on non-standard port"
+			result.DetectionPath = "exhaustive-tls"
+			return
+		}
 		banner = s.tryExhaustiveServiceProbes(port)
 	}
 
@@ -853,6 +867,8 @@ func unparsedVersionForPort(port int) string {
 		return "HTTP service (unparsed response)"
 	case 7676:
 		return "JMS service (unparsed response)"
+	case 9300:
+		return "Elasticsearch transport service (version not disclosed)"
 	default:
 		return ""
 	}
@@ -1375,6 +1391,8 @@ func exhaustiveServiceProbePayloads() []string {
 		"INFO\r\n",
 		"a001 CAPABILITY\r\n",
 		"NICK gomap\r\nUSER gomap 0 * :GoMap\r\n",
+		"OPTIONS rtsp://gomap.local/ RTSP/1.0\r\nCSeq: 1\r\n\r\n",
+		"OPTIONS sip:gomap.local SIP/2.0\r\nVia: SIP/2.0/TCP gomap.local;branch=z9hG4bK-gomap\r\n\r\n",
 	}
 }
 

@@ -318,7 +318,7 @@ When `-s` is enabled, gomap combines port-based hints and protocol/banner parsin
 
 `-Dv` enables the same service/version output as `-s`, shows a compact evidence column in text output, and adds a bounded deep-version pass for open ports whose first result is generic, weak, or empty. It is intended as GoMap's fast native version-detection profile for authorized lab/internal reconnaissance: more focused than the default `-s`, but still controlled so it does not turn a quick scan into a long script scan.
 
-`-De` (or `--exhaustive-services`) enables `-Dv` and adds a second, bounded probe matrix for open ports that remain unidentified after the normal service pass. It checks common text protocol interactions on non-standard ports, including SMTP, POP3, Redis, IMAP, and IRC. The profile is opt-in because silent ports can add latency; an unrecognized response remains `unknown` rather than being assigned an unsupported product or version.
+`-De` (or `--exhaustive-services`) enables `-Dv` and adds a second, bounded probe matrix for open ports that remain unidentified after the normal service pass. It checks TLS on non-standard ports plus common text protocol interactions, including SMTP, POP3, Redis, IMAP, IRC, RTSP, and SIP. The profile is opt-in because silent ports can add latency; an unrecognized response remains `unknown` rather than being assigned an unsupported product or version.
 
 Important: banner-based detection is heuristic. Always validate critical findings with a second tool.
 
