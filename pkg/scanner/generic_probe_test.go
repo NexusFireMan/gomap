@@ -119,8 +119,8 @@ func TestKnownAlternateFTPPortUsesFTPProbe(t *testing.T) {
 
 func TestExhaustiveServiceProbePayloadsAreBounded(t *testing.T) {
 	probes := exhaustiveServiceProbePayloads()
-	if len(probes) != 7 {
-		t.Fatalf("expected seven bounded exhaustive probes, got %d", len(probes))
+	if len(probes) != 9 {
+		t.Fatalf("expected nine bounded exhaustive probes, got %d", len(probes))
 	}
 	for _, probe := range probes {
 		if len(probe) == 0 {

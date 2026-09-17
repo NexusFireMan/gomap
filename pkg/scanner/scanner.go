@@ -1393,6 +1393,8 @@ func exhaustiveServiceProbePayloads() []string {
 		"NICK gomap\r\nUSER gomap 0 * :GoMap\r\n",
 		"OPTIONS rtsp://gomap.local/ RTSP/1.0\r\nCSeq: 1\r\n\r\n",
 		"OPTIONS sip:gomap.local SIP/2.0\r\nVia: SIP/2.0/TCP gomap.local;branch=z9hG4bK-gomap\r\n\r\n",
+		"RFB 003.008\r\n",
+		"version\r\n",
 	}
 }
 
