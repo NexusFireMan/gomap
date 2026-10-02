@@ -7,6 +7,14 @@ Note: this changelog is maintained from this point forward in the project histor
 ## Unreleased
 
 ### Added
+
+### Changed
+
+### Fixed
+
+## [2.4.9] - 2026-10-02
+
+### Added
 - Add opt-in `-De`/`--exhaustive-services` profile for bounded native probes on unidentified open ports.
 - Expand exhaustive detection with bounded non-standard TLS, RTSP, and SIP probes, plus Elasticsearch transport fallback labeling.
 - Added native TLS/GlassFish, OpenMQ/JMS, and IRC/UnrealIRCd fingerprints for common non-standard service ports.
