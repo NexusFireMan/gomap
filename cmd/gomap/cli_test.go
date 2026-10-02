@@ -250,6 +250,18 @@ func TestParseCLIOptionsDeepVersionEnablesServiceDetection(t *testing.T) {
 	}
 }
 
+func TestParseCLIOptionsExhaustiveEnablesDetectionProfiles(t *testing.T) {
+	for _, flag := range []string{"-De", "--exhaustive-services"} {
+		opts, err := ParseCLIOptions([]string{flag, "10.0.11.6"})
+		if err != nil {
+			t.Fatalf("%s: unexpected error: %v", flag, err)
+		}
+		if !opts.ExhaustiveFlag || !opts.ServiceFlag || !opts.DeepVersionFlag {
+			t.Fatalf("%s: expected exhaustive service and deep detection, got %+v", flag, opts)
+		}
+	}
+}
+
 func TestParseCLIOptionsRandomIPAllowsDeepVersion(t *testing.T) {
 	opts, err := ParseCLIOptions([]string{"-Dv", "--random-ip", "10.0.11.0/24"})
 	if err != nil {

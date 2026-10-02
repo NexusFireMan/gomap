@@ -29,6 +29,7 @@ type tcpResponse struct {
 	srcPort int
 	dstPort int
 	flags   byte
+	ack     uint32
 }
 
 // DiscoverOpenPortsSYN discovers open ports via native TCP SYN probes.
@@ -72,9 +73,9 @@ func DiscoverOpenPortsSYN(host string, ports []int, cfg SYNConfig) ([]int, error
 	targetPorts := dedupeSortedPorts(append([]int(nil), ports...))
 	sort.Ints(targetPorts)
 	openSet := make(map[int]struct{}, 16)
-	pending := make(map[int]struct{}, len(targetPorts))
+	pending := make(map[int]uint32, len(targetPorts))
 	for _, p := range targetPorts {
-		pending[p] = struct{}{}
+		pending[p] = rand.Uint32()
 	}
 
 	for attempt := 0; attempt <= cfg.Retries && len(pending) > 0; attempt++ {
@@ -88,7 +89,8 @@ func DiscoverOpenPortsSYN(host string, ports []int, cfg SYNConfig) ([]int, error
 			if _, stillPending := pending[port]; !stillPending {
 				continue
 			}
-			if err := sendTCPProbe(conn, srcIP, dstIP, srcPort, port, tcpFlagSyn); err != nil {
+			seq := pending[port]
+			if err := sendTCPProbe(conn, srcIP, dstIP, srcPort, port, seq, tcpFlagSyn); err != nil {
 				msg := strings.ToLower(err.Error())
 				if strings.Contains(msg, "operation not permitted") || strings.Contains(msg, "permission denied") {
 					return nil, errors.New("insufficient privileges for native syn scan")
@@ -104,13 +106,13 @@ func DiscoverOpenPortsSYN(host string, ports []int, cfg SYNConfig) ([]int, error
 			}
 			// Drain responses incrementally to avoid socket buffer overflows on large scans.
 			if (i+1)%64 == 0 {
-				if err := collectSYNResponses(conn, srcPort, pending, openSet, 220*time.Millisecond); err != nil {
+				if err := collectSYNResponses(conn, dstIP, srcPort, pending, openSet, 220*time.Millisecond); err != nil {
 					return nil, err
 				}
 			}
 		}
 
-		if err := collectSYNResponses(conn, srcPort, pending, openSet, timeoutPerRound); err != nil {
+		if err := collectSYNResponses(conn, dstIP, srcPort, pending, openSet, timeoutPerRound); err != nil {
 			return nil, err
 		}
 	}
@@ -123,9 +125,9 @@ func DiscoverOpenPortsSYN(host string, ports []int, cfg SYNConfig) ([]int, error
 	return openPorts, nil
 }
 
-func collectSYNResponses(conn net.PacketConn, srcPort int, pending map[int]struct{}, openSet map[int]struct{}, wait time.Duration) error {
+func collectSYNResponses(conn net.PacketConn, target net.IP, srcPort int, pending map[int]uint32, openSet map[int]struct{}, wait time.Duration) error {
 	deadline := time.Now().Add(wait)
-	for time.Now().Before(deadline) {
+	for len(pending) > 0 && time.Now().Before(deadline) {
 		remaining := time.Until(deadline)
 		if remaining <= 0 {
 			break
@@ -133,7 +135,7 @@ func collectSYNResponses(conn net.PacketConn, srcPort int, pending map[int]struc
 		if remaining > 150*time.Millisecond {
 			remaining = 150 * time.Millisecond
 		}
-		resp, ok, readErr := readTCPResponse(conn, remaining)
+		resp, ok, readErr := readTCPResponse(conn, target, remaining)
 		if readErr != nil {
 			if ne, ok := readErr.(net.Error); ok && ne.Timeout() {
 				continue
@@ -143,10 +145,11 @@ func collectSYNResponses(conn net.PacketConn, srcPort int, pending map[int]struc
 		if !ok || resp.dstPort != srcPort {
 			continue
 		}
-		if _, exists := pending[resp.srcPort]; !exists {
+		seq, exists := pending[resp.srcPort]
+		if !exists || resp.flags&tcpFlagAck == 0 || resp.ack != seq+1 {
 			continue
 		}
-		if resp.flags&tcpFlagSyn != 0 && resp.flags&tcpFlagAck != 0 {
+		if resp.flags&tcpFlagSyn != 0 && resp.flags&tcpFlagRst == 0 {
 			openSet[resp.srcPort] = struct{}{}
 			delete(pending, resp.srcPort)
 			continue
@@ -163,6 +166,7 @@ func BuildResultsFromKnownOpenPorts(s *Scanner, openPorts []int, detectServices 
 	if len(openPorts) == 0 {
 		return nil
 	}
+	openPorts = append([]int(nil), openPorts...)
 	sort.Ints(openPorts)
 	openPorts = dedupeSortedPorts(openPorts)
 
@@ -187,8 +191,7 @@ func BuildResultsFromKnownOpenPorts(s *Scanner, openPorts []int, detectServices 
 	return results
 }
 
-func sendTCPProbe(conn net.PacketConn, srcIP, dstIP net.IP, srcPort, dstPort int, flags byte) error {
-	seq := rand.Uint32()
+func sendTCPProbe(conn net.PacketConn, srcIP, dstIP net.IP, srcPort, dstPort int, seq uint32, flags byte) error {
 	hdr := buildTCPHeader(srcIP, dstIP, srcPort, dstPort, seq, flags)
 	_, err := conn.WriteTo(hdr, &net.IPAddr{IP: dstIP})
 	return err
@@ -236,13 +239,19 @@ func checksum16(data []byte) uint16 {
 	return ^uint16(sum)
 }
 
-func readTCPResponse(conn net.PacketConn, timeout time.Duration) (tcpResponse, bool, error) {
+func readTCPResponse(conn net.PacketConn, target net.IP, timeout time.Duration) (tcpResponse, bool, error) {
 	var resp tcpResponse
-	_ = conn.SetReadDeadline(time.Now().Add(timeout))
+	if err := conn.SetReadDeadline(time.Now().Add(timeout)); err != nil {
+		return resp, false, err
+	}
 	buf := make([]byte, 4096)
-	n, _, err := conn.ReadFrom(buf)
+	n, addr, err := conn.ReadFrom(buf)
 	if err != nil {
 		return resp, false, err
+	}
+	peer, ok := addr.(*net.IPAddr)
+	if !ok || !peer.IP.Equal(target) {
+		return resp, false, nil
 	}
 	return parseTCPResponsePacket(buf[:n])
 }
@@ -254,20 +263,15 @@ func parseTCPResponsePacket(pkt []byte) (tcpResponse, bool, error) {
 		return resp, false, nil
 	}
 
-	// Depending on the socket behavior, payload may include IPv4 header or only TCP segment.
-	offset := 0
-	if (pkt[0] >> 4) == 4 {
-		ihl := int(pkt[0]&0x0f) * 4
-		if ihl >= 20 && ihl+20 <= n {
-			offset = ihl
-		}
-	}
-	if offset+20 > n {
+	// net.IPConn.ReadFrom already removes the IPv4 header. Port bytes are not an IP header.
+	headerSize := int(pkt[12]>>4) * 4
+	if headerSize < 20 || headerSize > n {
 		return resp, false, nil
 	}
-	resp.srcPort = int(binary.BigEndian.Uint16(pkt[offset : offset+2]))
-	resp.dstPort = int(binary.BigEndian.Uint16(pkt[offset+2 : offset+4]))
-	resp.flags = pkt[offset+13]
+	resp.srcPort = int(binary.BigEndian.Uint16(pkt[0:2]))
+	resp.dstPort = int(binary.BigEndian.Uint16(pkt[2:4]))
+	resp.flags = pkt[13]
+	resp.ack = binary.BigEndian.Uint32(pkt[8:12])
 	return resp, true, nil
 }
 

@@ -97,6 +97,38 @@ func TestSMBOrientedParsingFixtures(t *testing.T) {
 	}
 }
 
+func TestDynamicONCRPCProbeOnlyUsesHighPorts(t *testing.T) {
+	for _, tc := range []struct {
+		port int
+		want bool
+	}{
+		{4848, false},
+		{7676, false},
+		{32767, false},
+		{32768, true},
+		{49156, true},
+	} {
+		if got := shouldProbeDynamicONCRPC(tc.port); got != tc.want {
+			t.Errorf("shouldProbeDynamicONCRPC(%d) = %v, want %v", tc.port, got, tc.want)
+		}
+	}
+}
+
+func TestUnparsedKnownServiceHasUsefulVersionFallback(t *testing.T) {
+	if got := unparsedVersionForPort(4848); got != "HTTP service (unparsed response)" {
+		t.Fatalf("unexpected HTTP fallback: %q", got)
+	}
+	if got := unparsedVersionForPort(7676); got != "JMS service (unparsed response)" {
+		t.Fatalf("unexpected JMS fallback: %q", got)
+	}
+	if got := unparsedVersionForPort(8686); got != "" {
+		t.Fatalf("unexpected fallback for RMI port: %q", got)
+	}
+	if got := NewPortManager().GetServiceName(3920, ""); got != "ssl" {
+		t.Fatalf("unexpected 3920 service mapping: %q", got)
+	}
+}
+
 func TestNoGreetingDetectionMetadata(t *testing.T) {
 	tests := []struct {
 		port     int
@@ -110,6 +142,7 @@ func TestNoGreetingDetectionMetadata(t *testing.T) {
 		{143, "IMAP service (no greeting)", "port open; no imap greeting"},
 		{2525, "SMTP service (no greeting)", "port open; no smtp greeting"},
 		{3389, "Microsoft Terminal Services", "RDP TCP/3389 open; no negotiation response"},
+		{3920, "TLS service (no handshake)", "port open; no TLS handshake"},
 	}
 
 	for _, tt := range tests {

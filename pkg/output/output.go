@@ -5,6 +5,7 @@ import (
 	"io"
 	"regexp"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/NexusFireMan/gomap/v2/pkg/scanner"
@@ -79,11 +80,30 @@ func padANSI(text string, width int) string {
 
 // PrintResults displays the scan results in a formatted table
 func (of *OutputFormatter) PrintResults(results []scanner.ScanResult) {
-	if of.IncludeServices {
-		of.printWithServices(results)
-	} else {
-		of.printBasic(results)
+	clean := make([]scanner.ScanResult, len(results))
+	for i, result := range results {
+		result.ServiceName = terminalText(result.ServiceName)
+		result.Version = terminalText(result.Version)
+		result.Hostname = terminalText(result.Hostname)
+		result.Confidence = terminalText(result.Confidence)
+		result.Evidence = terminalText(result.Evidence)
+		clean[i] = result
 	}
+	if of.IncludeServices {
+		of.printWithServices(clean)
+	} else {
+		of.printBasic(clean)
+	}
+}
+
+// Remote strings must not execute terminal controls or create extra table rows.
+func terminalText(text string) string {
+	return strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) || unicode.Is(unicode.Cf, r) || r == '\u2028' || r == '\u2029' {
+			return ' '
+		}
+		return r
+	}, text)
 }
 
 // printBasic prints results without service information
@@ -96,18 +116,22 @@ func (of *OutputFormatter) printBasic(results []scanner.ScanResult) {
 
 // printWithServices prints results with service and version information
 func (of *OutputFormatter) printWithServices(results []scanner.ScanResult) {
+	versionWidth := 36
+	for _, result := range results {
+		versionWidth = max(versionWidth, visibleWidth(result.Version))
+	}
 	if hostnames := detectedHostnames(results); len(hostnames) > 0 {
 		of.printf("%s%s%s\n", ColorBold, "Detected Hostname: "+strings.Join(hostnames, ", "), ColorReset)
 	}
 
 	if of.IncludeEvidence {
-		of.printf("%s%s%s\n", ColorBold, fmt.Sprintf("%-*s %-*s %-*s %-36s %s", portColWidth, "PORT", stateColWidth, "STATE", serviceColWidth, "SERVICE", "VERSION", "EVIDENCE"), ColorReset)
+		of.printf("%s%s%s\n", ColorBold, fmt.Sprintf("%-*s %-*s %-*s %-*s %s", portColWidth, "PORT", stateColWidth, "STATE", serviceColWidth, "SERVICE", versionWidth, "VERSION", "EVIDENCE"), ColorReset)
 		for _, result := range results {
-			of.printf("%s %s %s %-36s %s\n",
+			of.printf("%s %s %s %s %s\n",
 				padANSI(Port(result.Port), portColWidth),
 				padANSI(State("open"), stateColWidth),
 				padANSI(Service(result.ServiceName), serviceColWidth),
-				padANSI(Version(result.Version), 36),
+				padANSI(Version(result.Version), versionWidth),
 				result.Evidence,
 			)
 		}
@@ -115,13 +139,13 @@ func (of *OutputFormatter) printWithServices(results []scanner.ScanResult) {
 	}
 
 	if of.IncludeDetails {
-		of.printf("%s%s%s\n", ColorBold, fmt.Sprintf("%-*s %-*s %-*s %-36s %-7s %-8s %s", portColWidth, "PORT", stateColWidth, "STATE", serviceColWidth, "SERVICE", "VERSION", "LAT(ms)", "CONF", "EVIDENCE"), ColorReset)
+		of.printf("%s%s%s\n", ColorBold, fmt.Sprintf("%-*s %-*s %-*s %-*s %-7s %-8s %s", portColWidth, "PORT", stateColWidth, "STATE", serviceColWidth, "SERVICE", versionWidth, "VERSION", "LAT(ms)", "CONF", "EVIDENCE"), ColorReset)
 		for _, result := range results {
-			of.printf("%s %s %s %-36s %-7d %-8s %s\n",
+			of.printf("%s %s %s %s %-7d %-8s %s\n",
 				padANSI(Port(result.Port), portColWidth),
 				padANSI(State("open"), stateColWidth),
 				padANSI(Service(result.ServiceName), serviceColWidth),
-				Version(result.Version),
+				padANSI(Version(result.Version), versionWidth),
 				result.LatencyMs,
 				result.Confidence,
 				result.Evidence,

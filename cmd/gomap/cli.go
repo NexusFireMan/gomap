@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	out "github.com/NexusFireMan/gomap/v2/pkg/output"
 )
@@ -18,6 +19,7 @@ type CLIOptions struct {
 	ExcludePorts    string
 	ServiceFlag     bool
 	DeepVersionFlag bool
+	ExhaustiveFlag  bool
 	GhostFlag       bool
 	UpdateFlag      bool
 	RemoveFlag      bool
@@ -62,6 +64,8 @@ func ParseCLIOptions(args []string) (CLIOptions, error) {
 	fs.StringVar(&opts.ExcludePorts, "exclude-ports", "", "exclude ports (e.g., 80,443 or 1-1024)")
 	fs.BoolVar(&opts.ServiceFlag, "s", false, "detect services and versions")
 	fs.BoolVar(&opts.DeepVersionFlag, "Dv", false, "enable deeper bounded service/version detection")
+	fs.BoolVar(&opts.ExhaustiveFlag, "De", false, "enable exhaustive bounded service detection")
+	fs.BoolVar(&opts.ExhaustiveFlag, "exhaustive-services", false, "enable exhaustive bounded service detection")
 	fs.BoolVar(&opts.GhostFlag, "g", false, "ghost mode - controlled-rate low-noise scan profile")
 	fs.BoolVar(&opts.NoDiscovery, "nd", false, "disable host discovery (scan all hosts in CIDR even if inactive)")
 	fs.BoolVar(&opts.UpdateFlag, "up", false, "update gomap to the latest version")
@@ -78,7 +82,7 @@ func ParseCLIOptions(args []string) (CLIOptions, error) {
 	fs.IntVar(&opts.MaxHosts, "max-hosts", 0, "maximum number of hosts to scan after discovery (0 = unlimited)")
 	fs.IntVar(&opts.TimeoutMS, "timeout", 0, "connection timeout per attempt in milliseconds (default: auto by mode)")
 	fs.IntVar(&opts.Workers, "workers", 0, "number of concurrent workers (default: auto by mode)")
-	fs.IntVar(&opts.Retries, "retries", 0, "retry attempts per port on timeout/error")
+	fs.IntVar(&opts.Retries, "retries", 0, "retry attempts per port on timeout/transient connection error")
 	fs.IntVar(&opts.BackoffMS, "backoff-ms", 25, "base backoff in milliseconds between retries")
 	fs.IntVar(&opts.MaxTimeoutMS, "max-timeout", 0, "maximum adaptive timeout in milliseconds (0 = automatic)")
 	fs.BoolVar(&opts.AdaptiveTimeout, "adaptive-timeout", true, "enable adaptive timeout tuning during scan")
@@ -118,6 +122,10 @@ func normalizeOptions(opts CLIOptions) (CLIOptions, error) {
 	if opts.DeepVersionFlag {
 		opts.ServiceFlag = true
 	}
+	if opts.ExhaustiveFlag {
+		opts.ServiceFlag = true
+		opts.DeepVersionFlag = true
+	}
 
 	if opts.JSONFlag {
 		if opts.FormatFlag != "text" && opts.FormatFlag != "json" {
@@ -144,6 +152,9 @@ func normalizeOptions(opts CLIOptions) (CLIOptions, error) {
 	if opts.JSONFlag && opts.CSVFlag {
 		return opts, errors.New("choose only one machine output format: --json or --csv")
 	}
+	if opts.TopPorts < 0 {
+		return opts, errors.New("--top must be a positive number")
+	}
 	if opts.TopPortsAlias < 0 {
 		return opts, errors.New("--top-ports must be a positive number")
 	}
@@ -162,9 +173,6 @@ func normalizeOptions(opts CLIOptions) (CLIOptions, error) {
 	}
 	if opts.UDPFlag && opts.ScanType == "syn" {
 		return opts, errors.New("-u cannot be combined with --scan-type syn")
-	}
-	if opts.TopPorts < 0 {
-		return opts, errors.New("--top must be a positive number")
 	}
 	if opts.Rate < 0 {
 		return opts, errors.New("--rate cannot be negative")
@@ -186,6 +194,12 @@ func normalizeOptions(opts CLIOptions) (CLIOptions, error) {
 	}
 	if opts.MaxTimeoutMS < 0 {
 		return opts, errors.New("--max-timeout cannot be negative")
+	}
+	const maxMilliseconds = int64((1<<63 - 1) / time.Millisecond)
+	for name, value := range map[string]int{"timeout": opts.TimeoutMS, "max-timeout": opts.MaxTimeoutMS, "backoff-ms": opts.BackoffMS} {
+		if int64(value) > maxMilliseconds {
+			return opts, fmt.Errorf("--%s exceeds the supported duration", name)
+		}
 	}
 	if opts.OutPath != "" && strings.TrimSpace(opts.OutPath) == "" {
 		return opts, errors.New("invalid --out file path")
@@ -257,6 +271,7 @@ func printHelp(w *os.File) {
   --exclude-ports <ports>    remove ports from final scan set
   -s                         enable service/version detection
   -Dv                        deeper bounded service/version detection
+  -De, --exhaustive-services exhaustive bounded service detection
   -g                         ghost mode (controlled-rate low-noise profile)
   -nd                        disable CIDR host discovery
 
@@ -264,7 +279,7 @@ func printHelp(w *os.File) {
   --workers <N>              concurrent workers (auto by mode if 0)
   --rate <N>                 max ports/second per host (0 = unlimited)
   --timeout <ms>             dial timeout per attempt
-  --retries <N>              retries per port
+  --retries <N>              retries per port on transient connection errors
   --backoff-ms <ms>          exponential backoff base between retries
   --adaptive-timeout         dynamic timeout tuning (default: true)
   --max-timeout <ms>         adaptive timeout upper bound

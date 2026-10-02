@@ -55,6 +55,40 @@ func TestParseBannerPrefersSMTPBeforeGenericFTP220(t *testing.T) {
 	}
 }
 
+func TestParseJMSGlassFishAndIRCProducts(t *testing.T) {
+	if service, version := parseJMS("OpenMQ Java Message Service 301"); service != "jms" || version != "Java Message Service 301" {
+		t.Fatalf("unexpected JMS parse: %q/%q", service, version)
+	}
+	if service, version := parseGlassFish("Oracle Glassfish Application Server"); service != "http" || version != "GlassFish Server" {
+		t.Fatalf("unexpected GlassFish parse: %q/%q", service, version)
+	}
+	if service, version := parseIRC(":irc.example NOTICE AUTH :*** UnrealIRCd 6.1.0"); service != "irc" || version != "UnrealIRCd 6.1.0" {
+		t.Fatalf("unexpected IRC parse: %q/%q", service, version)
+	}
+	if service, version := parseIRC(":server 004 gomap Unreal3.2.10.4"); service != "irc" || version != "UnrealIRCd 3.2.10.4" {
+		t.Fatalf("unexpected numeric IRC parse: %q/%q", service, version)
+	}
+}
+
+func TestParseAdditionalTextServices(t *testing.T) {
+	tests := []struct {
+		name, banner, service, version string
+	}{
+		{"RTSP", "RTSP/1.0 200 OK\r\nServer: GStreamer/1.0", "rtsp", "GStreamer/1.0"},
+		{"SIP", "SIP/2.0 200 OK\r\nServer: Asterisk PBX", "sip", "Asterisk PBX"},
+		{"VNC", "RFB 003.008\r\n", "vnc", "RFB 003.008"},
+		{"Memcached", "VERSION 1.6.21\r\n", "memcached", "VERSION 1.6.21"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			service, version := parseBanner(tt.banner)
+			if service != tt.service || version != tt.version {
+				t.Fatalf("expected %s/%s, got %s/%s", tt.service, tt.version, service, version)
+			}
+		})
+	}
+}
+
 func TestParseFTPKnownVersions(t *testing.T) {
 	tests := []struct {
 		banner  string

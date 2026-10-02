@@ -97,6 +97,7 @@ func incrementIP(ip net.IP) {
 func ParseTargets(target string) ([]string, error) {
 	targets := strings.Split(target, ",")
 	var allIPs []string
+	seen := make(map[string]struct{})
 
 	for _, t := range targets {
 		t = strings.TrimSpace(t)
@@ -109,7 +110,12 @@ func ParseTargets(target string) ([]string, error) {
 			return nil, err
 		}
 
-		allIPs = append(allIPs, ips...)
+		for _, ip := range ips {
+			if _, exists := seen[ip]; !exists {
+				seen[ip] = struct{}{}
+				allIPs = append(allIPs, ip)
+			}
+		}
 	}
 
 	if len(allIPs) == 0 {
@@ -176,33 +182,37 @@ func DiscoverActiveHostsWithOptions(hosts []string, opts DiscoveryOptions) []str
 	if numWorkers <= 0 {
 		numWorkers = 25
 	}
-	activeChan := make(chan string, len(hosts))
+	return discoverHosts(hosts, numWorkers, func(host string) bool {
+		return isHostActive(host, commonPorts, timeout, opts.SourceIPs)
+	})
+}
+
+// Workers write distinct slots; collect in input order only after they finish.
+func discoverHosts(hosts []string, numWorkers int, probe func(string) bool) []string {
+	numWorkers = max(1, min(numWorkers, len(hosts)))
+	active := make([]bool, len(hosts))
+	jobs := make(chan int)
 	var wg sync.WaitGroup
-	semaphore := make(chan struct{}, numWorkers)
-
-	for _, host := range hosts {
+	for i := 0; i < numWorkers; i++ {
 		wg.Add(1)
-		go func(h string) {
+		go func() {
 			defer wg.Done()
-			semaphore <- struct{}{}        // Acquire slot
-			defer func() { <-semaphore }() // Release slot
-
-			if isHostActive(h, commonPorts, timeout, opts.SourceIPs) {
-				activeChan <- h
+			for index := range jobs {
+				active[index] = probe(hosts[index])
 			}
-		}(host)
+		}()
 	}
-
-	go func() {
-		wg.Wait()
-		close(activeChan)
-	}()
-
+	for index := range hosts {
+		jobs <- index
+	}
+	close(jobs)
+	wg.Wait()
 	var activeHosts []string
-	for host := range activeChan {
-		activeHosts = append(activeHosts, host)
+	for index, host := range hosts {
+		if active[index] {
+			activeHosts = append(activeHosts, host)
+		}
 	}
-
 	return activeHosts
 }
 
