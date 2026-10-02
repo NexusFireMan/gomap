@@ -63,6 +63,7 @@ func Run() {
 		MaxHosts:        opts.MaxHosts,
 		ServiceDetect:   opts.ServiceFlag,
 		DeepVersion:     opts.DeepVersionFlag,
+		Exhaustive:      opts.ExhaustiveFlag,
 		GhostMode:       opts.GhostFlag,
 		NoDiscovery:     opts.NoDiscovery,
 		Format:          opts.FormatFlag,

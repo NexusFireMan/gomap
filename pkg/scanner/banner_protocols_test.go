@@ -70,6 +70,25 @@ func TestParseJMSGlassFishAndIRCProducts(t *testing.T) {
 	}
 }
 
+func TestParseAdditionalTextServices(t *testing.T) {
+	tests := []struct {
+		name, banner, service, version string
+	}{
+		{"RTSP", "RTSP/1.0 200 OK\r\nServer: GStreamer/1.0", "rtsp", "GStreamer/1.0"},
+		{"SIP", "SIP/2.0 200 OK\r\nServer: Asterisk PBX", "sip", "Asterisk PBX"},
+		{"VNC", "RFB 003.008\r\n", "vnc", "RFB 003.008"},
+		{"Memcached", "VERSION 1.6.21\r\n", "memcached", "VERSION 1.6.21"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			service, version := parseBanner(tt.banner)
+			if service != tt.service || version != tt.version {
+				t.Fatalf("expected %s/%s, got %s/%s", tt.service, tt.version, service, version)
+			}
+		})
+	}
+}
+
 func TestParseFTPKnownVersions(t *testing.T) {
 	tests := []struct {
 		banner  string

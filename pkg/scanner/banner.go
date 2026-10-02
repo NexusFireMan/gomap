@@ -9,6 +9,10 @@ import (
 
 // ParseBanner extracts service name and version from a banner
 func parseBanner(banner string) (service, version string) {
+	if service, version := parseAdditionalTextServices(banner); service != "" {
+		return service, version
+	}
+
 	// First check if it's HTTP - we need full banner for this
 	if strings.Contains(banner, "HTTP/") {
 		if s, v := parseSearchHTTP(banner); s != "" {
@@ -88,6 +92,37 @@ func parseBanner(banner string) (service, version string) {
 	}
 
 	return "", ""
+}
+
+func parseAdditionalTextServices(banner string) (service, version string) {
+	trimmed := strings.TrimSpace(banner)
+	upper := strings.ToUpper(trimmed)
+	switch {
+	case strings.HasPrefix(upper, "RTSP/"):
+		return "rtsp", responseServerVersion(banner, "RTSP service")
+	case strings.HasPrefix(upper, "SIP/2.0") || strings.Contains(upper, " SIP/2.0"):
+		return "sip", responseServerVersion(banner, "SIP service")
+	case strings.HasPrefix(upper, "RFB "):
+		fields := strings.Fields(trimmed)
+		if len(fields) >= 2 {
+			return "vnc", "RFB " + fields[1]
+		}
+		return "vnc", "RFB service"
+	case strings.HasPrefix(upper, "VERSION "):
+		return "memcached", strings.TrimSpace(trimmed)
+	default:
+		return "", ""
+	}
+}
+
+func responseServerVersion(response, fallback string) string {
+	for _, line := range strings.Split(response, "\n") {
+		parts := strings.SplitN(line, ":", 2)
+		if len(parts) == 2 && strings.EqualFold(strings.TrimSpace(parts[0]), "Server") && strings.TrimSpace(parts[1]) != "" {
+			return strings.TrimSpace(parts[1])
+		}
+	}
+	return fallback
 }
 
 // sanitizeBanner removes non-printable characters and normalizes whitespace
