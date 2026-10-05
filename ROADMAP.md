@@ -12,6 +12,12 @@ GoMap's roadmap focuses on improving reliability, test coverage, documentation, 
 
 ## Detection and Scan Reliability
 
+- [x] Preserve explicit UDP states in text, JSON, JSONL, and CSV; count only confirmed open ports.
+- [x] Support `--version` and options before or after the CLI target.
+- [ ] Define and implement a global rate budget covering discovery, retries, and service detection; verify with an injected clock and fake transport.
+- [ ] Separate confirmed protocol, probable product, and disclosed version confidence; add positive and negative captured-response fixtures.
+- [ ] Add reproducible isolated Linux tests for SYN, cancellation, and temporary source-address cleanup.
+
 - [ ] Stabilize full-range CONNECT results across constrained VirtualBox and VPN lab networks.
 - [ ] Expand native fingerprints for SMB server identity, NetBIOS workgroup data, and IRC product/version banners.
 - [ ] Keep unidentified open ports explicit in text and structured output without inventing service or version data.
