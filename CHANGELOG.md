@@ -11,6 +11,7 @@ Note: this changelog is maintained from this point forward in the project histor
 ### Changed
 
 ### Fixed
+- Reject malformed SIP/RTSP, RFB, and Memcached text signatures; ignore Server lines in response bodies and lower confidence for generic banner descriptions.
 
 ## [2.4.9] - 2026-10-02
 

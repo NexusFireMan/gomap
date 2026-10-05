@@ -772,7 +772,7 @@ func (s *Scanner) grabBanner(conn net.Conn, port int, result *ScanResult) {
 			}
 		}
 		if version != "" {
-			result.Confidence = "high"
+			result.Confidence = bannerConfidence(version)
 			result.Evidence = "protocol banner"
 		} else {
 			result.Confidence = "medium"
@@ -831,7 +831,7 @@ func (s *Scanner) grabBanner(conn net.Conn, port int, result *ScanResult) {
 				if retryService, retryVersion := parseBanner(retryBanner); retryService != "" {
 					result.ServiceName = retryService
 					result.Version = retryVersion
-					result.Confidence = "high"
+					result.Confidence = bannerConfidence(retryVersion)
 					if retryVersion == "" {
 						result.Confidence = "medium"
 					}
@@ -1442,7 +1442,7 @@ func (s *Scanner) tryProtocolFingerprint(port int) (service, version, confidence
 				if version == "" {
 					version = "IRC service"
 				}
-				return service, version, "high", "IRC protocol response", "protocol-fingerprint", true
+				return service, version, bannerConfidence(version), "IRC protocol response", "protocol-fingerprint", true
 			}
 		}
 	case 53:

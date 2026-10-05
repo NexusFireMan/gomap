@@ -12,6 +12,9 @@ GoMap's roadmap focuses on improving reliability, test coverage, documentation, 
 
 ## Detection and Scan Reliability
 
+- [x] Add negative fixtures for malformed SIP/RTSP, RFB, and Memcached signatures and forged body headers.
+- [ ] Extend confidence review across all protocol-specific detection paths; distinguish protocol evidence from product/version disclosure.
+
 - [ ] Stabilize full-range CONNECT results across constrained VirtualBox and VPN lab networks.
 - [ ] Expand native fingerprints for SMB server identity, NetBIOS workgroup data, and IRC product/version banners.
 - [ ] Keep unidentified open ports explicit in text and structured output without inventing service or version data.

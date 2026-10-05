@@ -322,6 +322,8 @@ When `-s` is enabled, gomap combines port-based hints and protocol/banner parsin
 
 Important: banner-based detection is heuristic. Always validate critical findings with a second tool.
 
+Generic banner descriptions carry medium confidence. High banner confidence means a recognized disclosure, not independent confirmation of a product version or operating system. RFB and SMB versions describe their protocols; TLS metadata describes the encrypted transport. SIP/RTSP identification requires a valid response status line, and product headers are read only before the response body.
+
 Operational limits:
 - CONNECT completes one requested connection attempt before releasing the remaining workers; this avoids the initial parallel burst without adding probes. Banner reads do not block that release. A silent first port can add one attempt's wait before parallel scanning starts.
 - `--retries` applies to timeouts and transient connection errors, not explicit connection refusals or permission errors. Its default remains zero; bounded scans can still miss temporarily unavailable services.

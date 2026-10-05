@@ -94,22 +94,32 @@ func parseBanner(banner string) (service, version string) {
 	return "", ""
 }
 
+var textResponseLineRE = regexp.MustCompile(`^(RTSP/1\.[01]|SIP/2\.0) [1-6][0-9]{2}(?:[ \t].*)?$`)
+var rfbGreetingRE = regexp.MustCompile(`^RFB [0-9]{3}\.[0-9]{3}$`)
+var memcachedVersionRE = regexp.MustCompile(`^VERSION [0-9]+\.[0-9]+(?:\.[0-9]+)?(?:[-+][A-Za-z0-9._-]+)?$`)
+
+// Generic descriptions confirm less than a disclosed implementation banner.
+func bannerConfidence(version string) string {
+	switch strings.ToLower(strings.TrimSpace(version)) {
+	case "", "service", "service ready", "ready", "unknown", "ftp service", "ftp server ready", "smtp service", "pop3 service", "imap4rev1", "http", "rtsp service", "sip service", "irc service", "smb", "redis", "postgresql", "glassfish server":
+		return "medium"
+	default:
+		return "high"
+	}
+}
+
 func parseAdditionalTextServices(banner string) (service, version string) {
 	trimmed := strings.TrimSpace(banner)
-	upper := strings.ToUpper(trimmed)
+	line := strings.TrimSuffix(strings.SplitN(trimmed, "\n", 2)[0], "\r")
 	switch {
-	case strings.HasPrefix(upper, "RTSP/"):
+	case strings.HasPrefix(line, "RTSP/") && textResponseLineRE.MatchString(line):
 		return "rtsp", responseServerVersion(banner, "RTSP service")
-	case strings.HasPrefix(upper, "SIP/2.0") || strings.Contains(upper, " SIP/2.0"):
+	case strings.HasPrefix(line, "SIP/2.0") && textResponseLineRE.MatchString(line):
 		return "sip", responseServerVersion(banner, "SIP service")
-	case strings.HasPrefix(upper, "RFB "):
-		fields := strings.Fields(trimmed)
-		if len(fields) >= 2 {
-			return "vnc", "RFB " + fields[1]
-		}
-		return "vnc", "RFB service"
-	case strings.HasPrefix(upper, "VERSION "):
-		return "memcached", strings.TrimSpace(trimmed)
+	case rfbGreetingRE.MatchString(line):
+		return "vnc", line
+	case memcachedVersionRE.MatchString(line):
+		return "memcached", line
 	default:
 		return "", ""
 	}
@@ -117,6 +127,9 @@ func parseAdditionalTextServices(banner string) (service, version string) {
 
 func responseServerVersion(response, fallback string) string {
 	for _, line := range strings.Split(response, "\n") {
+		if strings.TrimSpace(line) == "" {
+			break
+		}
 		parts := strings.SplitN(line, ":", 2)
 		if len(parts) == 2 && strings.EqualFold(strings.TrimSpace(parts[0]), "Server") && strings.TrimSpace(parts[1]) != "" {
 			return strings.TrimSpace(parts[1])
