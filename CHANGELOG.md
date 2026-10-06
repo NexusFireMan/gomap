@@ -12,6 +12,7 @@ Note: this changelog is maintained from this point forward in the project histor
 
 ### Fixed
 - Reject malformed SIP/RTSP, RFB, and Memcached text signatures; ignore Server lines in response bodies and lower confidence for generic banner descriptions.
+- Associate SMB, Redis, and Node.js versions with explicit product fields; retain JMS protocol identifiers without inventing an OpenMQ product version, and require IRC protocol context.
 
 ## [2.4.9] - 2026-10-02
 

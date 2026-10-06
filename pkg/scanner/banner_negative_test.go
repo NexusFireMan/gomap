@@ -35,3 +35,38 @@ func TestBannerConfidenceForGenericDescriptions(t *testing.T) {
 		}
 	}
 }
+
+func TestVersionsMustBelongToIdentifiedProduct(t *testing.T) {
+	for _, tt := range []struct {
+		name, banner, version string
+		parse                 func(string) (string, string)
+	}{
+		{"SMB year", "SMB maintenance 2019", "SMB", parseSMB},
+		{"Windows year", "Microsoft Windows SMB build log 2019", "Windows SMB", parseSMB},
+		{"Samba unrelated number", "Samba uptime 4.2 hours", "Samba", parseSMB},
+		{"Redis unrelated version", "Redis error v=9.9", "Redis", parseRedis},
+		{"Redis disclosed version", "redis_version:6.2.5 v=9.9", "Redis 6.2.5", parseRedis},
+		{"JMS fields", "101 (imqbroker) 301", "Java Message Service 301", parseJMS},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			_, version := tt.parse(tt.banner)
+			if version != tt.version {
+				t.Fatalf("got %q, want %q", version, tt.version)
+			}
+		})
+	}
+	if got := parseNodeVersion("Node.js/20.1.0 backend/99.0"); got != "Node.js/Express 20.1.0" {
+		t.Fatalf("Node version: %q", got)
+	}
+	if got := parseNodeVersion("Express backend/99.0"); got != "" {
+		t.Fatalf("borrowed backend version: %q", got)
+	}
+}
+
+func TestIRCRejectsProductMentionsOutsideProtocol(t *testing.T) {
+	for _, banner := range []string{"unreal game 3.2", "documentation for ircd", "notice auth in documentation"} {
+		if service, _ := parseIRC(banner); service != "" {
+			t.Fatalf("classified unrelated text as IRC: %q", banner)
+		}
+	}
+}

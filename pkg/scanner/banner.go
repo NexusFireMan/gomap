@@ -101,7 +101,7 @@ var memcachedVersionRE = regexp.MustCompile(`^VERSION [0-9]+\.[0-9]+(?:\.[0-9]+)
 // Generic descriptions confirm less than a disclosed implementation banner.
 func bannerConfidence(version string) string {
 	switch strings.ToLower(strings.TrimSpace(version)) {
-	case "", "service", "service ready", "ready", "unknown", "ftp service", "ftp server ready", "smtp service", "pop3 service", "imap4rev1", "http", "rtsp service", "sip service", "irc service", "smb", "redis", "postgresql", "glassfish server":
+	case "", "service", "service ready", "ready", "unknown", "ftp service", "ftp server ready", "smtp service", "pop3 service", "imap4rev1", "http", "rtsp service", "sip service", "irc service", "smb", "redis", "postgresql", "glassfish server", "samba", "windows smb", "mysql", "elasticsearch", "java message service", "microsoft httpapi", "apache", "nginx", "microsoft ftp", "postfix smtp", "proftpd":
 		return "medium"
 	default:
 		return "high"
@@ -735,9 +735,9 @@ func parseNodeVersion(serverHeader string) string {
 		return ""
 	}
 
-	nodeRegex := regexp.MustCompile(`[\d\.]+`)
-	if match := nodeRegex.FindString(serverHeader); match != "" {
-		return fmt.Sprintf("Node.js/Express %s", match)
+	nodeRegex := regexp.MustCompile(`(?:Node\.js|nodejs|node|Express)[/\s]+(\d+(?:\.\d+)+)`)
+	if match := nodeRegex.FindStringSubmatch(serverHeader); match != nil {
+		return fmt.Sprintf("Node.js/Express %s", match[1])
 	}
 	return ""
 }
@@ -839,7 +839,7 @@ func parseJMS(banner string) (string, string) {
 
 	jmsRegex := regexp.MustCompile(`(\d+)\s*\(imqbroker\)\s*(\d+)`)
 	if match := jmsRegex.FindStringSubmatch(banner); match != nil {
-		return "jms", fmt.Sprintf("OpenMQ %s.%s", match[1], match[2])
+		return "jms", "Java Message Service " + match[2]
 	}
 	versionRegex := regexp.MustCompile(`(?i)(?:openmq|java message service|imqbroker)[^\d]{0,16}(\d+(?:\.\d+)+|\d{3})`)
 	if match := versionRegex.FindStringSubmatch(banner); match != nil {
@@ -862,11 +862,7 @@ func parseGlassFish(banner string) (string, string) {
 }
 
 func parseIRC(banner string) (string, string) {
-	lowerBanner := strings.ToLower(banner)
-	if !strings.Contains(lowerBanner, "unreal") &&
-		!strings.Contains(lowerBanner, "ircd") &&
-		!strings.Contains(lowerBanner, "notice auth") &&
-		!regexp.MustCompile(`(?m)^:\S+\s+001\s`).MatchString(banner) {
+	if !regexp.MustCompile(`(?im)^:\S+\s+(?:NOTICE\s+AUTH\b|00[1-5]\s)`).MatchString(banner) {
 		return "", ""
 	}
 	if match := regexp.MustCompile(`(?i)unreal(?:ircd)?[\s/-]*([\d.]+(?:[-\w.]*)?)`).FindStringSubmatch(banner); match != nil {
@@ -895,12 +891,6 @@ func parseSMB(banner string) (string, string) {
 		if match := sambaRegex.FindStringSubmatch(banner); match != nil {
 			return "microsoft-ds", fmt.Sprintf("Samba %s", match[1])
 		}
-		// Generic Samba patterns
-		if strings.Contains(banner, "3.") {
-			return "microsoft-ds", "Samba 3.X"
-		} else if strings.Contains(banner, "4.") {
-			return "microsoft-ds", "Samba 4.X"
-		}
 		return "microsoft-ds", "Samba"
 	}
 
@@ -921,8 +911,12 @@ func parseSMB(banner string) (string, string) {
 	}
 
 	// Check for Windows Server versions
-	if strings.Contains(banner, "Windows") || strings.Contains(banner, "2008") || strings.Contains(banner, "2012") ||
-		strings.Contains(banner, "2016") || strings.Contains(banner, "2019") {
+	if strings.Contains(banner, "Windows") {
+		windowsVersion := regexp.MustCompile(`Windows\s+(?:Server\s+)?(2008(?: R2)?|2012(?: R2)?|2016|2019|10|7)\b`).FindStringSubmatch(banner)
+		if windowsVersion == nil {
+			return "microsoft-ds", "Windows SMB"
+		}
+		banner = windowsVersion[0]
 
 		if strings.Contains(banner, "2008 R2") {
 			return "microsoft-ds", "Windows Server 2008 R2"
@@ -975,7 +969,7 @@ func parseRedis(banner string) (string, string) {
 		return "", ""
 	}
 
-	redisRegex := regexp.MustCompile(`v=([\d\.]+[\w.-]*)`)
+	redisRegex := regexp.MustCompile(`(?:redis_version:|Redis\s+(?:version[=:]\s*)?)(\d+(?:\.\d+)+(?:[-\w.]*)?)`)
 	if match := redisRegex.FindStringSubmatch(banner); match != nil {
 		return "redis", fmt.Sprintf("Redis %s", match[1])
 	}
