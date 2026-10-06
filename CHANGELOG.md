@@ -7,6 +7,8 @@ Note: this changelog is maintained from this point forward in the project histor
 ## Unreleased
 
 ### Added
+- Add Linux subprocess regressions for SIGINT/SIGTERM cleanup, including cleanup failures and preservation of existing addresses.
+- Add opt-in isolated raw-socket lifecycle validation with namespace guards, bounded reads, closure checks, and native netlink missing-interface handling; no probes or address modifications.
 
 ### Changed
 

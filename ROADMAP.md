@@ -12,6 +12,9 @@ GoMap's roadmap focuses on improving reliability, test coverage, documentation, 
 
 ## Detection and Scan Reliability
 
+- [x] Validate signal cleanup and error reporting in Linux subprocesses with fake address backends.
+- [x] Validate raw-socket deadlines and closure in an isolated loopback-only Linux namespace without sending probes.
+- [ ] Validate end-to-end SYN response handling and native netlink address rollback in a disposable, disconnected lab; lifecycle fixtures do not cover these kernel-level workflows.
 - [ ] Stabilize full-range CONNECT results across constrained VirtualBox and VPN lab networks.
 - [ ] Expand native fingerprints for SMB server identity, NetBIOS workgroup data, and IRC product/version banners.
 - [ ] Keep unidentified open ports explicit in text and structured output without inventing service or version data.
