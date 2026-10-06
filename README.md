@@ -334,6 +334,7 @@ Operational limits:
 - Raw SYN discovery and privileged interface changes require separate lab validation.
 - MySQL, DNS/TCP, ONC RPC, AJP and SMB reads handle fragmented frames with bounded buffers. HTTP banner collection is limited to 64 KiB; other text and binary probes still need broader fragmentation testing.
 - Duplicate targets and ports are scanned once. CIDR discovery uses a bounded worker pool and preserves target order, including when applying `--max-hosts` afterward.
+- When duplicate observations are combined, service, version, confidence, evidence, and detection path stay together. Higher-confidence identifications take precedence; equal-confidence results prefer a known service and fuller metadata, retaining the first observation on a complete tie. This selects an observation, not independent confirmation or consensus. Complete TLS handshake metadata is not replaced by partial TLS fields.
 - IPv4 CIDRs omit network/broadcast addresses except for /31 and /32; IPv6 ranges preserve endpoints. Expansion is limited to 65,536 addresses per CIDR.
 
 Non-standard port note:

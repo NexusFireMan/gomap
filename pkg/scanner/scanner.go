@@ -467,27 +467,20 @@ func dedupeOpenResults(results []ScanResult) []ScanResult {
 }
 
 func mergeOpenResult(a, b ScanResult) ScanResult {
-	// Prefer richer fields from b where present.
 	out := a
-	if b.ServiceName != "" {
+	// An identification and its supporting evidence must come from one observation.
+	if preferResultIdentification(a, b) {
 		out.ServiceName = b.ServiceName
-	}
-	if b.Version != "" {
 		out.Version = b.Version
-	}
-	if b.Hostname != "" {
-		out.Hostname = b.Hostname
-	}
-	if b.Confidence != "" {
 		out.Confidence = b.Confidence
-	}
-	if b.Evidence != "" {
 		out.Evidence = b.Evidence
-	}
-	if b.DetectionPath != "" {
 		out.DetectionPath = b.DetectionPath
+		if b.Hostname != "" {
+			out.Hostname = b.Hostname
+		}
 	}
-	if b.TLS {
+	// Do not erase a complete handshake with a TLS-only flag or partial metadata.
+	if b.TLS && (!a.TLS || (b.TLSVersion != "" && b.TLSCipher != "") || (a.TLSVersion == "" && b.TLSVersion != "")) {
 		out.TLS = true
 		out.TLSVersion = b.TLSVersion
 		out.TLSCipher = b.TLSCipher
@@ -500,6 +493,40 @@ func mergeOpenResult(a, b ScanResult) ScanResult {
 		out.LatencyMs = b.LatencyMs
 	}
 	return out
+}
+
+func preferResultIdentification(a, b ScanResult) bool {
+	if b.ServiceName == "" {
+		return false
+	}
+	if a.ServiceName == "" {
+		return true
+	}
+	quality := func(r ScanResult) [5]int {
+		var confidence int
+		switch r.Confidence {
+		case "high":
+			confidence = 3
+		case "medium":
+			confidence = 2
+		case "low":
+			confidence = 1
+		}
+		present := func(ok bool) int {
+			if ok {
+				return 1
+			}
+			return 0
+		}
+		return [5]int{confidence, present(r.ServiceName != "unknown"), present(r.Version != ""), present(r.Evidence != ""), present(r.DetectionPath != "")}
+	}
+	qa, qb := quality(a), quality(b)
+	for i := range qa {
+		if qa[i] != qb[i] {
+			return qb[i] > qa[i]
+		}
+	}
+	return false
 }
 
 func (s *Scanner) retryBackoff(attempt int) time.Duration {

@@ -12,6 +12,8 @@ GoMap's roadmap focuses on improving reliability, test coverage, documentation, 
 
 ## Detection and Scan Reliability
 
+- [x] Keep identification evidence coherent when deduplicating observations; retain stronger confidence and avoid mixing TLS handshakes.
+- [ ] Review UDP protocol claims against payload structure rather than inferring validated responses from destination ports alone.
 - [ ] Stabilize full-range CONNECT results across constrained VirtualBox and VPN lab networks.
 - [ ] Expand native fingerprints for SMB server identity, NetBIOS workgroup data, and IRC product/version banners.
 - [ ] Keep unidentified open ports explicit in text and structured output without inventing service or version data.

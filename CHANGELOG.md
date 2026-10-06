@@ -11,6 +11,7 @@ Note: this changelog is maintained from this point forward in the project histor
 ### Changed
 
 ### Fixed
+- Keep duplicate result identifications and evidence atomic, prefer stronger identifications over weak port hints, and preserve complete TLS metadata when a later observation is incomplete.
 
 ## [2.4.9] - 2026-10-02
 
