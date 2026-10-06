@@ -13,6 +13,7 @@ Note: this changelog is maintained from this point forward in the project histor
 ### Changed
 
 ### Fixed
+- Prevent signal-handler reinstallation after source-address cleanup, including concurrent installation/closure, to avoid retaining an idle cleanup goroutine.
 
 ## [2.4.9] - 2026-10-02
 

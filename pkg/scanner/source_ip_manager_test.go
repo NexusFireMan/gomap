@@ -206,3 +206,43 @@ func mustIPNet(t *testing.T, value string) *net.IPNet {
 	network.IP = ip
 	return network
 }
+
+func TestManagedSignalCleanupCannotReinstallAfterClose(t *testing.T) {
+	m, err := prepareManagedSourceIPsWithBackend("fake0", "192.0.2.21/24", &fakeAddressBackend{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Close(); err != nil {
+		t.Fatal(err)
+	}
+	m.InstallSignalCleanup()
+	if m.signalStop != nil || !m.signalClosed {
+		if m.signalStop != nil {
+			m.signalStop()
+		}
+		t.Fatal("closed manager reinstalled a signal handler")
+	}
+}
+
+func TestManagedSignalCleanupConcurrentInstallAndClose(t *testing.T) {
+	for range 20 {
+		m, err := prepareManagedSourceIPsWithBackend("fake0", "192.0.2.21/24", &fakeAddressBackend{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var wg sync.WaitGroup
+		wg.Go(m.InstallSignalCleanup)
+		wg.Go(func() {
+			if err := m.Close(); err != nil {
+				t.Error(err)
+			}
+		})
+		wg.Wait()
+		if !m.signalClosed || m.signalStop != nil {
+			if m.signalStop != nil {
+				m.signalStop()
+			}
+			t.Fatal("concurrent lifecycle retained a signal handler")
+		}
+	}
+}
