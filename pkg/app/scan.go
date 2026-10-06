@@ -23,6 +23,7 @@ type ScanRequest struct {
 	ExcludePorts    string
 	TopPorts        int
 	Rate            int
+	GlobalRate      int
 	MaxHosts        int
 	ServiceDetect   bool
 	DeepVersion     bool
@@ -46,6 +47,10 @@ type ScanRequest struct {
 
 // ExecuteScan runs the complete scan workflow: target expansion, host discovery, scan, and rendering.
 func ExecuteScan(req ScanRequest) (resultErr error) {
+	if req.GlobalRate < 0 {
+		return errors.New("--global-rate cannot be negative")
+	}
+	limiter := scanner.NewAttemptLimiter(req.GlobalRate)
 	machineOutput := req.Format != "text"
 	if req.ScanType == "" {
 		req.ScanType = "connect"
@@ -169,6 +174,7 @@ func ExecuteScan(req ScanRequest) (resultErr error) {
 				fmt.Printf("%s\n", output.StatusWarn("Ghost discovery profile active: low-noise probes on 443,80,22. Use -nd to skip discovery completely."))
 			}
 		}
+		discoveryOpts.AttemptLimiter = limiter
 		targets = scanner.DiscoverActiveHostsWithOptions(targets, discoveryOpts)
 		if len(targets) == 0 {
 			if machineOutput {
@@ -249,6 +255,7 @@ func ExecuteScan(req ScanRequest) (resultErr error) {
 			Timeout:         timeoutDuration,
 			Retries:         req.Retries,
 			Rate:            req.Rate,
+			AttemptLimiter:  limiter,
 			AdaptiveTimeout: req.AdaptiveTimeout,
 			BackoffBase:     time.Duration(req.BackoffMS) * time.Millisecond,
 			MaxTimeout:      maxTimeoutDuration,
@@ -264,9 +271,10 @@ func ExecuteScan(req ScanRequest) (resultErr error) {
 			openResults = s.ScanUDP(portsToScan, req.ServiceDetect)
 		} else if req.ScanType == "syn" {
 			synOpenPorts, synErr := scanner.DiscoverOpenPortsSYN(targetIP, portsToScan, scanner.SYNConfig{
-				Rate:      req.Rate,
-				Retries:   req.Retries,
-				GhostMode: req.GhostMode,
+				Rate:           req.Rate,
+				AttemptLimiter: limiter,
+				Retries:        req.Retries,
+				GhostMode:      req.GhostMode,
 			})
 			if synErr != nil {
 				if !machineOutput {

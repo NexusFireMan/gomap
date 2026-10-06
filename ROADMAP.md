@@ -12,6 +12,9 @@ GoMap's roadmap focuses on improving reliability, test coverage, documentation, 
 
 ## Detection and Scan Reliability
 
+- [x] Add a global attempt budget covering discovery, retries, and additional service connections without replacing per-host pacing.
+- [x] Extend isolated SYN response fixtures and cleanup failure tests without privileged sockets or NIC changes.
+- [ ] Validate raw SYN sockets and cleanup on interruption in a disposable, isolated Linux environment; simulated tests do not establish kernel-level behavior.
 - [ ] Stabilize full-range CONNECT results across constrained VirtualBox and VPN lab networks.
 - [ ] Expand native fingerprints for SMB server identity, NetBIOS workgroup data, and IRC product/version banners.
 - [ ] Keep unidentified open ports explicit in text and structured output without inventing service or version data.
