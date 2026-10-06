@@ -12,6 +12,9 @@ GoMap's roadmap focuses on improving reliability, test coverage, documentation, 
 
 ## Detection and Scan Reliability
 
+- [x] Keep unvalidated UDP port hints low confidence and prevent arbitrary payload bytes from becoming product versions.
+- [x] Add bounded NTP/SSDP response-shape checks and deterministic negative/fuzz fixtures without new probes.
+- [ ] Validate structured DNS, SNMP, NetBIOS, mDNS, and LLMNR replies before raising UDP identification confidence; distinguish header shape from query correlation.
 - [ ] Stabilize full-range CONNECT results across constrained VirtualBox and VPN lab networks.
 - [ ] Expand native fingerprints for SMB server identity, NetBIOS workgroup data, and IRC product/version banners.
 - [ ] Keep unidentified open ports explicit in text and structured output without inventing service or version data.

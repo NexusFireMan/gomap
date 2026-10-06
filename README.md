@@ -352,6 +352,10 @@ Non-standard port note:
 - No-response UDP ports are intentionally omitted because they may be closed, filtered, or open-but-silent.
 - `-u` cannot be combined with `--scan-type syn`, because SYN is TCP-specific.
 - CIDR scans with `-u` still use TCP host discovery unless `-nd` is set.
+- A UDP reply establishes responsiveness, not the application identity. Port-only service hints use the UDP map (never TCP names) and remain low confidence with an empty version. Unknown payload text is not promoted to a product version.
+- NTP classification checks a bounded server-mode header and reports the protocol version at medium confidence, not a daemon version or correlated time exchange. The header layout follows [RFC 5905](https://www.rfc-editor.org/rfc/rfc5905.html).
+- SSDP classification requires a bounded HTTP/1.1 200 response with ST, USN, and a HTTP(S) LOCATION header; SERVER disclosure is read from headers only. LOCATION is never fetched. These are shape checks based on [UPnP Device Architecture](https://openconnectivity.org/upnp-specs/UPnP-arch-DeviceArchitecture-v2.0-20200417.pdf), not full device verification.
+- DNS, SNMP, NetBIOS, mDNS, and LLMNR replies remain port hints until their payload structure is validated; receiving arbitrary bytes on those ports does not prove their protocol.
 
 ### Real Source-IP Selection
 

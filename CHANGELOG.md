@@ -11,6 +11,8 @@ Note: this changelog is maintained from this point forward in the project histor
 ### Changed
 
 ### Fixed
+- Keep unvalidated UDP replies at low identification confidence, avoid borrowing TCP service names, and stop presenting arbitrary payload text as a product version.
+- Bound NTP server-header and SSDP response-shape checks; ignore forged SSDP body headers, malformed responses, conflicting headers, and non-HTTP(S) LOCATION values without following URLs.
 
 ## [2.4.9] - 2026-10-02
 
