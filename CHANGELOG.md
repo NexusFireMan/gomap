@@ -11,6 +11,8 @@ Note: this changelog is maintained from this point forward in the project histor
 ### Changed
 
 ### Fixed
+- Match runtime DNS/SNMP replies against the actual sent probe fields; clear identification/version claims on mismatch while preserving responsiveness, with fixed-ID replay and authentication limitations explicit.
+- Support bounded non-minimal definite SNMP BER lengths without changing primitive values; document and test unsupported SNMP security/encoding and NetBIOS reply/datagram variants.
 - Validate bounded UDP/137 NetBIOS NB/NBSTAT response structure without disclosing node names, workgroups or MAC addresses; unsupported payloads remain low confidence.
 - Extend structural SNMP validation to v2c Response-PDUs and a conservative v3 plaintext USM noAuthNoPriv Response/Report subset; preserve low confidence for unsupported security/encoding variants and exclude credentials and response values from identification metadata.
 - Validate a conservative subset of DNS, mDNS, and LLMNR UDP response structures with a Go-native parser and strict bounded framing; reject malformed/truncated payloads without disclosing record values or claiming server versions or request correlation.

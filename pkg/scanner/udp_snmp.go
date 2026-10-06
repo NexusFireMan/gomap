@@ -1,14 +1,26 @@
 package scanner
 
 import (
+	"bytes"
 	"encoding/asn1"
 	"fmt"
 	"math/big"
 )
 
-// This validates a conservative DER-compatible subset of SNMP responses.
+// This validates a bounded subset of SNMP responses, including definite BER lengths.
 // It does not authenticate or correlate the message with an outstanding request.
 func udpSNMPVersion(response []byte) string {
+	if version := snmpDERVersion(response); version != "" {
+		return version
+	}
+	canonical, valid := snmpBERCanonical(response)
+	if !valid || bytes.Equal(response, canonical) {
+		return ""
+	}
+	return snmpDERVersion(canonical)
+}
+
+func snmpDERVersion(response []byte) string {
 	if len(response) == 0 || len(response) > maxUDPResponseBytes {
 		return ""
 	}
@@ -136,6 +148,14 @@ func snmpFields(data []byte, fields ...any) bool {
 }
 
 func snmpSequenceFields(data []byte, fields ...any) bool {
+	if snmpDERSequenceFields(data, fields...) {
+		return true
+	}
+	canonical, valid := snmpBERCanonical(data)
+	return valid && !bytes.Equal(data, canonical) && snmpDERSequenceFields(canonical, fields...)
+}
+
+func snmpDERSequenceFields(data []byte, fields ...any) bool {
 	var sequence asn1.RawValue
 	rest, err := asn1.Unmarshal(data, &sequence)
 	return err == nil && len(rest) == 0 && snmpSequence(sequence) && snmpFields(sequence.Bytes, fields...)

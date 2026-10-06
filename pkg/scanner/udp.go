@@ -114,7 +114,7 @@ func (s *Scanner) scanUDPPort(port int, detectServices bool) ScanResult {
 		return ScanResult{Port: port, IsOpen: false, Latency: latency, LatencyMs: latencyMs}
 	}
 
-	service, version, confidence, evidence := s.classifyUDPResponse(port, response, detectServices)
+	service, version, confidence, evidence := s.classifyUDPResponseForProbe(port, response, probe, detectServices)
 	return ScanResult{
 		Port:          port,
 		IsOpen:        true,
@@ -126,6 +126,21 @@ func (s *Scanner) scanUDPPort(port int, detectServices bool) ScanResult {
 		Evidence:      evidence,
 		DetectionPath: "udp-probe",
 	}
+}
+
+func (s *Scanner) classifyUDPResponseForProbe(port int, response, probe []byte, detectServices bool) (service, version, confidence, evidence string) {
+	service, version, confidence, evidence = s.classifyUDPResponse(port, response, detectServices)
+	if !detectServices || version == "" {
+		return
+	}
+	checked, matched := udpProbeFieldsMatch(port, probe, response)
+	if checked && !matched {
+		return service, "", "low", "UDP response received; protocol-shaped payload does not match sent probe fields"
+	}
+	if checked {
+		return service, version, "medium", version + "; sent probe fields matched; fixed identifiers; not authenticated"
+	}
+	return
 }
 
 func (s *Scanner) exchangeUDP(address string, payload []byte) ([]byte, error) {
