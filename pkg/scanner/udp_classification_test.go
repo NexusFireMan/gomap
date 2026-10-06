@@ -124,11 +124,14 @@ func FuzzUDPClassificationDoesNotInventUnvalidatedVersions(f *testing.F) {
 		if service == "" || confidence == "high" {
 			t.Fatal("empty service or excessive confidence")
 		}
-		if port != 123 && port != 161 && port != 1900 && (version != "" || confidence != "low") {
+		if port != 53 && port != 5353 && port != 5355 && port != 123 && port != 161 && port != 1900 && (version != "" || confidence != "low") {
 			t.Fatal("unvalidated payload interpreted as a protocol version")
 		}
 		if port == 161 && version != "" && udpSNMPv1Version(payload) == "" {
 			t.Fatal("unvalidated SNMP payload interpreted as a version")
+		}
+		if (port == 53 || port == 5353 || port == 5355) && version != "" && udpDNSVersion(int(port), payload) == "" {
+			t.Fatal("unvalidated DNS-format payload interpreted as a version")
 		}
 	})
 }
