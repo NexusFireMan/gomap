@@ -70,3 +70,35 @@ func TestIRCRejectsProductMentionsOutsideProtocol(t *testing.T) {
 		}
 	}
 }
+
+func TestHTTPAndSSHRejectMalformedResponseLines(t *testing.T) {
+	for _, banner := range []string{
+		"HTTP/garbage\r\nServer: Apache/9.9\r\n\r\n",
+		"HTTP/1.1 hello\r\nServer: nginx/9.9\r\n\r\n",
+		"HTTP/1.1 999 Bogus\r\nServer: Apache/9.9\r\n\r\n",
+		"SSH-..-OpenSSH_9.9", "SSH-2.0-   ", "SSH-2..0-OpenSSH_9.9",
+	} {
+		if service, version := parseBanner(banner); service != "" || version != "" {
+			t.Errorf("malformed response identified: %q -> %q %q", banner, service, version)
+		}
+	}
+	for _, banner := range []string{"HTTP/1.0 200 OK", "HTTP/1.1 404 Not Found", "HTTP/2 200", "HTTP/3 200"} {
+		if service, _ := parseHTTP(banner); service != "http" {
+			t.Errorf("valid response rejected: %q", banner)
+		}
+	}
+}
+
+func TestPageTitleDoesNotConfirmServerImplementation(t *testing.T) {
+	for _, title := range []string{"Example Portal", "Apache Tomcat/9.0.17"} {
+		banner := "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n<title>" + title + "</title>"
+		result := grabBannerFromFixture(t, 8080, banner)
+		if result.Confidence != "medium" || result.ServiceName != "http-proxy" {
+			t.Fatalf("title treated as confirmed product: %+v", result)
+		}
+	}
+	serverBanner := "HTTP/1.1 200 OK\r\nServer: nginx/1.24.0\r\n\r\n<title>Example</title>"
+	if result := grabBannerFromFixture(t, 8080, serverBanner); result.Confidence != "high" {
+		t.Fatalf("explicit server disclosure lost confidence: %+v", result)
+	}
+}

@@ -14,7 +14,7 @@ func parseBanner(banner string) (service, version string) {
 	}
 
 	// First check if it's HTTP - we need full banner for this
-	if strings.Contains(banner, "HTTP/") {
+	if validHTTPResponseLine(banner) {
 		if s, v := parseSearchHTTP(banner); s != "" {
 			return s, v
 		}
@@ -35,6 +35,9 @@ func parseBanner(banner string) (service, version string) {
 	banner = sanitizeBanner(banner)
 
 	if banner == "" {
+		return "", ""
+	}
+	if strings.HasPrefix(banner, "SSH-") && !sshBannerRE.MatchString(banner) {
 		return "", ""
 	}
 
@@ -108,6 +111,21 @@ func bannerConfidence(version string) string {
 	}
 }
 
+func bannerIdentificationConfidence(banner, version string) string {
+	if validHTTPResponseLine(banner) && responseServerVersion(banner, "") == "" && extractHTTPTitle(banner) != "" {
+		// A page title is content, not a server implementation disclosure.
+		return "medium"
+	}
+	return bannerConfidence(version)
+}
+
+var httpResponseLineRE = regexp.MustCompile(`^HTTP/(?:1\.[01]|2(?:\.0)?|3(?:\.0)?) [1-5][0-9]{2}(?:[ \t].*)?$`)
+
+func validHTTPResponseLine(banner string) bool {
+	line := strings.TrimSpace(strings.SplitN(banner, "\n", 2)[0])
+	return httpResponseLineRE.MatchString(line)
+}
+
 func parseAdditionalTextServices(banner string) (service, version string) {
 	trimmed := strings.TrimSpace(banner)
 	line := strings.TrimSuffix(strings.SplitN(trimmed, "\n", 2)[0], "\r")
@@ -161,7 +179,7 @@ func sanitizeBanner(banner string) string {
 	return result
 }
 
-var sshBannerRE = regexp.MustCompile(`^SSH-([\d\.]+)-(.+)$`)
+var sshBannerRE = regexp.MustCompile(`^SSH-([0-9]+\.[0-9]+)-(\S.*)$`)
 var openSSHImplementationRE = regexp.MustCompile(`OpenSSH[\s_]+([\d\.]+)(?:p(\d+))?([^\r\n]*)`)
 
 // parseSSH extracts SSH version information
@@ -549,7 +567,7 @@ func cleanFTPBannerText(text string) string {
 func parseHTTP(banner string) (string, string) {
 	// Check if it starts with HTTP response
 	banner = strings.TrimSpace(banner)
-	if !strings.HasPrefix(banner, "HTTP/") {
+	if !validHTTPResponseLine(banner) {
 		return "", ""
 	}
 

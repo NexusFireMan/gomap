@@ -11,6 +11,7 @@ Note: this changelog is maintained from this point forward in the project histor
 ### Changed
 
 ### Fixed
+- Keep HTTP page-title hints at medium confidence and TLS-only application port hints at low confidence; reject malformed HTTP/SSH response lines.
 - Reject malformed SIP/RTSP, RFB, and Memcached text signatures; ignore Server lines in response bodies and lower confidence for generic banner descriptions.
 - Associate SMB, Redis, and Node.js versions with explicit product fields; retain JMS protocol identifiers without inventing an OpenMQ product version, and require IRC protocol context.
 
