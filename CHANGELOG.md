@@ -11,6 +11,7 @@ Note: this changelog is maintained from this point forward in the project histor
 ### Changed
 
 ### Fixed
+- Validate a bounded DER-compatible subset of SNMPv1 response fields before reporting its protocol variant; keep unsupported variants/encodings low confidence and exclude communities and binding values from identification metadata.
 - Keep unvalidated UDP replies at low identification confidence, avoid borrowing TCP service names, and stop presenting arbitrary payload text as a product version.
 - Bound NTP server-header and SSDP response-shape checks; ignore forged SSDP body headers, malformed responses, conflicting headers, and non-HTTP(S) LOCATION values without following URLs.
 

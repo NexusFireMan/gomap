@@ -14,7 +14,9 @@ GoMap's roadmap focuses on improving reliability, test coverage, documentation, 
 
 - [x] Keep unvalidated UDP port hints low confidence and prevent arbitrary payload bytes from becoming product versions.
 - [x] Add bounded NTP/SSDP response-shape checks and deterministic negative/fuzz fixtures without new probes.
-- [ ] Validate structured DNS, SNMP, NetBIOS, mDNS, and LLMNR replies before raising UDP identification confidence; distinguish header shape from query correlation.
+- [x] Validate a bounded SNMPv1 response subset with standard ASN.1 decoding, negative fixtures, and metadata disclosure tests.
+- [ ] Review unsupported SNMP BER forms, SNMPv2/v3, and query correlation without exposing credentials or response values.
+- [ ] Validate structured DNS, NetBIOS, mDNS, and LLMNR replies before raising UDP identification confidence; distinguish header shape from query correlation.
 - [ ] Stabilize full-range CONNECT results across constrained VirtualBox and VPN lab networks.
 - [ ] Expand native fingerprints for SMB server identity, NetBIOS workgroup data, and IRC product/version banners.
 - [ ] Keep unidentified open ports explicit in text and structured output without inventing service or version data.

@@ -168,6 +168,10 @@ func (s *Scanner) classifyUDPResponse(port int, response []byte, detectServices 
 	}
 
 	switch port {
+	case 161:
+		if version := udpSNMPv1Version(response); version != "" {
+			return "snmp", version, "medium", "SNMPv1-shaped response; ASN.1 fields validated; request not correlated"
+		}
 	case 123:
 		if version := udpNTPVersion(response); version != "" {
 			return "ntp", version, "medium", "ntp-shaped udp response; server mode; timestamps not correlated"

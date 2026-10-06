@@ -355,7 +355,8 @@ Non-standard port note:
 - A UDP reply establishes responsiveness, not the application identity. Port-only service hints use the UDP map (never TCP names) and remain low confidence with an empty version. Unknown payload text is not promoted to a product version.
 - NTP classification checks a bounded server-mode header and reports the protocol version at medium confidence, not a daemon version or correlated time exchange. The header layout follows [RFC 5905](https://www.rfc-editor.org/rfc/rfc5905.html).
 - SSDP classification requires a bounded HTTP/1.1 200 response with ST, USN, and a HTTP(S) LOCATION header; SERVER disclosure is read from headers only. LOCATION is never fetched. These are shape checks based on [UPnP Device Architecture](https://openconnectivity.org/upnp-specs/UPnP-arch-DeviceArchitecture-v2.0-20200417.pdf), not full device verification.
-- DNS, SNMP, NetBIOS, mDNS, and LLMNR replies remain port hints until their payload structure is validated; receiving arbitrary bytes on those ports does not prove their protocol.
+- SNMPv1 classification checks a bounded DER-compatible ASN.1 response, including PDU type, field bounds, binding structure, and error indexes, based on [RFC 1157](https://www.rfc-editor.org/rfc/rfc1157.html). It reports only the protocol variant at medium confidence, does not correlate requests, and never includes communities or binding values in identification metadata. The conservative decoder leaves other BER forms and SNMPv2/v3 as low-confidence hints.
+- DNS, NetBIOS, mDNS, and LLMNR replies remain port hints until their payload structure is validated; receiving arbitrary bytes on those ports does not prove their protocol.
 
 ### Real Source-IP Selection
 
