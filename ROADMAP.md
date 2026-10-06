@@ -15,11 +15,14 @@ GoMap's roadmap focuses on improving reliability, test coverage, documentation, 
 - [x] Keep unvalidated UDP port hints low confidence and prevent arbitrary payload bytes from becoming product versions.
 - [x] Add bounded NTP/SSDP response-shape checks and deterministic negative/fuzz fixtures without new probes.
 - [x] Validate a bounded SNMPv1 response subset with standard ASN.1 decoding, negative fixtures, and metadata disclosure tests.
-- [ ] Review unsupported SNMP BER forms, SNMPv2/v3, and query correlation without exposing credentials or response values.
+- [x] Validate bounded SNMPv2c response fields, Counter64 and exception values without exposing communities or bindings.
+- [x] Validate a conservative SNMPv3 plaintext USM noAuthNoPriv Response/Report subset; label it unauthenticated and reject unsupported security modes.
+- [ ] Review unsupported SNMP BER forms/security models and query correlation without exposing credentials or response values.
 - [x] Validate bounded DNS response structure with a Go-native parser, strict framing, and malformed/compressed-record fixtures.
 - [x] Validate a conservative mDNS response subset, including cache-flush classes and questionless answers, without exposing record values.
 - [x] Validate a conservative LLMNR response subset with its own flag semantics and deterministic negative/fuzz tests.
-- [ ] Validate NetBIOS response structure and correlate supported UDP replies to requests; structural validation alone is not authenticated identity.
+- [x] Validate a bounded subset of UDP/137 NetBIOS NB/NBSTAT response structure, including compressed names and record framing, without disclosing node names or MAC addresses.
+- [ ] Correlate supported UDP replies to requests and review unsupported NetBIOS reply/datagram variants; structural validation alone is not authenticated identity.
 - [ ] Stabilize full-range CONNECT results across constrained VirtualBox and VPN lab networks.
 - [ ] Expand native fingerprints for SMB server identity, NetBIOS workgroup data, and IRC product/version banners.
 - [ ] Keep unidentified open ports explicit in text and structured output without inventing service or version data.

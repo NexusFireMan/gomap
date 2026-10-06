@@ -6,6 +6,13 @@ import (
 	"testing"
 )
 
+func udpSNMPv1Version(response []byte) string {
+	if version := udpSNMPVersion(response); version == "SNMPv1 response" {
+		return version
+	}
+	return ""
+}
+
 func snmpFixtureMarshal(t testing.TB, value any) []byte {
 	t.Helper()
 	encoded, err := asn1.Marshal(value)

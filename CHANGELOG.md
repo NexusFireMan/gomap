@@ -11,6 +11,8 @@ Note: this changelog is maintained from this point forward in the project histor
 ### Changed
 
 ### Fixed
+- Validate bounded UDP/137 NetBIOS NB/NBSTAT response structure without disclosing node names, workgroups or MAC addresses; unsupported payloads remain low confidence.
+- Extend structural SNMP validation to v2c Response-PDUs and a conservative v3 plaintext USM noAuthNoPriv Response/Report subset; preserve low confidence for unsupported security/encoding variants and exclude credentials and response values from identification metadata.
 - Validate a conservative subset of DNS, mDNS, and LLMNR UDP response structures with a Go-native parser and strict bounded framing; reject malformed/truncated payloads without disclosing record values or claiming server versions or request correlation.
 - Validate a bounded DER-compatible subset of SNMPv1 response fields before reporting its protocol variant; keep unsupported variants/encodings low confidence and exclude communities and binding values from identification metadata.
 - Keep unvalidated UDP replies at low identification confidence, avoid borrowing TCP service names, and stop presenting arbitrary payload text as a product version.

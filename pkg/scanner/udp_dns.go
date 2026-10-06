@@ -65,6 +65,10 @@ func udpDNSVersion(port int, payload []byte) string {
 // The library decoder permits trailing bytes and some mismatched RDLENGTHs.
 // Check framing independently without duplicating compression/name decoding.
 func udpDNSFrameValid(payload []byte) bool {
+	return udpNameServiceFrameValid(payload, udpDNSBodyFrameValid)
+}
+
+func udpNameServiceFrameValid(payload []byte, bodyValid func([]byte, int, int, dnsmessage.Type) bool) bool {
 	if len(payload) < 12 || len(payload) > maxUDPResponseBytes {
 		return false
 	}
@@ -91,7 +95,7 @@ func udpDNSFrameValid(payload []byte) bool {
 			length := int(binary.BigEndian.Uint16(payload[off+8 : off+10]))
 			off += 10
 			end := off + length
-			if end > len(payload) || !udpDNSBodyFrameValid(payload, off, end, kind) {
+			if end > len(payload) || !bodyValid(payload, off, end, kind) {
 				return false
 			}
 			off = end
