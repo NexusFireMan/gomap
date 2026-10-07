@@ -12,6 +12,8 @@ GoMap's roadmap focuses on improving reliability, test coverage, documentation, 
 
 ## Detection and Scan Reliability
 
+- [x] Keep identification evidence coherent when deduplicating observations; retain stronger confidence and avoid mixing TLS handshakes.
+- [ ] Review UDP protocol claims against payload structure rather than inferring validated responses from destination ports alone.
 - [x] Validate signal cleanup and error reporting in Linux subprocesses with fake address backends.
 - [x] Validate raw-socket deadlines and closure in an isolated loopback-only Linux namespace without sending probes.
 - [ ] Validate end-to-end SYN response handling and native netlink address rollback in a disposable, disconnected lab; lifecycle fixtures do not cover these kernel-level workflows.
