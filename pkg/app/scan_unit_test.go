@@ -11,6 +11,12 @@ import (
 	"github.com/NexusFireMan/gomap/v2/pkg/scanner"
 )
 
+func TestExecuteScanRejectsNegativeGlobalRateBeforeNetworkWork(t *testing.T) {
+	if err := ExecuteScan(ScanRequest{GlobalRate: -1}); err == nil || !strings.Contains(err.Error(), "global-rate") {
+		t.Fatalf("invalid budget accepted: %v", err)
+	}
+}
+
 func TestTextReportWrittenToOutputFile(t *testing.T) {
 	l, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {

@@ -22,6 +22,7 @@ type Scanner struct {
 	Host               string
 	NumWorkers         int
 	Rate               int
+	AttemptLimiter     *AttemptLimiter
 	Timeout            time.Duration
 	Retries            int
 	AdaptiveTimeout    bool
@@ -49,6 +50,7 @@ type Scanner struct {
 type ScanConfig struct {
 	NumWorkers      int
 	Rate            int
+	AttemptLimiter  *AttemptLimiter
 	Timeout         time.Duration
 	Retries         int
 	AdaptiveTimeout bool
@@ -95,6 +97,7 @@ func NewScanner(host string, ghostMode bool) *Scanner {
 
 // Configure overrides scanner defaults with validated values.
 func (s *Scanner) Configure(cfg ScanConfig) {
+	s.AttemptLimiter = cfg.AttemptLimiter
 	if cfg.NumWorkers > 0 {
 		s.NumWorkers = cfg.NumWorkers
 	}
@@ -143,7 +146,7 @@ func (s *Scanner) Configure(cfg ScanConfig) {
 
 // Scan performs the port scanning operation
 func (s *Scanner) Scan(ports []int, detectServices bool) []ScanResult {
-	return s.scanPortsWithDial(ports, detectServices, s.dialTCP)
+	return s.scanPortsWithDial(ports, detectServices, s.dialTCPUnpaced)
 }
 
 type tcpDialFunc func(string, time.Duration) (net.Conn, error)
@@ -155,7 +158,7 @@ func (s *Scanner) scanPortsWithDial(ports []int, detectServices bool, dial tcpDi
 
 // ScanWithDiagnostics retains inconclusive CONNECT outcomes without reporting them as closed.
 func (s *Scanner) ScanWithDiagnostics(ports []int, detectServices bool) ([]ScanResult, ConnectDiagnostics) {
-	return s.scanPortsReportWithDial(ports, detectServices, s.dialTCP)
+	return s.scanPortsReportWithDial(ports, detectServices, s.dialTCPUnpaced)
 }
 
 func (s *Scanner) scanPortsReportWithDial(ports []int, detectServices bool, dial tcpDialFunc) ([]ScanResult, ConnectDiagnostics) {
@@ -288,6 +291,7 @@ func (s *Scanner) scanPortWithDial(port int, detectServices bool, dial tcpDialFu
 	)
 
 	for attempt := 0; attempt <= s.Retries; attempt++ {
+		s.AttemptLimiter.Wait()
 		attemptStart := time.Now()
 		conn, err = dial(address, s.connectTimeout())
 		s.recordDialOutcome(err, time.Since(attemptStart))
@@ -696,8 +700,7 @@ func (s *Scanner) grabBanner(conn net.Conn, port int, result *ScanResult) {
 				if result.ServiceName == "winrm" && result.Version == "" {
 					result.Version = "Microsoft WinRM over TLS"
 				}
-				result.Confidence = "high"
-				result.Evidence = "tls handshake"
+				result.Confidence, result.Evidence = tlsOnlyIdentification(result.ServiceName)
 				result.DetectionPath = "tls-fingerprint"
 				return
 			}
@@ -772,7 +775,7 @@ func (s *Scanner) grabBanner(conn net.Conn, port int, result *ScanResult) {
 			}
 		}
 		if version != "" {
-			result.Confidence = "high"
+			result.Confidence = bannerIdentificationConfidence(banner, version)
 			result.Evidence = "protocol banner"
 		} else {
 			result.Confidence = "medium"
@@ -831,7 +834,7 @@ func (s *Scanner) grabBanner(conn net.Conn, port int, result *ScanResult) {
 				if retryService, retryVersion := parseBanner(retryBanner); retryService != "" {
 					result.ServiceName = retryService
 					result.Version = retryVersion
-					result.Confidence = "high"
+					result.Confidence = bannerIdentificationConfidence(retryBanner, retryVersion)
 					if retryVersion == "" {
 						result.Confidence = "medium"
 					}
@@ -1442,7 +1445,7 @@ func (s *Scanner) tryProtocolFingerprint(port int) (service, version, confidence
 				if version == "" {
 					version = "IRC service"
 				}
-				return service, version, "high", "IRC protocol response", "protocol-fingerprint", true
+				return service, version, bannerConfidence(version), "IRC protocol response", "protocol-fingerprint", true
 			}
 		}
 	case 53:

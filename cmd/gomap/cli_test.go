@@ -5,6 +5,21 @@ import (
 	"testing"
 )
 
+func TestGlobalRateValidationAndIndependentPerHostRate(t *testing.T) {
+	for _, value := range []string{"0", "20", "300"} {
+		opts, err := ParseCLIOptions([]string{"--global-rate", value, "--rate", "7", "127.0.0.1"})
+		if err != nil || opts.Rate != 7 {
+			t.Fatalf("valid rates rejected: %+v %v", opts, err)
+		}
+		if value == "20" && opts.GlobalRate != 20 {
+			t.Fatal("global rate not preserved")
+		}
+	}
+	if _, err := ParseCLIOptions([]string{"--global-rate", "-1", "127.0.0.1"}); err == nil {
+		t.Fatal("negative global rate accepted")
+	}
+}
+
 func TestTopPortsAliasValidation(t *testing.T) {
 	for _, args := range [][]string{
 		{"--top-ports", "-1", "127.0.0.1"},

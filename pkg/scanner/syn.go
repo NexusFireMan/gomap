@@ -20,9 +20,10 @@ const (
 
 // SYNConfig contains runtime options for SYN discovery.
 type SYNConfig struct {
-	Rate      int
-	Retries   int
-	GhostMode bool
+	Rate           int
+	Retries        int
+	GhostMode      bool
+	AttemptLimiter *AttemptLimiter
 }
 
 type tcpResponse struct {
@@ -90,6 +91,7 @@ func DiscoverOpenPortsSYN(host string, ports []int, cfg SYNConfig) ([]int, error
 				continue
 			}
 			seq := pending[port]
+			cfg.AttemptLimiter.Wait()
 			if err := sendTCPProbe(conn, srcIP, dstIP, srcPort, port, seq, tcpFlagSyn); err != nil {
 				msg := strings.ToLower(err.Error())
 				if strings.Contains(msg, "operation not permitted") || strings.Contains(msg, "permission denied") {
