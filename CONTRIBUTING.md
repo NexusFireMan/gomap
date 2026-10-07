@@ -31,6 +31,16 @@ If `golangci-lint` is not available in your `PATH`, use the pinned binary instal
 
 ## Lab Tests
 
+Deterministic transport and cleanup tests run without VM targets, root, or changes to interface addresses:
+
+```bash
+go test -race ./pkg/scanner -run 'Test(AttemptLimiter|SYN|Managed|Cleanup)'
+```
+
+These use virtual clocks, packet fixtures, and fake address backends. They cover shared pacing, invalid SYN responses, rollback, idempotent cleanup, and preservation of multiple cleanup errors. They do not validate real raw sockets, netlink permissions, or signal handling in the kernel.
+
+Privileged validation remains a separate, opt-in task in a disposable Linux VM or isolated network namespace with no external route. Check permission failures, response correlation, interruption cleanup, and preservation of pre-existing addresses; retain only redacted results. Do not mark this validation complete on the strength of simulated tests alone.
+
 Integration tests are opt-in and require live lab hosts:
 
 ```bash

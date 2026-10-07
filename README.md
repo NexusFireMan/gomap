@@ -265,6 +265,7 @@ Main options:
 Performance/robustness:
   --workers         concurrent workers (default: auto by mode)
   --rate            max scan rate in ports/second per host (0 = unlimited)
+  --global-rate     max connection/probe starts/second across the entire scan (0 = unlimited)
   --timeout         per-attempt dial timeout in ms (default: auto by mode)
   --retries         retries per port on timeout/transient connection error
   --backoff-ms      base exponential backoff between retries
@@ -337,6 +338,8 @@ Operational limits:
 - Service names inferred only from ports do not prove a product or operating system. A missing banner may reflect filtering, a silent service, or a timeout.
 - Repeated unauthenticated connections can trigger server-side connection-error limits. MySQL errors such as 1129 (blocked host) and 1130 (host denied) are reported; GoMap does not authenticate or reset server limits automatically.
 - `--rate` limits initial CONNECT attempts and configured CONNECT retries per host; it is not a global limit for host discovery or additional service probes.
+- `--global-rate N` shares one non-burst budget across hosts, TCP host discovery, CONNECT retries, additional TCP/TLS service connections, UDP exchanges, and SYN transmissions. Combine it with `--rate` when both global and per-host pacing are needed. It defaults to zero (disabled) and can increase total scan time.
+- The global budget counts attempt starts, not packets or application messages on an established connection. DNS resolution, local route selection, and kernel retransmissions are outside this budget; it is not a wire-level bandwidth limit.
 - Raw SYN discovery and privileged interface changes require separate lab validation.
 - MySQL, DNS/TCP, ONC RPC, AJP and SMB reads handle fragmented frames with bounded buffers. HTTP banner collection is limited to 64 KiB; other text and binary probes still need broader fragmentation testing.
 - Duplicate targets and ports are scanned once. CIDR discovery uses a bounded worker pool and preserves target order, including when applying `--max-hosts` afterward.

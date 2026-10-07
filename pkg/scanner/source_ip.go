@@ -65,16 +65,23 @@ func ValidateSourceIPsForTargets(ips []net.IP, targets []string) error {
 }
 
 func (s *Scanner) dialTCP(address string, timeout time.Duration) (net.Conn, error) {
+	s.AttemptLimiter.Wait()
+	return s.dialTCPUnpaced(address, timeout)
+}
+
+func (s *Scanner) dialTCPUnpaced(address string, timeout time.Duration) (net.Conn, error) {
 	dialer := s.dialerFor("tcp", address, timeout)
 	return dialer.Dial("tcp", address)
 }
 
 func (s *Scanner) dialUDP(address string, timeout time.Duration) (net.Conn, error) {
+	s.AttemptLimiter.Wait()
 	dialer := s.dialerFor("udp", address, timeout)
 	return dialer.Dial("udp", address)
 }
 
 func (s *Scanner) dialTLS(address string, timeout time.Duration, cfg *tls.Config) (*tls.Conn, error) {
+	s.AttemptLimiter.Wait()
 	dialer := s.dialerFor("tcp", address, timeout)
 	return tls.DialWithDialer(dialer, "tcp", address, cfg)
 }

@@ -33,6 +33,7 @@ type CLIOptions struct {
 	TopPorts        int
 	TopPortsAlias   int
 	Rate            int
+	GlobalRate      int
 	MaxHosts        int
 	TimeoutMS       int
 	Workers         int
@@ -80,6 +81,7 @@ func ParseCLIOptions(args []string) (CLIOptions, error) {
 	fs.IntVar(&opts.TopPorts, "top", 0, "scan top N ports from curated protocol list")
 	fs.IntVar(&opts.TopPortsAlias, "top-ports", 0, "scan top N ports from curated protocol list")
 	fs.IntVar(&opts.Rate, "rate", 0, "max scan rate in ports/second per host (0 = unlimited)")
+	fs.IntVar(&opts.GlobalRate, "global-rate", 0, "max connection/probe starts per second across all hosts and phases (0 = unlimited)")
 	fs.IntVar(&opts.MaxHosts, "max-hosts", 0, "maximum number of hosts to scan after discovery (0 = unlimited)")
 	fs.IntVar(&opts.TimeoutMS, "timeout", 0, "connection timeout per attempt in milliseconds (default: auto by mode)")
 	fs.IntVar(&opts.Workers, "workers", 0, "number of concurrent workers (default: auto by mode)")
@@ -206,6 +208,9 @@ func normalizeOptions(opts CLIOptions) (CLIOptions, error) {
 	if opts.Rate < 0 {
 		return opts, errors.New("--rate cannot be negative")
 	}
+	if opts.GlobalRate < 0 {
+		return opts, errors.New("--global-rate cannot be negative")
+	}
 	if opts.MaxHosts < 0 {
 		return opts, errors.New("--max-hosts cannot be negative")
 	}
@@ -307,6 +312,7 @@ func printHelp(w *os.File) {
 %sPerformance & Robustness:%s
   --workers <N>              concurrent workers (auto by mode if 0)
   --rate <N>                 max ports/second per host (0 = unlimited)
+  --global-rate <N>          max connection/probe starts/second for the entire scan
   --timeout <ms>             dial timeout per attempt
   --retries <N>              retries per port on transient connection errors
   --backoff-ms <ms>          exponential backoff base between retries
