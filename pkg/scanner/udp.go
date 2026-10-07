@@ -1,17 +1,22 @@
 package scanner
 
 import (
+	"bufio"
 	"bytes"
 	"errors"
 	"fmt"
 	"math/rand/v2"
 	"net"
+	"net/http"
+	"net/url"
 	"sort"
 	"strings"
 	"sync"
 	"syscall"
 	"time"
 )
+
+const maxUDPResponseBytes = 2048
 
 // GetTopUDPPorts returns a compact high-signal UDP default set.
 func GetTopUDPPorts() []int {
@@ -111,7 +116,7 @@ func (s *Scanner) scanUDPPort(port int, detectServices bool) ScanResult {
 			Evidence: evidence, Confidence: "low", DetectionPath: "udp-probe"}
 	}
 
-	service, version, confidence, evidence := s.classifyUDPResponse(port, response, detectServices)
+	service, version, confidence, evidence := s.classifyUDPResponseForProbe(port, response, probe, detectServices)
 	return ScanResult{
 		Port:          port,
 		IsOpen:        true,
@@ -124,6 +129,21 @@ func (s *Scanner) scanUDPPort(port int, detectServices bool) ScanResult {
 		Evidence:      evidence,
 		DetectionPath: "udp-probe",
 	}
+}
+
+func (s *Scanner) classifyUDPResponseForProbe(port int, response, probe []byte, detectServices bool) (service, version, confidence, evidence string) {
+	service, version, confidence, evidence = s.classifyUDPResponse(port, response, detectServices)
+	if !detectServices || version == "" {
+		return
+	}
+	checked, matched := udpProbeFieldsMatch(port, probe, response)
+	if checked && !matched {
+		return service, "", "low", "UDP response received; protocol-shaped payload does not match sent probe fields"
+	}
+	if checked {
+		return service, version, "medium", version + "; sent probe fields matched; fixed identifiers; not authenticated"
+	}
+	return
 }
 
 func udpErrorState(err error) (string, string) {
@@ -152,7 +172,7 @@ func (s *Scanner) exchangeUDP(address string, payload []byte) ([]byte, error) {
 		return nil, err
 	}
 
-	buf := make([]byte, 2048)
+	buf := make([]byte, maxUDPResponseBytes)
 	n, err := conn.Read(buf)
 	if err != nil {
 		return nil, err
@@ -161,43 +181,48 @@ func (s *Scanner) exchangeUDP(address string, payload []byte) ([]byte, error) {
 }
 
 func (s *Scanner) classifyUDPResponse(port int, response []byte, detectServices bool) (service, version, confidence, evidence string) {
-	service = s.PortManager.GetServiceName(port, "")
+	// UDP hints must not inherit the TCP service map.
+	service = udpServiceName(port)
 	if service == "" {
-		service = udpServiceName(port)
+		service = "unknown"
 	}
-	confidence = "medium"
-	evidence = "udp response"
+	confidence = "low"
+	evidence = fmt.Sprintf("udp response (%d bytes); unrecognized payload", len(response))
+	if service != "unknown" {
+		evidence = fmt.Sprintf("udp response (%d bytes); service inferred from UDP port only; payload not validated", len(response))
+	}
 
 	if !detectServices {
-		if service != "" {
-			confidence = "low"
-			evidence = "udp response + port map"
-		}
 		return service, "", confidence, evidence
 	}
 
 	switch port {
-	case 53:
-		return "domain", "DNS response", "medium", "dns udp response"
-	case 123:
-		return "ntp", udpNTPVersion(response), "medium", "ntp udp response"
 	case 137:
-		return "netbios-ns", "NetBIOS name service response", "medium", "netbios udp response"
+		if version := udpNetBIOSVersion(response); version != "" {
+			if version == netbiosRedirectLabel {
+				return "netbios-ns", version, "medium", version + "; bounded NS/A fields validated; redirect not followed; request not correlated"
+			}
+			return "netbios-ns", version, "medium", version + "; bounded NBNS fields validated; request not correlated"
+		}
+	case 53, 5353, 5355:
+		if version := udpDNSVersion(port, response); version != "" {
+			return service, version, "medium", version + "; bounded DNS-format fields validated; request not correlated"
+		}
 	case 161:
-		return "snmp", "SNMP response", "medium", "snmp udp response"
+		if version := udpSNMPVersion(response); version != "" {
+			return "snmp", version, "medium", version + "; ASN.1 fields validated; request not correlated or authenticated"
+		}
+	case 123:
+		if version := udpNTPVersion(response); version != "" {
+			return "ntp", version, "medium", "ntp-shaped udp response; server mode; timestamps not correlated"
+		}
 	case 1900:
-		return "ssdp", udpSSDPVersion(response), "medium", "ssdp udp response"
-	case 5353:
-		return "mdns", "mDNS response", "medium", "mdns udp response"
-	case 5355:
-		return "llmnr", "LLMNR response", "medium", "llmnr udp response"
+		if version := udpSSDPVersion(response); version != "" {
+			return "ssdp", version, "medium", "ssdp-shaped HTTP/1.1 200 response; ST, USN and LOCATION headers present"
+		}
 	}
 
-	text := strings.TrimSpace(string(bytes.Map(printableASCII, response)))
-	if text != "" && len(text) <= 120 {
-		version = text
-	}
-	return service, version, confidence, evidence
+	return service, "", confidence, evidence
 }
 
 func udpProbePayload(port int) []byte {
@@ -234,6 +259,7 @@ func udpServiceName(port int) string {
 		67:    "dhcps",
 		68:    "dhcpc",
 		69:    "tftp",
+		111:   "rpcbind",
 		123:   "ntp",
 		137:   "netbios-ns",
 		138:   "netbios-dgm",
@@ -256,34 +282,45 @@ func udpServiceName(port int) string {
 }
 
 func udpNTPVersion(response []byte) string {
-	if len(response) == 0 {
-		return "NTP response"
+	if len(response) < 48 || len(response) > maxUDPResponseBytes || response[0]&0x7 != 4 {
+		return ""
 	}
 	version := (response[0] >> 3) & 0x7
-	if version == 0 {
-		return "NTP response"
+	if version < 1 || version > 4 {
+		return ""
 	}
 	return fmt.Sprintf("NTPv%d response", version)
 }
 
 func udpSSDPVersion(response []byte) string {
-	text := string(response)
-	for _, line := range strings.Split(text, "\n") {
-		line = strings.TrimSpace(line)
-		lower := strings.ToLower(line)
-		if strings.HasPrefix(lower, "server:") {
-			return strings.TrimSpace(line[len("server:"):])
+	if len(response) == 0 || len(response) > maxUDPResponseBytes {
+		return ""
+	}
+	parsed, err := http.ReadResponse(bufio.NewReader(bytes.NewReader(response)), nil)
+	if err != nil {
+		return ""
+	}
+	defer func() { _ = parsed.Body.Close() }()
+	if parsed.ProtoMajor != 1 || parsed.ProtoMinor != 1 || parsed.StatusCode != http.StatusOK {
+		return ""
+	}
+	for _, name := range []string{"ST", "USN", "LOCATION"} {
+		if len(parsed.Header.Values(name)) != 1 || strings.TrimSpace(parsed.Header.Get(name)) == "" {
+			return ""
 		}
 	}
+	if !strings.HasPrefix(parsed.Header.Get("USN"), "uuid:") || len(parsed.Header.Get("USN")) <= len("uuid:") {
+		return ""
+	}
+	location, err := url.Parse(parsed.Header.Get("LOCATION"))
+	if err != nil || (location.Scheme != "http" && location.Scheme != "https") || location.Hostname() == "" {
+		return ""
+	}
+	if len(parsed.Header.Values("SERVER")) > 1 {
+		return ""
+	}
+	if server := strings.TrimSpace(parsed.Header.Get("SERVER")); server != "" {
+		return server
+	}
 	return "SSDP response"
-}
-
-func printableASCII(r rune) rune {
-	if r == '\r' || r == '\n' || r == '\t' {
-		return r
-	}
-	if r < 32 || r > 126 {
-		return -1
-	}
-	return r
 }

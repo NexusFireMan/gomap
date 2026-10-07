@@ -12,6 +12,20 @@ GoMap's roadmap focuses on improving reliability, test coverage, documentation, 
 
 ## Detection and Scan Reliability
 
+- [x] Keep unvalidated UDP port hints low confidence and prevent arbitrary payload bytes from becoming product versions.
+- [x] Add bounded NTP/SSDP response-shape checks and deterministic negative/fuzz fixtures without new probes.
+- [x] Validate a bounded SNMPv1 response subset with standard ASN.1 decoding, negative fixtures, and metadata disclosure tests.
+- [x] Validate bounded SNMPv2c response fields, Counter64 and exception values without exposing communities or bindings.
+- [x] Validate a conservative SNMPv3 plaintext USM noAuthNoPriv Response/Report subset; label it unauthenticated and reject unsupported security modes.
+- [x] Review unsupported SNMP BER forms/security models; support bounded non-minimal definite lengths and document/test explicit fallbacks without credential disclosure.
+- [x] Validate bounded DNS response structure with a Go-native parser, strict framing, and malformed/compressed-record fixtures.
+- [x] Validate a conservative mDNS response subset, including cache-flush classes and questionless answers, without exposing record values.
+- [x] Validate a conservative LLMNR response subset with its own flag semantics and deterministic negative/fuzz tests.
+- [x] Validate a bounded subset of UDP/137 NetBIOS NB/NBSTAT response structure, including compressed names and record framing, without disclosing node names or MAC addresses.
+- [x] Recognize a bounded NetBIOS redirect subset with coherent NS/A records, without following redirects or disclosing targets; keep unsupported forms low confidence.
+- [x] Validate negative UDP/137 name-query replies with strict NULL-record framing, known error codes, legacy counter-layout fixtures and input/disclosure protections.
+- [x] Match DNS/SNMP replies against actual sent probe fields and review unsupported NetBIOS variants; document why existing generic/zero-timestamp probes cannot establish correlation. See [UDP validation scope](docs/UDP_VALIDATION.md).
+- Authenticated/encrypted SNMP and protocol-specific queries/reassembly remain outside the implemented UDP scope; completed validation/review tasks do not imply support for every variant.
 - [x] Keep identification evidence coherent when deduplicating observations; retain stronger confidence and avoid mixing TLS handshakes.
 - [ ] Review UDP protocol claims against payload structure rather than inferring validated responses from destination ports alone.
 - [x] Validate signal cleanup and error reporting in Linux subprocesses with fake address backends.

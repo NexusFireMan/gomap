@@ -18,6 +18,16 @@ Note: this changelog is maintained from this point forward in the project histor
 - Clarify per-host rate scope in CLI help and HTTP-only random-IP behavior at runtime.
 
 ### Fixed
+- Validate negative UDP/137 NetBIOS name-query replies for format/server/name/refused errors with strict flags, encoded names and empty zero-TTL NULL records; support the RFC 1002 zero-counter layout without mutating inputs or treating errors as closed ports or confirmed server identities.
+- Validate a conservative UDP/137 NetBIOS redirect subset with coherent NS/A records and strict framing; report redirects without following them or disclosing targets, with deterministic malformed-packet tests and fuzz coverage.
+- Match runtime DNS/SNMP replies against the actual sent probe fields; clear identification/version claims on mismatch while preserving responsiveness, with fixed-ID replay and authentication limitations explicit.
+- Support bounded non-minimal definite SNMP BER lengths without changing primitive values; document and test unsupported SNMP security/encoding and NetBIOS reply/datagram variants.
+- Validate bounded UDP/137 NetBIOS NB/NBSTAT response structure without disclosing node names, workgroups or MAC addresses; unsupported payloads remain low confidence.
+- Extend structural SNMP validation to v2c Response-PDUs and a conservative v3 plaintext USM noAuthNoPriv Response/Report subset; preserve low confidence for unsupported security/encoding variants and exclude credentials and response values from identification metadata.
+- Validate a conservative subset of DNS, mDNS, and LLMNR UDP response structures with a Go-native parser and strict bounded framing; reject malformed/truncated payloads without disclosing record values or claiming server versions or request correlation.
+- Validate a bounded DER-compatible subset of SNMPv1 response fields before reporting its protocol variant; keep unsupported variants/encodings low confidence and exclude communities and binding values from identification metadata.
+- Keep unvalidated UDP replies at low identification confidence, avoid borrowing TCP service names, and stop presenting arbitrary payload text as a product version.
+- Bound NTP server-header and SSDP response-shape checks; ignore forged SSDP body headers, malformed responses, conflicting headers, and non-HTTP(S) LOCATION values without following URLs.
 - Keep duplicate result identifications and evidence atomic, prefer stronger identifications over weak port hints, and preserve complete TLS metadata when a later observation is incomplete.
 - Prevent signal-handler reinstallation after source-address cleanup, including concurrent installation/closure, to avoid retaining an idle cleanup goroutine.
 - Keep HTTP page-title hints at medium confidence and TLS-only application port hints at low confidence; reject malformed HTTP/SSH response lines.
