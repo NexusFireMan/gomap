@@ -73,6 +73,7 @@ func ParseCLIOptions(args []string) (CLIOptions, error) {
 	fs.BoolVar(&opts.RemoveFlag, "remove", false, "remove gomap from the system (/usr/local/bin)")
 	fs.BoolVar(&opts.DoctorFlag, "doctor", false, "inspect active binary, PATH copies, and installation origin")
 	fs.BoolVar(&opts.VersionFlag, "v", false, "show version information")
+	fs.BoolVar(&opts.VersionFlag, "version", false, "show version information")
 	fs.BoolVar(&opts.JSONFlag, "json", false, "output scan results in JSON format")
 	fs.BoolVar(&opts.CSVFlag, "csv", false, "output scan results in CSV format")
 	fs.StringVar(&opts.FormatFlag, "format", "text", "output format: text|json|jsonl|csv")
@@ -98,7 +99,7 @@ func ParseCLIOptions(args []string) (CLIOptions, error) {
 		printHelp(os.Stderr)
 	}
 
-	if err := fs.Parse(args); err != nil {
+	if err := fs.Parse(interspersedFlags(fs, args)); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return opts, errHelp
 		}
@@ -117,6 +118,34 @@ func ParseCLIOptions(args []string) (CLIOptions, error) {
 	opts.Host = fs.Arg(0)
 
 	return normalizeOptions(opts)
+}
+
+func interspersedFlags(fs *flag.FlagSet, args []string) []string {
+	var options, targets []string
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			targets = append(targets, args[i+1:]...)
+			break
+		}
+		if arg == "-" || !strings.HasPrefix(arg, "-") {
+			targets = append(targets, arg)
+			continue
+		}
+		options = append(options, arg)
+		name := strings.TrimLeft(arg, "-")
+		if strings.Contains(name, "=") {
+			continue
+		}
+		if option := fs.Lookup(name); option != nil {
+			boolFlag, ok := option.Value.(interface{ IsBoolFlag() bool })
+			if (!ok || !boolFlag.IsBoolFlag()) && i+1 < len(args) {
+				i++
+				options = append(options, args[i])
+			}
+		}
+	}
+	return append(append(options, "--"), targets...)
 }
 
 func normalizeOptions(opts CLIOptions) (CLIOptions, error) {
@@ -308,7 +337,7 @@ func printHelp(w *os.File) {
   -up                        self-update to latest version
   --remove                   remove non-package gomap copies found in PATH/common locations
   --doctor                   inspect active binary, PATH copies, and install origin
-  -v                         show version/build information
+  -v, --version              show version/build information
   -h                         show this help
 
 %sExamples:%s
@@ -326,6 +355,7 @@ func printHelp(w *os.File) {
 
 %sNotes:%s
   - CIDR discovery is enabled by default; ghost mode uses a low-noise profile.
+  - --rate is per host; discovery and additional service probes have separate limits.
   - With --source-interface, --random-ip selects real, preconfigured source IPs.
   - Without --source-interface, --random-ip only changes HTTP headers for compatibility.
   - GoMap never adds arbitrary addresses to a NIC; configure only addresses you own.

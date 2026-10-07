@@ -9,8 +9,11 @@ Note: this changelog is maintained from this point forward in the project histor
 ### Added
 - Add opt-in `--global-rate` with a shared connection/probe budget across discovery, hosts, retries, and service detection; preserve the existing per-host `--rate` behavior.
 - Add deterministic budget tests and additional simulated SYN classification and source-address cleanup error regression tests.
+- Explicit UDP port states, retained in text and structured reports without inflating confirmed-open counts.
+- `--version` alias and CLI options before or after the target.
 
 ### Changed
+- Clarify per-host rate scope in CLI help and HTTP-only random-IP behavior at runtime.
 
 ### Fixed
 
