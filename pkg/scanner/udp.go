@@ -3,6 +3,7 @@ package scanner
 import (
 	"bufio"
 	"bytes"
+	"errors"
 	"fmt"
 	"math/rand/v2"
 	"net"
@@ -11,6 +12,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -25,7 +27,7 @@ func GetTopUDPPorts() []int {
 	})
 }
 
-// ScanUDP probes UDP ports and returns only ports that send a UDP response.
+// ScanUDP retains uncertain outcomes as well as confirmed responses.
 func (s *Scanner) ScanUDP(ports []int, detectServices bool) []ScanResult {
 	ports = uniquePortsOrdered(ports)
 	if s.GhostMode {
@@ -75,15 +77,13 @@ func (s *Scanner) ScanUDP(ports []int, detectServices bool) []ScanResult {
 
 	openPorts := make([]ScanResult, 0)
 	for result := range resultsChan {
-		if result.IsOpen {
-			openPorts = append(openPorts, result)
-		}
+		openPorts = append(openPorts, result)
 	}
 
 	sort.Slice(openPorts, func(i, j int) bool {
 		return openPorts[i].Port < openPorts[j].Port
 	})
-	return dedupeOpenResults(openPorts)
+	return openPorts
 }
 
 func (s *Scanner) scanUDPPort(port int, detectServices bool) ScanResult {
@@ -111,13 +111,16 @@ func (s *Scanner) scanUDPPort(port int, detectServices bool) ScanResult {
 		latencyMs = 1
 	}
 	if err != nil {
-		return ScanResult{Port: port, IsOpen: false, Latency: latency, LatencyMs: latencyMs}
+		state, evidence := udpErrorState(err)
+		return ScanResult{Port: port, State: state, Latency: latency, LatencyMs: latencyMs,
+			Evidence: evidence, Confidence: "low", DetectionPath: "udp-probe"}
 	}
 
 	service, version, confidence, evidence := s.classifyUDPResponseForProbe(port, response, probe, detectServices)
 	return ScanResult{
 		Port:          port,
 		IsOpen:        true,
+		State:         "open",
 		ServiceName:   service,
 		Version:       version,
 		Latency:       latency,
@@ -141,6 +144,17 @@ func (s *Scanner) classifyUDPResponseForProbe(port int, response, probe []byte, 
 		return service, version, "medium", version + "; sent probe fields matched; fixed identifiers; not authenticated"
 	}
 	return
+}
+
+func udpErrorState(err error) (string, string) {
+	if errors.Is(err, syscall.ECONNREFUSED) {
+		return "closed", "UDP socket reported connection refused"
+	}
+	var netErr net.Error
+	if errors.As(err, &netErr) && netErr.Timeout() {
+		return "open|filtered", "no UDP response before deadline"
+	}
+	return "unknown", "UDP exchange failed; port state undetermined"
 }
 
 func (s *Scanner) exchangeUDP(address string, payload []byte) ([]byte, error) {
