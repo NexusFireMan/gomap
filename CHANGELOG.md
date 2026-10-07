@@ -7,11 +7,22 @@ Note: this changelog is maintained from this point forward in the project histor
 ## Unreleased
 
 ### Added
+- Add Linux subprocess regressions for SIGINT/SIGTERM cleanup, including cleanup failures and preservation of existing addresses.
+- Add opt-in isolated raw-socket lifecycle validation with namespace guards, bounded reads, closure checks, and native netlink missing-interface handling; no probes or address modifications.
+- Add opt-in `--global-rate` with a shared connection/probe budget across discovery, hosts, retries, and service detection; preserve the existing per-host `--rate` behavior.
+- Add deterministic budget tests and additional simulated SYN classification and source-address cleanup error regression tests.
+- Explicit UDP port states, retained in text and structured reports without inflating confirmed-open counts.
+- `--version` alias and CLI options before or after the target.
 
 ### Changed
+- Clarify per-host rate scope in CLI help and HTTP-only random-IP behavior at runtime.
 
 ### Fixed
 - Keep duplicate result identifications and evidence atomic, prefer stronger identifications over weak port hints, and preserve complete TLS metadata when a later observation is incomplete.
+- Prevent signal-handler reinstallation after source-address cleanup, including concurrent installation/closure, to avoid retaining an idle cleanup goroutine.
+- Keep HTTP page-title hints at medium confidence and TLS-only application port hints at low confidence; reject malformed HTTP/SSH response lines.
+- Reject malformed SIP/RTSP, RFB, and Memcached text signatures; ignore Server lines in response bodies and lower confidence for generic banner descriptions.
+- Associate SMB, Redis, and Node.js versions with explicit product fields; retain JMS protocol identifiers without inventing an OpenMQ product version, and require IRC protocol context.
 
 ## [2.4.9] - 2026-10-02
 

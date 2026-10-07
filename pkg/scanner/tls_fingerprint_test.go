@@ -2,8 +2,24 @@ package scanner
 
 import (
 	"crypto/tls"
+	"strings"
 	"testing"
 )
+
+func TestTLSOnlyIdentificationDoesNotConfirmApplication(t *testing.T) {
+	for _, service := range []string{"https", "imaps", "winrm", "intermapper", "custom-tls"} {
+		confidence, evidence := tlsOnlyIdentification(service)
+		if confidence != "low" || !strings.Contains(evidence, "inferred from port only") {
+			t.Errorf("TLS alone confirmed %s: %s %s", service, confidence, evidence)
+		}
+	}
+	for _, service := range []string{"tls", "ssl"} {
+		confidence, evidence := tlsOnlyIdentification(service)
+		if confidence != "high" || !strings.Contains(evidence, "no application banner") {
+			t.Errorf("transport evidence missing: %s %s", confidence, evidence)
+		}
+	}
+}
 
 func TestTLSVersionString(t *testing.T) {
 	if got := tlsVersionString(tls.VersionTLS12); got != "TLS1.2" {

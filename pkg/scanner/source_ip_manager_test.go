@@ -206,3 +206,81 @@ func mustIPNet(t *testing.T, value string) *net.IPNet {
 	network.IP = ip
 	return network
 }
+
+func TestManagedSignalCleanupCannotReinstallAfterClose(t *testing.T) {
+	m, err := prepareManagedSourceIPsWithBackend("fake0", "192.0.2.21/24", &fakeAddressBackend{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Close(); err != nil {
+		t.Fatal(err)
+	}
+	m.InstallSignalCleanup()
+	if m.signalStop != nil || !m.signalClosed {
+		if m.signalStop != nil {
+			m.signalStop()
+		}
+		t.Fatal("closed manager reinstalled a signal handler")
+	}
+}
+
+func TestManagedSignalCleanupConcurrentInstallAndClose(t *testing.T) {
+	for range 20 {
+		m, err := prepareManagedSourceIPsWithBackend("fake0", "192.0.2.21/24", &fakeAddressBackend{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var wg sync.WaitGroup
+		wg.Go(m.InstallSignalCleanup)
+		wg.Go(func() {
+			if err := m.Close(); err != nil {
+				t.Error(err)
+			}
+		})
+		wg.Wait()
+		if !m.signalClosed || m.signalStop != nil {
+			if m.signalStop != nil {
+				m.signalStop()
+			}
+			t.Fatal("concurrent lifecycle retained a signal handler")
+		}
+	}
+}
+
+func TestManagedCleanupContinuesAndPreservesAllErrors(t *testing.T) {
+	first, second := errors.New("first delete failure"), errors.New("second delete failure")
+	backend := &fakeAddressBackend{
+		existing:  []*net.IPNet{mustIPNet(t, "192.0.2.20/24")},
+		deleteErr: map[string]error{"192.0.2.21/24": first, "192.0.2.23/24": second},
+	}
+	m, err := prepareManagedSourceIPsWithBackend("fake0", "192.0.2.20/24,192.0.2.21/24,192.0.2.22/24,192.0.2.23/24", backend)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for range 2 {
+		err := m.Close()
+		if !errors.Is(err, first) || !errors.Is(err, second) {
+			t.Fatalf("cleanup lost an error: %v", err)
+		}
+	}
+	if len(backend.deleted) != 3 {
+		t.Fatalf("cleanup stopped early or repeated: %v", backend.deleted)
+	}
+	for _, addr := range backend.deleted {
+		if addr.IP.Equal(backend.existing[0].IP) {
+			t.Fatal("cleanup removed a pre-existing address")
+		}
+	}
+}
+
+func TestManagedSetupPreservesRollbackError(t *testing.T) {
+	addErr, cleanupErr := errors.New("setup failed"), errors.New("rollback failed")
+	backend := &fakeAddressBackend{
+		addError:  map[string]error{"192.0.2.22/24": addErr},
+		deleteErr: map[string]error{"192.0.2.21/24": cleanupErr},
+	}
+	_, err := prepareManagedSourceIPsWithBackend("fake0", "192.0.2.21/24,192.0.2.22/24", backend)
+	if !errors.Is(err, addErr) || !errors.Is(err, cleanupErr) || len(backend.deleted) != 1 {
+		t.Fatalf("setup/rollback errors were not preserved: %v", err)
+	}
+}

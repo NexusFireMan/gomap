@@ -51,7 +51,7 @@ A fast TCP/UDP port scanner written in Go, with optional service/version detecti
 ## Current scope
 
 - Fast concurrent TCP scanning with selectable engine (`connect` or `syn`).
-- UDP probing with `-u` for responsive UDP services.
+- UDP probing with `-u`, retaining confirmed and uncertain port states.
 - Default quick scan uses a curated top-port list normalized to unique ports (current effective size: 996).
 - Optional service and version detection (`-s`).
 - Single host, hostname, comma-separated targets, and CIDR ranges.
@@ -192,7 +192,7 @@ sudo dpkg -i gomap_<version>_linux_amd64.deb
 # Native SYN scan discovery (requires root/CAP_NET_RAW)
 ./gomap --scan-type syn 10.0.11.6
 
-# UDP scan (responsive UDP services only)
+# UDP scan with explicit port states
 ./gomap -u 10.0.11.6
 
 # UDP scan on selected ports
@@ -244,6 +244,8 @@ Host Exposure Summary
 
 ## CLI Reference
 
+Options can appear before or after the target. Use `--` to end option parsing.
+
 ```text
 Usage:
   gomap [options] <host|CIDR>
@@ -263,6 +265,7 @@ Main options:
 Performance/robustness:
   --workers         concurrent workers (default: auto by mode)
   --rate            max scan rate in ports/second per host (0 = unlimited)
+  --global-rate     max connection/probe starts/second across the entire scan (0 = unlimited)
   --timeout         per-attempt dial timeout in ms (default: auto by mode)
   --retries         retries per port on timeout/transient connection error
   --backoff-ms      base exponential backoff between retries
@@ -293,7 +296,7 @@ Low-noise defaults for `-g` ghost mode:
   - tradeoff: discovery may miss hosts that only expose non-probed ports (for example 139/445 only)
 
 Maintenance:
-  -v                show version/build info
+  -v, --version     show version/build info
   -up               update to latest version
   --remove          remove non-package gomap copies found in PATH/common locations
   --doctor          inspect active binary, PATH copies, and install origin
@@ -322,6 +325,10 @@ When `-s` is enabled, gomap combines port-based hints and protocol/banner parsin
 
 Important: banner-based detection is heuristic. Always validate critical findings with a second tool.
 
+Generic banner descriptions carry medium confidence. High banner confidence means a recognized disclosure, not independent confirmation of a product version or operating system. RFB and SMB versions describe their protocols; TLS metadata describes the encrypted transport. SIP/RTSP identification requires a valid response status line, and product headers are read only before the response body.
+
+HTTP page titles are content hints and carry medium confidence, even when they mention a product version. A TLS-only handshake confirms the transport, not the application: an application label inferred from its port stays low confidence. HTTP and SSH response lines must be syntactically valid before their banners are accepted.
+
 Operational limits:
 - CONNECT completes one requested connection attempt before releasing the remaining workers; this avoids the initial parallel burst without adding probes. Banner reads do not block that release. A silent first port can add one attempt's wait before parallel scanning starts.
 - `--retries` applies to timeouts and transient connection errors, not explicit connection refusals or permission errors. Its default remains zero; bounded scans can still miss temporarily unavailable services.
@@ -331,6 +338,8 @@ Operational limits:
 - Service names inferred only from ports do not prove a product or operating system. A missing banner may reflect filtering, a silent service, or a timeout.
 - Repeated unauthenticated connections can trigger server-side connection-error limits. MySQL errors such as 1129 (blocked host) and 1130 (host denied) are reported; GoMap does not authenticate or reset server limits automatically.
 - `--rate` limits initial CONNECT attempts and configured CONNECT retries per host; it is not a global limit for host discovery or additional service probes.
+- `--global-rate N` shares one non-burst budget across hosts, TCP host discovery, CONNECT retries, additional TCP/TLS service connections, UDP exchanges, and SYN transmissions. Combine it with `--rate` when both global and per-host pacing are needed. It defaults to zero (disabled) and can increase total scan time.
+- The global budget counts attempt starts, not packets or application messages on an established connection. DNS resolution, local route selection, and kernel retransmissions are outside this budget; it is not a wire-level bandwidth limit.
 - Raw SYN discovery and privileged interface changes require separate lab validation.
 - MySQL, DNS/TCP, ONC RPC, AJP and SMB reads handle fragmented frames with bounded buffers. HTTP banner collection is limited to 64 KiB; other text and binary probes still need broader fragmentation testing.
 - Duplicate targets and ports are scanned once. CIDR discovery uses a bounded worker pool and preserves target order, including when applying `--max-hosts` afterward.
@@ -350,7 +359,8 @@ Non-standard port note:
 - TCP remains the default scan mode.
 - `-u` switches port probing to UDP and uses a compact UDP default port set unless `-p` is provided.
 - GoMap reports UDP ports as open only when a UDP response is received.
-- No-response UDP ports are intentionally omitted because they may be closed, filtered, or open-but-silent.
+- UDP timeouts are retained as `open|filtered`; a socket connection-refused error is reported as `closed`. Other exchange errors remain `unknown`.
+- UDP reports contain one result per requested port. `open` remains a boolean for compatibility and is true only for confirmed responses; the additive `state` field describes UDP outcomes. Open-port totals exclude uncertain and closed results.
 - `-u` cannot be combined with `--scan-type syn`, because SYN is TCP-specific.
 - CIDR scans with `-u` still use TCP host discovery unless `-nd` is set.
 
@@ -498,11 +508,11 @@ Single report document with metadata:
 
 ### JSONL (`--format jsonl`)
 
-One JSON record per open port, emitted after scanning completes. Consumers can process records line by line; this is not live result streaming.
+One JSON record per reported port, emitted after scanning completes (including uncertain and closed UDP outcomes). Consumers can process records line by line; this is not live result streaming.
 
 ### CSV (`--format csv`)
 
-One row per open port with columns:
+One row per reported port, including uncertain and closed UDP outcomes, with columns:
 
 `host,port,state,service,version,hostname,tls,tls_version,tls_cipher,tls_alpn,tls_server_name,tls_issuer,latency_ms,confidence,evidence,detection_path`
 

@@ -54,3 +54,42 @@ func TestSYNRejectsUnrelatedPeersAndAcknowledgements(t *testing.T) {
 		t.Fatalf("accepted unrelated packet: %#v", conn)
 	}
 }
+
+func TestSYNClosedAndInvalidResponses(t *testing.T) {
+	target := net.ParseIP("192.0.2.1")
+	for _, tc := range []struct {
+		name     string
+		flags    byte
+		sequence uint32
+		wantOpen bool
+	}{
+		{"reset is closed", tcpFlagRst | tcpFlagAck, 41, false},
+		{"reset plus syn is not open", tcpFlagRst | tcpFlagSyn | tcpFlagAck, 41, false},
+		{"wrapped acknowledgement", tcpFlagSyn | tcpFlagAck, ^uint32(0), true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			packet := make([]byte, 20)
+			binary.BigEndian.PutUint16(packet, 443)
+			binary.BigEndian.PutUint16(packet[2:], 40123)
+			binary.BigEndian.PutUint32(packet[8:], tc.sequence+1)
+			packet[12] = 5 << 4
+			packet[13] = tc.flags
+			wrongDestination := append([]byte(nil), packet...)
+			binary.BigEndian.PutUint16(wrongDestination[2:], 40124)
+			noAck := append([]byte(nil), packet...)
+			noAck[13] &^= tcpFlagAck
+			conn := &fakeSYNConn{packets: []synDatagram{
+				{packet[:10], target}, {wrongDestination, target}, {noAck, target}, {packet, target},
+			}}
+			pending := map[int]uint32{443: tc.sequence}
+			open := map[int]struct{}{}
+			if err := collectSYNResponses(conn, target, 40123, pending, open, time.Second); err != nil {
+				t.Fatal(err)
+			}
+			_, gotOpen := open[443]
+			if gotOpen != tc.wantOpen || len(pending) != 0 || len(conn.packets) != 0 {
+				t.Fatalf("incorrect response classification: open=%v pending=%v", open, pending)
+			}
+		})
+	}
+}
