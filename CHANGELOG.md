@@ -7,6 +7,14 @@ Note: this changelog is maintained from this point forward in the project histor
 ## Unreleased
 
 ### Added
+
+### Changed
+
+### Fixed
+
+## [2.5.0] - 2026-10-07
+
+### Added
 - Add Linux subprocess regressions for SIGINT/SIGTERM cleanup, including cleanup failures and preservation of existing addresses.
 - Add opt-in isolated raw-socket lifecycle validation with namespace guards, bounded reads, closure checks, and native netlink missing-interface handling; no probes or address modifications.
 - Add opt-in `--global-rate` with a shared connection/probe budget across discovery, hosts, retries, and service detection; preserve the existing per-host `--rate` behavior.
@@ -33,6 +41,11 @@ Note: this changelog is maintained from this point forward in the project histor
 - Keep HTTP page-title hints at medium confidence and TLS-only application port hints at low confidence; reject malformed HTTP/SSH response lines.
 - Reject malformed SIP/RTSP, RFB, and Memcached text signatures; ignore Server lines in response bodies and lower confidence for generic banner descriptions.
 - Associate SMB, Redis, and Node.js versions with explicit product fields; retain JMS protocol identifiers without inventing an OpenMQ product version, and require IRC protocol context.
+
+### Compatibility And Validation
+- UDP reports now retain uncertain and closed outcomes. Consumers must filter by `state` or the compatible `open` boolean when counting confirmed-open ports; CSV headers remain unchanged.
+- Integrated unit, race, lint and coverage checks pass with 59.3% total coverage. Raw-socket lifecycle checks passed in a disconnected, loopback-only Linux namespace; repeated signal cleanup tests use fake address backends and do not modify host interfaces.
+- End-to-end SYN discovery and native netlink address rollback remain separate lab-validation tasks. Structural fingerprints do not authenticate servers or guarantee product/version identity; authenticated/encrypted SNMP remains unsupported by these validators.
 
 ## [2.4.9] - 2026-10-02
 
