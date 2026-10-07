@@ -340,7 +340,7 @@ Operational limits:
 - `--rate` limits initial CONNECT attempts and configured CONNECT retries per host; it is not a global limit for host discovery or additional service probes.
 - `--global-rate N` shares one non-burst budget across hosts, TCP host discovery, CONNECT retries, additional TCP/TLS service connections, UDP exchanges, and SYN transmissions. Combine it with `--rate` when both global and per-host pacing are needed. It defaults to zero (disabled) and can increase total scan time.
 - The global budget counts attempt starts, not packets or application messages on an established connection. DNS resolution, local route selection, and kernel retransmissions are outside this budget; it is not a wire-level bandwidth limit.
-- Raw SYN discovery and privileged interface changes require separate lab validation.
+- Raw-socket deadlines and closure are validated in an isolated loopback-only Linux namespace; signal cleanup uses deterministic subprocess tests with fake address backends. End-to-end SYN discovery and native netlink address rollback still require separate lab validation. See [Contributing](CONTRIBUTING.md#lab-tests) for the opt-in checks.
 - MySQL, DNS/TCP, ONC RPC, AJP and SMB reads handle fragmented frames with bounded buffers. HTTP banner collection is limited to 64 KiB; other text and binary probes still need broader fragmentation testing.
 - Duplicate targets and ports are scanned once. CIDR discovery uses a bounded worker pool and preserves target order, including when applying `--max-hosts` afterward.
 - When duplicate observations are combined, service, version, confidence, evidence, and detection path stay together. Higher-confidence identifications take precedence; equal-confidence results prefer a known service and fuller metadata, retaining the first observation on a complete tie. This selects an observation, not independent confirmation or consensus. Complete TLS handshake metadata is not replaced by partial TLS fields.
@@ -361,6 +361,7 @@ Non-standard port note:
 - GoMap reports UDP ports as open only when a UDP response is received.
 - UDP timeouts are retained as `open|filtered`; a socket connection-refused error is reported as `closed`. Other exchange errors remain `unknown`.
 - UDP reports contain one result per requested port. `open` remains a boolean for compatibility and is true only for confirmed responses; the additive `state` field describes UDP outcomes. Open-port totals exclude uncertain and closed results.
+- Starting with v2.5.0, automation consuming UDP reports must filter by `state == "open"` (or the JSON `open` boolean) rather than treating every returned row as confirmed open. CSV column names remain unchanged.
 - `-u` cannot be combined with `--scan-type syn`, because SYN is TCP-specific.
 - CIDR scans with `-u` still use TCP host discovery unless `-nd` is set.
 - A UDP reply establishes responsiveness, not the application identity. Port-only service hints use the UDP map (never TCP names) and remain low confidence with an empty version. Unknown payload text is not promoted to a product version.
