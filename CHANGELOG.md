@@ -11,6 +11,7 @@ Note: this changelog is maintained from this point forward in the project histor
 ### Changed
 
 ### Fixed
+- Validate negative UDP/137 NetBIOS name-query replies for format/server/name/refused errors with strict flags, encoded names and empty zero-TTL NULL records; support the RFC 1002 zero-counter layout without mutating inputs or treating errors as closed ports or confirmed server identities.
 - Match runtime DNS/SNMP replies against the actual sent probe fields; clear identification/version claims on mismatch while preserving responsiveness, with fixed-ID replay and authentication limitations explicit.
 - Support bounded non-minimal definite SNMP BER lengths without changing primitive values; document and test unsupported SNMP security/encoding and NetBIOS reply/datagram variants.
 - Validate bounded UDP/137 NetBIOS NB/NBSTAT response structure without disclosing node names, workgroups or MAC addresses; unsupported payloads remain low confidence.

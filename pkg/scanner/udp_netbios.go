@@ -9,9 +9,16 @@ import (
 const (
 	netbiosNameRecord   dnsmessage.Type = 32
 	netbiosStatusRecord dnsmessage.Type = 33
+	netbiosNullRecord   dnsmessage.Type = 10
 )
 
 func udpNetBIOSVersion(payload []byte) string {
+	if len(payload) < 12 || len(payload) > maxUDPResponseBytes {
+		return ""
+	}
+	if payload[3]&0x0f != 0 {
+		return udpNetBIOSErrorVersion(payload)
+	}
 	if !udpNameServiceFrameValid(payload, udpNetBIOSBodyValid) {
 		return ""
 	}
@@ -44,6 +51,54 @@ func udpNetBIOSVersion(payload []byte) string {
 		return "NetBIOS node status response"
 	}
 	return "NetBIOS name service response"
+}
+
+func udpNetBIOSErrorVersion(payload []byte) string {
+	var reason string
+	switch payload[3] & 0x0f {
+	case 1:
+		reason = "format error"
+	case 2:
+		reason = "server failure"
+	case 3:
+		reason = "name not found"
+	case 5:
+		reason = "refused"
+	default:
+		return ""
+	}
+	flags := binary.BigEndian.Uint16(payload[2:4])
+	count := binary.BigEndian.Uint16(payload[6:8])
+	if flags&0xff70 != 0x8500 || binary.BigEndian.Uint16(payload[4:6]) != 0 || count > 1 || binary.BigEndian.Uint32(payload[8:12]) != 0 {
+		return ""
+	}
+	// RFC 1002 section 4.2.14 includes a NULL record despite ANCOUNT=0.
+	// Normalize only that counter on a private copy to validate the entire frame.
+	frame := payload
+	if count == 0 {
+		frame = append([]byte(nil), payload...)
+		binary.BigEndian.PutUint16(frame[6:8], 1)
+	}
+	if !udpNameServiceFrameValid(frame, func(_ []byte, off, end int, kind dnsmessage.Type) bool {
+		return kind == netbiosNullRecord && off == end
+	}) {
+		return ""
+	}
+	var parser dnsmessage.Parser
+	if _, err := parser.Start(frame); err != nil {
+		return ""
+	}
+	if _, err := parser.AllQuestions(); err != nil {
+		return ""
+	}
+	answer, err := parser.AnswerHeader()
+	if err != nil || answer.Type != netbiosNullRecord || answer.Class != dnsmessage.ClassINET || answer.TTL != 0 || !netbiosEncodedNameValid(answer.Name) {
+		return ""
+	}
+	if _, err := parser.UnknownResource(); err != nil {
+		return ""
+	}
+	return "NetBIOS name service error: " + reason
 }
 
 func netbiosEncodedNameValid(name dnsmessage.Name) bool {
