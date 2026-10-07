@@ -23,6 +23,7 @@ type ScanRequest struct {
 	ExcludePorts    string
 	TopPorts        int
 	Rate            int
+	GlobalRate      int
 	MaxHosts        int
 	ServiceDetect   bool
 	DeepVersion     bool
@@ -46,6 +47,10 @@ type ScanRequest struct {
 
 // ExecuteScan runs the complete scan workflow: target expansion, host discovery, scan, and rendering.
 func ExecuteScan(req ScanRequest) (resultErr error) {
+	if req.GlobalRate < 0 {
+		return errors.New("--global-rate cannot be negative")
+	}
+	limiter := scanner.NewAttemptLimiter(req.GlobalRate)
 	machineOutput := req.Format != "text"
 	if req.ScanType == "" {
 		req.ScanType = "connect"
@@ -109,8 +114,8 @@ func ExecuteScan(req ScanRequest) (resultErr error) {
 		defer func() { resultErr = errors.Join(resultErr, outFile.Close()) }()
 		destWriter = outFile
 	}
-	if req.RandomIP && req.SourceInterface == "" && !scanner.IsCIDR(req.Target) && !machineOutput {
-		fmt.Printf("%s\n", output.StatusWarn("--random-ip is most useful with CIDR targets; using local /24 approximation per host."))
+	if req.RandomIP && req.SourceInterface == "" && !machineOutput {
+		fmt.Printf("%s\n", output.StatusWarn("--random-ip without --source-interface changes HTTP headers only; TCP source addresses remain unchanged."))
 	}
 	var sourceIPs []net.IP
 	if req.SourceInterface != "" {
@@ -169,6 +174,7 @@ func ExecuteScan(req ScanRequest) (resultErr error) {
 				fmt.Printf("%s\n", output.StatusWarn("Ghost discovery profile active: low-noise probes on 443,80,22. Use -nd to skip discovery completely."))
 			}
 		}
+		discoveryOpts.AttemptLimiter = limiter
 		targets = scanner.DiscoverActiveHostsWithOptions(targets, discoveryOpts)
 		if len(targets) == 0 {
 			if machineOutput {
@@ -249,6 +255,7 @@ func ExecuteScan(req ScanRequest) (resultErr error) {
 			Timeout:         timeoutDuration,
 			Retries:         req.Retries,
 			Rate:            req.Rate,
+			AttemptLimiter:  limiter,
 			AdaptiveTimeout: req.AdaptiveTimeout,
 			BackoffBase:     time.Duration(req.BackoffMS) * time.Millisecond,
 			MaxTimeout:      maxTimeoutDuration,
@@ -264,9 +271,10 @@ func ExecuteScan(req ScanRequest) (resultErr error) {
 			openResults = s.ScanUDP(portsToScan, req.ServiceDetect)
 		} else if req.ScanType == "syn" {
 			synOpenPorts, synErr := scanner.DiscoverOpenPortsSYN(targetIP, portsToScan, scanner.SYNConfig{
-				Rate:      req.Rate,
-				Retries:   req.Retries,
-				GhostMode: req.GhostMode,
+				Rate:           req.Rate,
+				AttemptLimiter: limiter,
+				Retries:        req.Retries,
+				GhostMode:      req.GhostMode,
 			})
 			if synErr != nil {
 				if !machineOutput {
@@ -319,7 +327,7 @@ func ExecuteScan(req ScanRequest) (resultErr error) {
 	totalOpen := 0
 	for _, targetIP := range targets {
 		if results, exists := allResults[targetIP]; exists {
-			totalOpen += len(results)
+			totalOpen += scanner.CountOpen(results)
 			if len(targets) > 1 {
 				fmt.Fprintf(&textReport, "\n%s\n", output.Highlight(fmt.Sprintf("═══ %s ═══", output.Host(targetIP))))
 			}
@@ -370,11 +378,19 @@ func hostSummaries(targets []string, allResults map[string][]scanner.ScanResult,
 	fmt.Fprintf(&report, "\n%s\n", output.Bold("Host Exposure Summary"))
 	for _, host := range targets {
 		results := allResults[host]
-		open := len(results)
+		open := scanner.CountOpen(results)
 		critical := criticalServices(results)
 		exposure := exposureLevel(open, len(critical))
 		if len(diagnostics) > 0 && diagnostics[0][host].UnresolvedPorts > 0 {
 			exposure = "indeterminate (observed: " + exposure + ")"
+		}
+		for _, result := range results {
+			if result.EffectiveState() == "open|filtered" || result.EffectiveState() == "unknown" {
+				if !strings.HasPrefix(exposure, "indeterminate") {
+					exposure = "indeterminate (observed: " + exposure + ")"
+				}
+				break
+			}
 		}
 
 		criticalStr := "none"
@@ -436,6 +452,9 @@ func criticalServices(results []scanner.ScanResult) []string {
 
 	found := make(map[string]struct{})
 	for _, r := range results {
+		if r.State != "" && r.State != "open" {
+			continue
+		}
 		if _, ok := criticalSet[r.ServiceName]; ok {
 			found[r.ServiceName] = struct{}{}
 		}

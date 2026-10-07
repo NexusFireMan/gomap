@@ -51,7 +51,7 @@ A fast TCP/UDP port scanner written in Go, with optional service/version detecti
 ## Current scope
 
 - Fast concurrent TCP scanning with selectable engine (`connect` or `syn`).
-- UDP probing with `-u` for responsive UDP services.
+- UDP probing with `-u`, retaining confirmed and uncertain port states.
 - Default quick scan uses a curated top-port list normalized to unique ports (current effective size: 996).
 - Optional service and version detection (`-s`).
 - Single host, hostname, comma-separated targets, and CIDR ranges.
@@ -192,7 +192,7 @@ sudo dpkg -i gomap_<version>_linux_amd64.deb
 # Native SYN scan discovery (requires root/CAP_NET_RAW)
 ./gomap --scan-type syn 10.0.11.6
 
-# UDP scan (responsive UDP services only)
+# UDP scan with explicit port states
 ./gomap -u 10.0.11.6
 
 # UDP scan on selected ports
@@ -244,6 +244,8 @@ Host Exposure Summary
 
 ## CLI Reference
 
+Options can appear before or after the target. Use `--` to end option parsing.
+
 ```text
 Usage:
   gomap [options] <host|CIDR>
@@ -263,6 +265,7 @@ Main options:
 Performance/robustness:
   --workers         concurrent workers (default: auto by mode)
   --rate            max scan rate in ports/second per host (0 = unlimited)
+  --global-rate     max connection/probe starts/second across the entire scan (0 = unlimited)
   --timeout         per-attempt dial timeout in ms (default: auto by mode)
   --retries         retries per port on timeout/transient connection error
   --backoff-ms      base exponential backoff between retries
@@ -293,7 +296,7 @@ Low-noise defaults for `-g` ghost mode:
   - tradeoff: discovery may miss hosts that only expose non-probed ports (for example 139/445 only)
 
 Maintenance:
-  -v                show version/build info
+  -v, --version     show version/build info
   -up               update to latest version
   --remove          remove non-package gomap copies found in PATH/common locations
   --doctor          inspect active binary, PATH copies, and install origin
@@ -322,6 +325,10 @@ When `-s` is enabled, gomap combines port-based hints and protocol/banner parsin
 
 Important: banner-based detection is heuristic. Always validate critical findings with a second tool.
 
+Generic banner descriptions carry medium confidence. High banner confidence means a recognized disclosure, not independent confirmation of a product version or operating system. RFB and SMB versions describe their protocols; TLS metadata describes the encrypted transport. SIP/RTSP identification requires a valid response status line, and product headers are read only before the response body.
+
+HTTP page titles are content hints and carry medium confidence, even when they mention a product version. A TLS-only handshake confirms the transport, not the application: an application label inferred from its port stays low confidence. HTTP and SSH response lines must be syntactically valid before their banners are accepted.
+
 Operational limits:
 - CONNECT completes one requested connection attempt before releasing the remaining workers; this avoids the initial parallel burst without adding probes. Banner reads do not block that release. A silent first port can add one attempt's wait before parallel scanning starts.
 - `--retries` applies to timeouts and transient connection errors, not explicit connection refusals or permission errors. Its default remains zero; bounded scans can still miss temporarily unavailable services.
@@ -331,9 +338,12 @@ Operational limits:
 - Service names inferred only from ports do not prove a product or operating system. A missing banner may reflect filtering, a silent service, or a timeout.
 - Repeated unauthenticated connections can trigger server-side connection-error limits. MySQL errors such as 1129 (blocked host) and 1130 (host denied) are reported; GoMap does not authenticate or reset server limits automatically.
 - `--rate` limits initial CONNECT attempts and configured CONNECT retries per host; it is not a global limit for host discovery or additional service probes.
-- Raw SYN discovery and privileged interface changes require separate lab validation.
+- `--global-rate N` shares one non-burst budget across hosts, TCP host discovery, CONNECT retries, additional TCP/TLS service connections, UDP exchanges, and SYN transmissions. Combine it with `--rate` when both global and per-host pacing are needed. It defaults to zero (disabled) and can increase total scan time.
+- The global budget counts attempt starts, not packets or application messages on an established connection. DNS resolution, local route selection, and kernel retransmissions are outside this budget; it is not a wire-level bandwidth limit.
+- Raw-socket deadlines and closure are validated in an isolated loopback-only Linux namespace; signal cleanup uses deterministic subprocess tests with fake address backends. End-to-end SYN discovery and native netlink address rollback still require separate lab validation. See [Contributing](CONTRIBUTING.md#lab-tests) for the opt-in checks.
 - MySQL, DNS/TCP, ONC RPC, AJP and SMB reads handle fragmented frames with bounded buffers. HTTP banner collection is limited to 64 KiB; other text and binary probes still need broader fragmentation testing.
 - Duplicate targets and ports are scanned once. CIDR discovery uses a bounded worker pool and preserves target order, including when applying `--max-hosts` afterward.
+- When duplicate observations are combined, service, version, confidence, evidence, and detection path stay together. Higher-confidence identifications take precedence; equal-confidence results prefer a known service and fuller metadata, retaining the first observation on a complete tie. This selects an observation, not independent confirmation or consensus. Complete TLS handshake metadata is not replaced by partial TLS fields.
 - IPv4 CIDRs omit network/broadcast addresses except for /31 and /32; IPv6 ranges preserve endpoints. Expansion is limited to 65,536 addresses per CIDR.
 
 Non-standard port note:
@@ -349,9 +359,20 @@ Non-standard port note:
 - TCP remains the default scan mode.
 - `-u` switches port probing to UDP and uses a compact UDP default port set unless `-p` is provided.
 - GoMap reports UDP ports as open only when a UDP response is received.
-- No-response UDP ports are intentionally omitted because they may be closed, filtered, or open-but-silent.
+- UDP timeouts are retained as `open|filtered`; a socket connection-refused error is reported as `closed`. Other exchange errors remain `unknown`.
+- UDP reports contain one result per requested port. `open` remains a boolean for compatibility and is true only for confirmed responses; the additive `state` field describes UDP outcomes. Open-port totals exclude uncertain and closed results.
+- Starting with v2.5.0, automation consuming UDP reports must filter by `state == "open"` (or the JSON `open` boolean) rather than treating every returned row as confirmed open. CSV column names remain unchanged.
 - `-u` cannot be combined with `--scan-type syn`, because SYN is TCP-specific.
 - CIDR scans with `-u` still use TCP host discovery unless `-nd` is set.
+- A UDP reply establishes responsiveness, not the application identity. Port-only service hints use the UDP map (never TCP names) and remain low confidence with an empty version. Unknown payload text is not promoted to a product version.
+- NTP classification checks a bounded server-mode header and reports the protocol version at medium confidence, not a daemon version or correlated time exchange. The header layout follows [RFC 5905](https://www.rfc-editor.org/rfc/rfc5905.html).
+- SSDP classification requires a bounded HTTP/1.1 200 response with ST, USN, and a HTTP(S) LOCATION header; SERVER disclosure is read from headers only. LOCATION is never fetched. These are shape checks based on [UPnP Device Architecture](https://openconnectivity.org/upnp-specs/UPnP-arch-DeviceArchitecture-v2.0-20200417.pdf), not full device verification.
+- SNMP classification checks a bounded ASN.1 subset of v1/v2c Response-PDUs, including field bounds, binding types, and error indexes, based on [RFC 1157](https://www.rfc-editor.org/rfc/rfc1157.html) and [RFC 3416](https://www.rfc-editor.org/rfc/rfc3416.html). Bounded normalization also accepts non-minimal definite BER lengths allowed by [RFC 3417 section 8](https://www.rfc-editor.org/rfc/rfc3417.html#section-8); indefinite lengths and constructed simple values are rejected. V2c adds exception values and unsigned Counter64 bounds. The v3 subset supports plaintext USM `noAuthNoPriv` Response/Report PDUs with zero message flags, bounded header/security/context fields, and empty authentication/privacy parameters ([message format](https://www.rfc-editor.org/rfc/rfc3412.html), [USM format](https://www.rfc-editor.org/rfc/rfc3414.html)). V3 labels explicitly say `unauthenticated`. Standalone parsing remains structural evidence; runtime replies are matched only to compatible sent queries, never authenticated. Communities, usernames, engine/context identifiers and binding values never enter identification metadata. Unsupported BER forms, security models, authenticated/encrypted messages and PDUs remain low-confidence hints. No v2c/v3 queries or credential handling are added; the existing SNMP probe is unchanged.
+- DNS, mDNS, and LLMNR classification uses the Go-native `golang.org/x/net/dns/dnsmessage` parser with bounded framing checks: section counts, names/compression, supported record bodies and lengths, response flags, and protocol-specific header/class rules. Validated shapes report only `DNS response`, `mDNS response`, or `LLMNR response` at medium confidence, not a server product/version or authenticated identity. Standalone shape checks do not correlate requests; runtime DNS replies are compared to the actual sent query as described below. Record names/values are not copied into identification metadata. See [DNS wire format](https://www.rfc-editor.org/rfc/rfc1035.html), [mDNS](https://www.rfc-editor.org/rfc/rfc6762.html), and [LLMNR](https://www.rfc-editor.org/rfc/rfc4795.html).
+- These DNS-format checks deliberately support a conservative subset up to 2048 bytes. Truncated packets, unsupported record bodies/classes, and tentative LLMNR replies remain low-confidence hints. No new mDNS/LLMNR queries or multicast listeners are added; their existing generic probes may elicit no reply.
+- NetBIOS name service on UDP/137 validates a bounded subset of positive NB/NBSTAT replies and negative name-query replies, based on [RFC 1002](https://www.rfc-editor.org/rfc/rfc1002.html). Positive checks cover encoded names, framing, IN class, address entries, node-name flags/counts and statistics. Negative checks require coherent response flags, a valid encoded name, zero-TTL empty NULL record and error code 1/2/3/5; the section 4.2.14 zero-answer-counter layout and the count-one layout are supported without changing input bytes. Output contains only a protocol/error label at medium confidence, not Windows/Samba versions, hostnames, workgroups or MAC addresses. An error does not mean the responsive port is closed or establish server identity. Header-only errors and unsupported variants remain low-confidence hints. UDP/138 datagrams and TCP/139 sessions are outside these checks; no new queries are added and the generic probe may elicit no reply.
+- NetBIOS redirects are recognized only when RFC 1002 section 4.2.15 flags and section counts match, with one IN-class NS record pointing to an encoded NetBIOS name and one matching IN-class A record. Targets must match exactly after name decompression. This conservative subset does not cover every redirect form or authenticate the sender. Redirects are never followed; names and destination addresses are not included in output.
+- Runtime DNS matching checks the transaction ID and echoed question name/type/class; SNMP matching checks version, community, request ID and binding OIDs/count/order against the actual sent probe. A mismatch keeps the responsive port but clears its version and lowers identification confidence. Matching fields stay medium confidence: identifiers are fixed, replay remains possible, and this is not authentication. Other current probes lack usable correlation fields (including NTP's zero transmit timestamp). See the reviewed [UDP validation and unsupported-variant matrix](docs/UDP_VALIDATION.md).
 
 ### Real Source-IP Selection
 
@@ -497,11 +518,11 @@ Single report document with metadata:
 
 ### JSONL (`--format jsonl`)
 
-One JSON record per open port, emitted after scanning completes. Consumers can process records line by line; this is not live result streaming.
+One JSON record per reported port, emitted after scanning completes (including uncertain and closed UDP outcomes). Consumers can process records line by line; this is not live result streaming.
 
 ### CSV (`--format csv`)
 
-One row per open port with columns:
+One row per reported port, including uncertain and closed UDP outcomes, with columns:
 
 `host,port,state,service,version,hostname,tls,tls_version,tls_cipher,tls_alpn,tls_server_name,tls_issuer,latency_ms,confidence,evidence,detection_path`
 

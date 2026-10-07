@@ -60,6 +60,7 @@ func Run() {
 		ExcludePorts:    opts.ExcludePorts,
 		TopPorts:        opts.TopPorts,
 		Rate:            opts.Rate,
+		GlobalRate:      opts.GlobalRate,
 		MaxHosts:        opts.MaxHosts,
 		ServiceDetect:   opts.ServiceFlag,
 		DeepVersion:     opts.DeepVersionFlag,

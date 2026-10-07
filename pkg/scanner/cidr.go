@@ -10,10 +10,11 @@ import (
 
 // DiscoveryOptions controls CIDR host discovery behavior.
 type DiscoveryOptions struct {
-	Ports      []int
-	Timeout    time.Duration
-	NumWorkers int
-	SourceIPs  []net.IP
+	Ports          []int
+	Timeout        time.Duration
+	NumWorkers     int
+	SourceIPs      []net.IP
+	AttemptLimiter *AttemptLimiter
 }
 
 // ExpandCIDR expands a CIDR notation to a list of IPs
@@ -183,7 +184,7 @@ func DiscoverActiveHostsWithOptions(hosts []string, opts DiscoveryOptions) []str
 		numWorkers = 25
 	}
 	return discoverHosts(hosts, numWorkers, func(host string) bool {
-		return isHostActive(host, commonPorts, timeout, opts.SourceIPs)
+		return isHostActive(host, commonPorts, timeout, opts.SourceIPs, opts.AttemptLimiter)
 	})
 }
 
@@ -217,9 +218,10 @@ func discoverHosts(hosts []string, numWorkers int, probe func(string) bool) []st
 }
 
 // isHostActive checks if a host is reachable by attempting connections to common ports
-func isHostActive(host string, ports []int, timeout time.Duration, sourceIPs []net.IP) bool {
+func isHostActive(host string, ports []int, timeout time.Duration, sourceIPs []net.IP, limiter *AttemptLimiter) bool {
 	for _, port := range ports {
 		address := net.JoinHostPort(host, fmt.Sprintf("%d", port))
+		limiter.Wait()
 		conn, err := dialerForSourceIPs(sourceIPs, "tcp", address, timeout).Dial("tcp", address)
 		if err == nil {
 			_ = conn.Close()

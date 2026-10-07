@@ -36,6 +36,9 @@ func TestScanUDPDetectsResponsivePort(t *testing.T) {
 	if !results[0].IsOpen || results[0].Port != port {
 		t.Fatalf("unexpected udp result: %+v", results[0])
 	}
+	if results[0].EffectiveState() != "open" || results[0].Version != "" || results[0].Confidence != "low" || CountOpen(results) != 1 {
+		t.Fatalf("unrecognized response must confirm responsiveness, not a product: %+v", results[0])
+	}
 	if results[0].DetectionPath != "udp-probe" {
 		t.Fatalf("unexpected detection path: %q", results[0].DetectionPath)
 	}

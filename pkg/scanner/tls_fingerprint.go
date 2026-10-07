@@ -16,6 +16,13 @@ type tlsFingerprint struct {
 	Issuer  string
 }
 
+func tlsOnlyIdentification(service string) (confidence, evidence string) {
+	if service == "tls" || service == "ssl" {
+		return "high", "tls handshake; no application banner"
+	}
+	return "low", "tls handshake; application service inferred from port only"
+}
+
 func (s *Scanner) detectTLSFingerprint(port int) (tlsFingerprint, bool) {
 	return s.detectTLSFingerprintWithTimeout(port, 1600*time.Millisecond, 4*time.Second)
 }

@@ -29,6 +29,7 @@ type ManagedSourceIPs struct {
 	setupMu       sync.Mutex
 	signalMu      sync.Mutex
 	signalStop    func()
+	signalClosed  bool
 }
 
 // PrepareManagedSourceIPs adds explicit addresses and rolls back partial setup failures.
@@ -189,7 +190,7 @@ func (m *ManagedSourceIPs) Close() error {
 func (m *ManagedSourceIPs) InstallSignalCleanup() {
 	m.signalMu.Lock()
 	defer m.signalMu.Unlock()
-	if m.signalStop == nil {
+	if !m.signalClosed && m.signalStop == nil {
 		m.signalStop = installManagedSignalCleanup(m)
 	}
 }
@@ -197,6 +198,7 @@ func (m *ManagedSourceIPs) InstallSignalCleanup() {
 func (m *ManagedSourceIPs) stopSignalCleanup() {
 	m.signalMu.Lock()
 	defer m.signalMu.Unlock()
+	m.signalClosed = true
 	if m.signalStop != nil {
 		m.signalStop()
 		m.signalStop = nil
