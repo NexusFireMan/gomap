@@ -185,6 +185,9 @@ func (s *Scanner) classifyUDPResponse(port int, response []byte, detectServices 
 	switch port {
 	case 137:
 		if version := udpNetBIOSVersion(response); version != "" {
+			if version == netbiosRedirectLabel {
+				return "netbios-ns", version, "medium", version + "; bounded NS/A fields validated; redirect not followed; request not correlated"
+			}
 			return "netbios-ns", version, "medium", version + "; bounded NBNS fields validated; request not correlated"
 		}
 	case 53, 5353, 5355:

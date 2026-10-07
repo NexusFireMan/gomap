@@ -38,7 +38,8 @@ context remains structural evidence only.
 | Traps, informs, other SNMP PDUs | Low-confidence fallback | Not replies to the existing query |
 | NetBIOS NB/NBSTAT positive replies | Bounded structural validation | No valid NetBIOS query is currently sent |
 | NetBIOS negative name-query replies, codes 1/2/3/5 | Bounded structural validation, medium confidence | Encoded name and empty NULL record required; no query correlation or server identity |
-| Other NetBIOS errors, redirects, WACK, registration/release replies | Low-confidence fallback | Outside the implemented name-query/status response subset |
+| NetBIOS redirects with encoded NS target and matching A owner | Bounded structural validation, medium confidence | Exact decoded-name match, RFC flags/counts and IN class; never followed, targets not disclosed, no query correlation |
+| Other NetBIOS errors/redirect forms, WACK, registration/release replies | Low-confidence fallback | Outside the implemented name-query/status/redirect response subset |
 | UDP/138 datagrams, fragmented NetBIOS messages | Low-confidence fallback | No datagram decoder or reassembly is implemented |
 
 All response validators use the existing 2048-byte bound. A fallback never

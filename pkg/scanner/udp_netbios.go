@@ -7,9 +7,10 @@ import (
 )
 
 const (
-	netbiosNameRecord   dnsmessage.Type = 32
-	netbiosStatusRecord dnsmessage.Type = 33
-	netbiosNullRecord   dnsmessage.Type = 10
+	netbiosNameRecord    dnsmessage.Type = 32
+	netbiosStatusRecord  dnsmessage.Type = 33
+	netbiosNullRecord    dnsmessage.Type = 10
+	netbiosRedirectLabel                 = "NetBIOS name service redirect"
 )
 
 func udpNetBIOSVersion(payload []byte) string {
@@ -18,6 +19,9 @@ func udpNetBIOSVersion(payload []byte) string {
 	}
 	if payload[3]&0x0f != 0 {
 		return udpNetBIOSErrorVersion(payload)
+	}
+	if binary.BigEndian.Uint32(payload[8:12]) != 0 {
+		return udpNetBIOSRedirectVersion(payload)
 	}
 	if !udpNameServiceFrameValid(payload, udpNetBIOSBodyValid) {
 		return ""
@@ -51,6 +55,35 @@ func udpNetBIOSVersion(payload []byte) string {
 		return "NetBIOS node status response"
 	}
 	return "NetBIOS name service response"
+}
+
+func udpNetBIOSRedirectVersion(payload []byte) string {
+	if binary.BigEndian.Uint16(payload[2:4]) != 0x8100 ||
+		binary.BigEndian.Uint32(payload[4:8]) != 0 ||
+		binary.BigEndian.Uint16(payload[8:10]) != 1 || binary.BigEndian.Uint16(payload[10:12]) != 1 {
+		return ""
+	}
+	if !udpNameServiceFrameValid(payload, func(data []byte, off, end int, kind dnsmessage.Type) bool {
+		return (kind == dnsmessage.TypeNS || kind == dnsmessage.TypeA) && udpDNSBodyFrameValid(data, off, end, kind)
+	}) {
+		return ""
+	}
+	var message dnsmessage.Message
+	if err := message.Unpack(payload); err != nil {
+		return ""
+	}
+	authority, additional := message.Authorities[0], message.Additionals[0]
+	nameserver, ok := authority.Body.(*dnsmessage.NSResource)
+	if !ok || authority.Header.Class != dnsmessage.ClassINET || authority.Header.Name.String() == "." ||
+		!netbiosEncodedNameValid(nameserver.NS) || additional.Header.Class != dnsmessage.ClassINET ||
+		additional.Header.Name != nameserver.NS {
+		return ""
+	}
+	if _, ok := additional.Body.(*dnsmessage.AResource); !ok {
+		return ""
+	}
+	// Recognize only the encoded-name subset; never use the supplied address.
+	return netbiosRedirectLabel
 }
 
 func udpNetBIOSErrorVersion(payload []byte) string {

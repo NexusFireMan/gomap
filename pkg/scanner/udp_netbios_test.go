@@ -146,7 +146,7 @@ func FuzzUDPNetBIOSBounded(f *testing.F) {
 	f.Fuzz(func(t *testing.T, payload []byte) {
 		version := udpNetBIOSVersion(payload)
 		switch version {
-		case "", "NetBIOS name service response", "NetBIOS node status response", "NetBIOS name service error: format error", "NetBIOS name service error: server failure", "NetBIOS name service error: name not found", "NetBIOS name service error: refused":
+		case "", netbiosRedirectLabel, "NetBIOS name service response", "NetBIOS node status response", "NetBIOS name service error: format error", "NetBIOS name service error: server failure", "NetBIOS name service error: name not found", "NetBIOS name service error: refused":
 		default:
 			t.Fatal("invented server version")
 		}

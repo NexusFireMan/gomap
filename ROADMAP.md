@@ -22,6 +22,7 @@ GoMap's roadmap focuses on improving reliability, test coverage, documentation, 
 - [x] Validate a conservative mDNS response subset, including cache-flush classes and questionless answers, without exposing record values.
 - [x] Validate a conservative LLMNR response subset with its own flag semantics and deterministic negative/fuzz tests.
 - [x] Validate a bounded subset of UDP/137 NetBIOS NB/NBSTAT response structure, including compressed names and record framing, without disclosing node names or MAC addresses.
+- [x] Recognize a bounded NetBIOS redirect subset with coherent NS/A records, without following redirects or disclosing targets; keep unsupported forms low confidence.
 - [x] Validate negative UDP/137 name-query replies with strict NULL-record framing, known error codes, legacy counter-layout fixtures and input/disclosure protections.
 - [x] Match DNS/SNMP replies against actual sent probe fields and review unsupported NetBIOS variants; document why existing generic/zero-timestamp probes cannot establish correlation. See [UDP validation scope](docs/UDP_VALIDATION.md).
 - Authenticated/encrypted SNMP and protocol-specific queries/reassembly remain outside the implemented UDP scope; completed validation/review tasks do not imply support for every variant.

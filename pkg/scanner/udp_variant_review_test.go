@@ -32,7 +32,7 @@ func TestUDPUnsupportedVariantPolicy(t *testing.T) {
 		payload[3] = (payload[3] & 0xf0) | code
 		assertHint(137, payload)
 	}
-	// A complete DNS-framed redirect is still not a supported NB/NBSTAT reply.
+	// A redirect without its additional address record remains unsupported.
 	name, err := dnsmessage.NewName("EGFCEFEECACACACACACACACACACACACA.fixture.invalid.")
 	if err != nil {
 		t.Fatal(err)
