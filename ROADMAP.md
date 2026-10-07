@@ -12,6 +12,8 @@ GoMap's roadmap focuses on improving reliability, test coverage, documentation, 
 
 ## Detection and Scan Reliability
 
+- [x] Add negative fixtures for malformed SIP/RTSP, RFB, and Memcached signatures and forged body headers.
+- [ ] Extend confidence review across all protocol-specific detection paths; distinguish protocol evidence from product/version disclosure.
 - [x] Preserve explicit UDP states in text, JSON, JSONL, and CSV; count only confirmed open ports.
 - [x] Support `--version` and options before or after the CLI target.
 - [ ] Define and implement a global rate budget covering discovery, retries, and service detection; verify with an injected clock and fake transport.

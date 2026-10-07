@@ -14,7 +14,7 @@ func parseBanner(banner string) (service, version string) {
 	}
 
 	// First check if it's HTTP - we need full banner for this
-	if strings.Contains(banner, "HTTP/") {
+	if validHTTPResponseLine(banner) {
 		if s, v := parseSearchHTTP(banner); s != "" {
 			return s, v
 		}
@@ -35,6 +35,9 @@ func parseBanner(banner string) (service, version string) {
 	banner = sanitizeBanner(banner)
 
 	if banner == "" {
+		return "", ""
+	}
+	if strings.HasPrefix(banner, "SSH-") && !sshBannerRE.MatchString(banner) {
 		return "", ""
 	}
 
@@ -94,22 +97,47 @@ func parseBanner(banner string) (service, version string) {
 	return "", ""
 }
 
+var textResponseLineRE = regexp.MustCompile(`^(RTSP/1\.[01]|SIP/2\.0) [1-6][0-9]{2}(?:[ \t].*)?$`)
+var rfbGreetingRE = regexp.MustCompile(`^RFB [0-9]{3}\.[0-9]{3}$`)
+var memcachedVersionRE = regexp.MustCompile(`^VERSION [0-9]+\.[0-9]+(?:\.[0-9]+)?(?:[-+][A-Za-z0-9._-]+)?$`)
+
+// Generic descriptions confirm less than a disclosed implementation banner.
+func bannerConfidence(version string) string {
+	switch strings.ToLower(strings.TrimSpace(version)) {
+	case "", "service", "service ready", "ready", "unknown", "ftp service", "ftp server ready", "smtp service", "pop3 service", "imap4rev1", "http", "rtsp service", "sip service", "irc service", "smb", "redis", "postgresql", "glassfish server", "samba", "windows smb", "mysql", "elasticsearch", "java message service", "microsoft httpapi", "apache", "nginx", "microsoft ftp", "postfix smtp", "proftpd":
+		return "medium"
+	default:
+		return "high"
+	}
+}
+
+func bannerIdentificationConfidence(banner, version string) string {
+	if validHTTPResponseLine(banner) && responseServerVersion(banner, "") == "" && extractHTTPTitle(banner) != "" {
+		// A page title is content, not a server implementation disclosure.
+		return "medium"
+	}
+	return bannerConfidence(version)
+}
+
+var httpResponseLineRE = regexp.MustCompile(`^HTTP/(?:1\.[01]|2(?:\.0)?|3(?:\.0)?) [1-5][0-9]{2}(?:[ \t].*)?$`)
+
+func validHTTPResponseLine(banner string) bool {
+	line := strings.TrimSpace(strings.SplitN(banner, "\n", 2)[0])
+	return httpResponseLineRE.MatchString(line)
+}
+
 func parseAdditionalTextServices(banner string) (service, version string) {
 	trimmed := strings.TrimSpace(banner)
-	upper := strings.ToUpper(trimmed)
+	line := strings.TrimSuffix(strings.SplitN(trimmed, "\n", 2)[0], "\r")
 	switch {
-	case strings.HasPrefix(upper, "RTSP/"):
+	case strings.HasPrefix(line, "RTSP/") && textResponseLineRE.MatchString(line):
 		return "rtsp", responseServerVersion(banner, "RTSP service")
-	case strings.HasPrefix(upper, "SIP/2.0") || strings.Contains(upper, " SIP/2.0"):
+	case strings.HasPrefix(line, "SIP/2.0") && textResponseLineRE.MatchString(line):
 		return "sip", responseServerVersion(banner, "SIP service")
-	case strings.HasPrefix(upper, "RFB "):
-		fields := strings.Fields(trimmed)
-		if len(fields) >= 2 {
-			return "vnc", "RFB " + fields[1]
-		}
-		return "vnc", "RFB service"
-	case strings.HasPrefix(upper, "VERSION "):
-		return "memcached", strings.TrimSpace(trimmed)
+	case rfbGreetingRE.MatchString(line):
+		return "vnc", line
+	case memcachedVersionRE.MatchString(line):
+		return "memcached", line
 	default:
 		return "", ""
 	}
@@ -117,6 +145,9 @@ func parseAdditionalTextServices(banner string) (service, version string) {
 
 func responseServerVersion(response, fallback string) string {
 	for _, line := range strings.Split(response, "\n") {
+		if strings.TrimSpace(line) == "" {
+			break
+		}
 		parts := strings.SplitN(line, ":", 2)
 		if len(parts) == 2 && strings.EqualFold(strings.TrimSpace(parts[0]), "Server") && strings.TrimSpace(parts[1]) != "" {
 			return strings.TrimSpace(parts[1])
@@ -148,7 +179,7 @@ func sanitizeBanner(banner string) string {
 	return result
 }
 
-var sshBannerRE = regexp.MustCompile(`^SSH-([\d\.]+)-(.+)$`)
+var sshBannerRE = regexp.MustCompile(`^SSH-([0-9]+\.[0-9]+)-(\S.*)$`)
 var openSSHImplementationRE = regexp.MustCompile(`OpenSSH[\s_]+([\d\.]+)(?:p(\d+))?([^\r\n]*)`)
 
 // parseSSH extracts SSH version information
@@ -536,7 +567,7 @@ func cleanFTPBannerText(text string) string {
 func parseHTTP(banner string) (string, string) {
 	// Check if it starts with HTTP response
 	banner = strings.TrimSpace(banner)
-	if !strings.HasPrefix(banner, "HTTP/") {
+	if !validHTTPResponseLine(banner) {
 		return "", ""
 	}
 
@@ -722,9 +753,9 @@ func parseNodeVersion(serverHeader string) string {
 		return ""
 	}
 
-	nodeRegex := regexp.MustCompile(`[\d\.]+`)
-	if match := nodeRegex.FindString(serverHeader); match != "" {
-		return fmt.Sprintf("Node.js/Express %s", match)
+	nodeRegex := regexp.MustCompile(`(?:Node\.js|nodejs|node|Express)[/\s]+(\d+(?:\.\d+)+)`)
+	if match := nodeRegex.FindStringSubmatch(serverHeader); match != nil {
+		return fmt.Sprintf("Node.js/Express %s", match[1])
 	}
 	return ""
 }
@@ -826,7 +857,7 @@ func parseJMS(banner string) (string, string) {
 
 	jmsRegex := regexp.MustCompile(`(\d+)\s*\(imqbroker\)\s*(\d+)`)
 	if match := jmsRegex.FindStringSubmatch(banner); match != nil {
-		return "jms", fmt.Sprintf("OpenMQ %s.%s", match[1], match[2])
+		return "jms", "Java Message Service " + match[2]
 	}
 	versionRegex := regexp.MustCompile(`(?i)(?:openmq|java message service|imqbroker)[^\d]{0,16}(\d+(?:\.\d+)+|\d{3})`)
 	if match := versionRegex.FindStringSubmatch(banner); match != nil {
@@ -849,11 +880,7 @@ func parseGlassFish(banner string) (string, string) {
 }
 
 func parseIRC(banner string) (string, string) {
-	lowerBanner := strings.ToLower(banner)
-	if !strings.Contains(lowerBanner, "unreal") &&
-		!strings.Contains(lowerBanner, "ircd") &&
-		!strings.Contains(lowerBanner, "notice auth") &&
-		!regexp.MustCompile(`(?m)^:\S+\s+001\s`).MatchString(banner) {
+	if !regexp.MustCompile(`(?im)^:\S+\s+(?:NOTICE\s+AUTH\b|00[1-5]\s)`).MatchString(banner) {
 		return "", ""
 	}
 	if match := regexp.MustCompile(`(?i)unreal(?:ircd)?[\s/-]*([\d.]+(?:[-\w.]*)?)`).FindStringSubmatch(banner); match != nil {
@@ -882,12 +909,6 @@ func parseSMB(banner string) (string, string) {
 		if match := sambaRegex.FindStringSubmatch(banner); match != nil {
 			return "microsoft-ds", fmt.Sprintf("Samba %s", match[1])
 		}
-		// Generic Samba patterns
-		if strings.Contains(banner, "3.") {
-			return "microsoft-ds", "Samba 3.X"
-		} else if strings.Contains(banner, "4.") {
-			return "microsoft-ds", "Samba 4.X"
-		}
 		return "microsoft-ds", "Samba"
 	}
 
@@ -908,8 +929,12 @@ func parseSMB(banner string) (string, string) {
 	}
 
 	// Check for Windows Server versions
-	if strings.Contains(banner, "Windows") || strings.Contains(banner, "2008") || strings.Contains(banner, "2012") ||
-		strings.Contains(banner, "2016") || strings.Contains(banner, "2019") {
+	if strings.Contains(banner, "Windows") {
+		windowsVersion := regexp.MustCompile(`Windows\s+(?:Server\s+)?(2008(?: R2)?|2012(?: R2)?|2016|2019|10|7)\b`).FindStringSubmatch(banner)
+		if windowsVersion == nil {
+			return "microsoft-ds", "Windows SMB"
+		}
+		banner = windowsVersion[0]
 
 		if strings.Contains(banner, "2008 R2") {
 			return "microsoft-ds", "Windows Server 2008 R2"
@@ -962,7 +987,7 @@ func parseRedis(banner string) (string, string) {
 		return "", ""
 	}
 
-	redisRegex := regexp.MustCompile(`v=([\d\.]+[\w.-]*)`)
+	redisRegex := regexp.MustCompile(`(?:redis_version:|Redis\s+(?:version[=:]\s*)?)(\d+(?:\.\d+)+(?:[-\w.]*)?)`)
 	if match := redisRegex.FindStringSubmatch(banner); match != nil {
 		return "redis", fmt.Sprintf("Redis %s", match[1])
 	}
