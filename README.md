@@ -51,7 +51,7 @@ A fast TCP/UDP port scanner written in Go, with optional service/version detecti
 ## Current scope
 
 - Fast concurrent TCP scanning with selectable engine (`connect` or `syn`).
-- UDP probing with `-u` for responsive UDP services.
+- UDP probing with `-u`, retaining confirmed and uncertain port states.
 - Default quick scan uses a curated top-port list normalized to unique ports (current effective size: 996).
 - Optional service and version detection (`-s`).
 - Single host, hostname, comma-separated targets, and CIDR ranges.
@@ -192,7 +192,7 @@ sudo dpkg -i gomap_<version>_linux_amd64.deb
 # Native SYN scan discovery (requires root/CAP_NET_RAW)
 ./gomap --scan-type syn 10.0.11.6
 
-# UDP scan (responsive UDP services only)
+# UDP scan with explicit port states
 ./gomap -u 10.0.11.6
 
 # UDP scan on selected ports
@@ -244,6 +244,8 @@ Host Exposure Summary
 
 ## CLI Reference
 
+Options can appear before or after the target. Use `--` to end option parsing.
+
 ```text
 Usage:
   gomap [options] <host|CIDR>
@@ -293,7 +295,7 @@ Low-noise defaults for `-g` ghost mode:
   - tradeoff: discovery may miss hosts that only expose non-probed ports (for example 139/445 only)
 
 Maintenance:
-  -v                show version/build info
+  -v, --version     show version/build info
   -up               update to latest version
   --remove          remove non-package gomap copies found in PATH/common locations
   --doctor          inspect active binary, PATH copies, and install origin
@@ -353,7 +355,8 @@ Non-standard port note:
 - TCP remains the default scan mode.
 - `-u` switches port probing to UDP and uses a compact UDP default port set unless `-p` is provided.
 - GoMap reports UDP ports as open only when a UDP response is received.
-- No-response UDP ports are intentionally omitted because they may be closed, filtered, or open-but-silent.
+- UDP timeouts are retained as `open|filtered`; a socket connection-refused error is reported as `closed`. Other exchange errors remain `unknown`.
+- UDP reports contain one result per requested port. `open` remains a boolean for compatibility and is true only for confirmed responses; the additive `state` field describes UDP outcomes. Open-port totals exclude uncertain and closed results.
 - `-u` cannot be combined with `--scan-type syn`, because SYN is TCP-specific.
 - CIDR scans with `-u` still use TCP host discovery unless `-nd` is set.
 
@@ -501,11 +504,11 @@ Single report document with metadata:
 
 ### JSONL (`--format jsonl`)
 
-One JSON record per open port, emitted after scanning completes. Consumers can process records line by line; this is not live result streaming.
+One JSON record per reported port, emitted after scanning completes (including uncertain and closed UDP outcomes). Consumers can process records line by line; this is not live result streaming.
 
 ### CSV (`--format csv`)
 
-One row per open port with columns:
+One row per reported port, including uncertain and closed UDP outcomes, with columns:
 
 `host,port,state,service,version,hostname,tls,tls_version,tls_cipher,tls_alpn,tls_server_name,tls_issuer,latency_ms,confidence,evidence,detection_path`
 

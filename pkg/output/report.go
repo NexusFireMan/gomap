@@ -69,10 +69,10 @@ func PrintJSONReport(w io.Writer, target string, ports []int, targets []string, 
 
 	for _, host := range targets {
 		results := allResults[host]
-		report.TotalOpenPorts += len(results)
+		report.TotalOpenPorts += scanner.CountOpen(results)
 		hostEntry := hostReport{
 			Host:      host,
-			OpenPorts: len(results),
+			OpenPorts: scanner.CountOpen(results),
 			Results:   results,
 		}
 		if len(diagnostics) > 0 {
@@ -88,7 +88,7 @@ func PrintJSONReport(w io.Writer, target string, ports []int, targets []string, 
 	return enc.Encode(report)
 }
 
-// PrintCSVReport prints one row per open port.
+// PrintCSVReport prints one row per reported port.
 func PrintCSVReport(writer io.Writer, allResults map[string][]scanner.ScanResult, targets []string) error {
 	w := csv.NewWriter(writer)
 
@@ -103,7 +103,7 @@ func PrintCSVReport(writer io.Writer, allResults map[string][]scanner.ScanResult
 			row := []string{
 				host,
 				strconv.Itoa(r.Port),
-				"open",
+				r.EffectiveState(),
 				r.ServiceName,
 				r.Version,
 				r.Hostname,
@@ -128,7 +128,7 @@ func PrintCSVReport(writer io.Writer, allResults map[string][]scanner.ScanResult
 	return w.Error()
 }
 
-// PrintJSONLReport prints one JSON object per open port.
+// PrintJSONLReport prints one JSON object per reported port.
 func PrintJSONLReport(w io.Writer, target string, targets []string, allResults map[string][]scanner.ScanResult) error {
 	enc := json.NewEncoder(w)
 	for _, host := range targets {
@@ -140,7 +140,7 @@ func PrintJSONLReport(w io.Writer, target string, targets []string, allResults m
 				Target:        target,
 				Host:          host,
 				Port:          r.Port,
-				State:         "open",
+				State:         r.EffectiveState(),
 				Service:       r.ServiceName,
 				Version:       r.Version,
 				Hostname:      r.Hostname,

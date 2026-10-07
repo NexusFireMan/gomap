@@ -7,8 +7,11 @@ Note: this changelog is maintained from this point forward in the project histor
 ## Unreleased
 
 ### Added
+- Explicit UDP port states, retained in text and structured reports without inflating confirmed-open counts.
+- `--version` alias and CLI options before or after the target.
 
 ### Changed
+- Clarify per-host rate scope in CLI help and HTTP-only random-IP behavior at runtime.
 
 ### Fixed
 - Keep HTTP page-title hints at medium confidence and TLS-only application port hints at low confidence; reject malformed HTTP/SSH response lines.
