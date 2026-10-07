@@ -700,8 +700,7 @@ func (s *Scanner) grabBanner(conn net.Conn, port int, result *ScanResult) {
 				if result.ServiceName == "winrm" && result.Version == "" {
 					result.Version = "Microsoft WinRM over TLS"
 				}
-				result.Confidence = "high"
-				result.Evidence = "tls handshake"
+				result.Confidence, result.Evidence = tlsOnlyIdentification(result.ServiceName)
 				result.DetectionPath = "tls-fingerprint"
 				return
 			}
@@ -776,7 +775,7 @@ func (s *Scanner) grabBanner(conn net.Conn, port int, result *ScanResult) {
 			}
 		}
 		if version != "" {
-			result.Confidence = "high"
+			result.Confidence = bannerIdentificationConfidence(banner, version)
 			result.Evidence = "protocol banner"
 		} else {
 			result.Confidence = "medium"
@@ -835,7 +834,7 @@ func (s *Scanner) grabBanner(conn net.Conn, port int, result *ScanResult) {
 				if retryService, retryVersion := parseBanner(retryBanner); retryService != "" {
 					result.ServiceName = retryService
 					result.Version = retryVersion
-					result.Confidence = "high"
+					result.Confidence = bannerIdentificationConfidence(retryBanner, retryVersion)
 					if retryVersion == "" {
 						result.Confidence = "medium"
 					}
@@ -1446,7 +1445,7 @@ func (s *Scanner) tryProtocolFingerprint(port int) (service, version, confidence
 				if version == "" {
 					version = "IRC service"
 				}
-				return service, version, "high", "IRC protocol response", "protocol-fingerprint", true
+				return service, version, bannerConfidence(version), "IRC protocol response", "protocol-fingerprint", true
 			}
 		}
 	case 53:
