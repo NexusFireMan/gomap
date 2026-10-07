@@ -18,6 +18,7 @@ type OutputFormatter struct {
 	IncludeEvidence bool
 	writer          io.Writer
 	writeErr        error
+	stateWidth      int
 }
 
 // WriteResults renders a report to a writer and propagates write failures.
@@ -80,6 +81,10 @@ func padANSI(text string, width int) string {
 
 // PrintResults displays the scan results in a formatted table
 func (of *OutputFormatter) PrintResults(results []scanner.ScanResult) {
+	of.stateWidth = stateColWidth
+	for _, result := range results {
+		of.stateWidth = max(of.stateWidth, len(result.EffectiveState()))
+	}
 	clean := make([]scanner.ScanResult, len(results))
 	for i, result := range results {
 		result.ServiceName = terminalText(result.ServiceName)
@@ -108,9 +113,9 @@ func terminalText(text string) string {
 
 // printBasic prints results without service information
 func (of *OutputFormatter) printBasic(results []scanner.ScanResult) {
-	of.printf("%s%s%s\n", ColorBold, fmt.Sprintf("%-*s %-*s", portColWidth, "PORT", stateColWidth, "STATE"), ColorReset)
+	of.printf("%s%s%s\n", ColorBold, fmt.Sprintf("%-*s %-*s", portColWidth, "PORT", of.stateWidth, "STATE"), ColorReset)
 	for _, result := range results {
-		of.printf("%s %s\n", padANSI(Port(result.Port), portColWidth), padANSI(State("open"), stateColWidth))
+		of.printf("%s %s\n", padANSI(Port(result.Port), portColWidth), padANSI(State(result.EffectiveState()), of.stateWidth))
 	}
 }
 
@@ -125,11 +130,11 @@ func (of *OutputFormatter) printWithServices(results []scanner.ScanResult) {
 	}
 
 	if of.IncludeEvidence {
-		of.printf("%s%s%s\n", ColorBold, fmt.Sprintf("%-*s %-*s %-*s %-*s %s", portColWidth, "PORT", stateColWidth, "STATE", serviceColWidth, "SERVICE", versionWidth, "VERSION", "EVIDENCE"), ColorReset)
+		of.printf("%s%s%s\n", ColorBold, fmt.Sprintf("%-*s %-*s %-*s %-*s %s", portColWidth, "PORT", of.stateWidth, "STATE", serviceColWidth, "SERVICE", versionWidth, "VERSION", "EVIDENCE"), ColorReset)
 		for _, result := range results {
 			of.printf("%s %s %s %s %s\n",
 				padANSI(Port(result.Port), portColWidth),
-				padANSI(State("open"), stateColWidth),
+				padANSI(State(result.EffectiveState()), of.stateWidth),
 				padANSI(Service(result.ServiceName), serviceColWidth),
 				padANSI(Version(result.Version), versionWidth),
 				result.Evidence,
@@ -139,11 +144,11 @@ func (of *OutputFormatter) printWithServices(results []scanner.ScanResult) {
 	}
 
 	if of.IncludeDetails {
-		of.printf("%s%s%s\n", ColorBold, fmt.Sprintf("%-*s %-*s %-*s %-*s %-7s %-8s %s", portColWidth, "PORT", stateColWidth, "STATE", serviceColWidth, "SERVICE", versionWidth, "VERSION", "LAT(ms)", "CONF", "EVIDENCE"), ColorReset)
+		of.printf("%s%s%s\n", ColorBold, fmt.Sprintf("%-*s %-*s %-*s %-*s %-7s %-8s %s", portColWidth, "PORT", of.stateWidth, "STATE", serviceColWidth, "SERVICE", versionWidth, "VERSION", "LAT(ms)", "CONF", "EVIDENCE"), ColorReset)
 		for _, result := range results {
 			of.printf("%s %s %s %s %-7d %-8s %s\n",
 				padANSI(Port(result.Port), portColWidth),
-				padANSI(State("open"), stateColWidth),
+				padANSI(State(result.EffectiveState()), of.stateWidth),
 				padANSI(Service(result.ServiceName), serviceColWidth),
 				padANSI(Version(result.Version), versionWidth),
 				result.LatencyMs,
@@ -154,11 +159,11 @@ func (of *OutputFormatter) printWithServices(results []scanner.ScanResult) {
 		return
 	}
 
-	of.printf("%s%s%s\n", ColorBold, fmt.Sprintf("%-*s %-*s %-*s %s", portColWidth, "PORT", stateColWidth, "STATE", serviceColWidth, "SERVICE", "VERSION"), ColorReset)
+	of.printf("%s%s%s\n", ColorBold, fmt.Sprintf("%-*s %-*s %-*s %s", portColWidth, "PORT", of.stateWidth, "STATE", serviceColWidth, "SERVICE", "VERSION"), ColorReset)
 	for _, result := range results {
 		of.printf("%s %s %s %s\n",
 			padANSI(Port(result.Port), portColWidth),
-			padANSI(State("open"), stateColWidth),
+			padANSI(State(result.EffectiveState()), of.stateWidth),
 			padANSI(Service(result.ServiceName), serviceColWidth),
 			Version(result.Version),
 		)

@@ -6,6 +6,7 @@ import "time"
 type ScanResult struct {
 	Port          int           `json:"port"`
 	IsOpen        bool          `json:"open"`
+	State         string        `json:"state,omitempty"`
 	ServiceName   string        `json:"service,omitempty"`
 	Version       string        `json:"version,omitempty"`
 	Hostname      string        `json:"hostname,omitempty"`
@@ -20,6 +21,27 @@ type ScanResult struct {
 	Confidence    string        `json:"confidence,omitempty"`
 	Evidence      string        `json:"evidence,omitempty"`
 	DetectionPath string        `json:"detection_path,omitempty"`
+}
+
+// EffectiveState preserves results created before explicit states were added.
+func (r ScanResult) EffectiveState() string {
+	if r.State != "" {
+		return r.State
+	}
+	if r.IsOpen {
+		return "open"
+	}
+	return "unknown"
+}
+
+func CountOpen(results []ScanResult) int {
+	count := 0
+	for _, result := range results {
+		if result.EffectiveState() == "open" {
+			count++
+		}
+	}
+	return count
 }
 
 // GetTop1000Ports returns the top 1000 most commonly used ports
