@@ -12,6 +12,9 @@ GoMap's roadmap focuses on improving reliability, test coverage, documentation, 
 
 ## Detection and Scan Reliability
 
+- [x] Validate signal cleanup and error reporting in Linux subprocesses with fake address backends.
+- [x] Validate raw-socket deadlines and closure in an isolated loopback-only Linux namespace without sending probes.
+- [ ] Validate end-to-end SYN response handling and native netlink address rollback in a disposable, disconnected lab; lifecycle fixtures do not cover these kernel-level workflows.
 - [x] Add a global attempt budget covering discovery, retries, and additional service connections without replacing per-host pacing.
 - [x] Extend isolated SYN response fixtures and cleanup failure tests without privileged sockets or NIC changes.
 - [ ] Validate raw SYN sockets and cleanup on interruption in a disposable, isolated Linux environment; simulated tests do not establish kernel-level behavior.

@@ -31,6 +31,27 @@ If `golangci-lint` is not available in your `PATH`, use the pinned binary instal
 
 ## Lab Tests
 
+Linux subprocess tests exercise `SIGINT` and `SIGTERM` cleanup with a fake address backend:
+
+```bash
+go test -race ./pkg/scanner -run '^TestManagedSignalCleanupProcess$' -v
+```
+
+They verify reverse cleanup order, preservation of pre-existing addresses, error reporting, and signal-derived exit codes. They do not change NIC addresses.
+
+An opt-in kernel socket lifecycle test requires a separate user/network namespace containing only loopback:
+
+```bash
+test_dir=$(mktemp -d)
+go test -c -o "$test_dir/scanner.test" ./pkg/scanner
+unshare -Urn env GOMAP_RUN_ISOLATED_TESTS=1 "$test_dir/scanner.test" -test.run '^TestIsolatedRawSocketLifecycle$' -test.v
+rm -r "$test_dir"
+```
+
+This test refuses the initial network namespace or a namespace with other interfaces. It opens an idle raw TCP socket, verifies its read deadline and closure, and checks the native netlink missing-interface error. It sends no packets and adds or removes no addresses. Systems that disable unprivileged user namespaces cannot run it; do not substitute the host network namespace.
+
+Successful lifecycle tests do not establish end-to-end SYN discovery accuracy or native netlink address rollback. Those remain separate validation tasks in a disposable, disconnected lab.
+
 Deterministic transport and cleanup tests run without VM targets, root, or changes to interface addresses:
 
 ```bash
