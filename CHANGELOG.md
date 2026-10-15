@@ -8,7 +8,11 @@ Note: this changelog is maintained from this point forward in the project histor
 
 ### Added
 
+- Add deterministic CLI parser regressions for defaults, invalid arguments, normalization, aliases, unchanged caller arguments, duration boundaries and maintenance-option validation; no scan or maintenance actions run in these tests.
+
 ### Changed
+
+- Raise the minimum total statement coverage from 10% to 40% in local coverage checks and CI; retain 60% as a future roadmap milestone.
 
 ### Fixed
 
