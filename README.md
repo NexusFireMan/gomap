@@ -34,6 +34,7 @@
 - [Real Source-IP Selection](#real-source-ip-selection)
 - [HTB Performance Benchmark (Lab)](#htb-performance-benchmark-lab)
 - [Metasploitable3 Lab Benchmark](#metasploitable3-lab-benchmark)
+- [Per-Host Settings And Unknown Evidence](#per-host-settings-and-unknown-evidence)
 - [Output Formats](#output-formats)
 - [Responsible Use](#responsible-use)
 - [Quick Links](#quick-links)
@@ -267,6 +268,7 @@ Performance/robustness:
   --rate            max scan rate in ports/second per host (0 = unlimited)
   --global-rate     max connection/probe starts/second across the entire scan (0 = unlimited)
   --timeout         per-attempt dial timeout in ms (default: auto by mode)
+  --host-config     JSON per-IP CONNECT/UDP timeout and retry overrides
   --retries         retries per port on timeout/transient connection error
   --backoff-ms      base exponential backoff between retries
   --adaptive-timeout enable dynamic timeout tuning (default: true)
@@ -279,6 +281,8 @@ Output:
   --csv             shortcut for --format csv
   --out             output file path
   --details         add latency/confidence/evidence columns (text only)
+  --capture-unknown opt-in bounded hex samples for unknown responses (implies -s)
+  --evidence-bytes  sample size, 1-1024 bytes (default: 256)
 
 Source and HTTP identity controls:
   --random-agent    randomize HTTP User-Agent on each request
@@ -499,6 +503,28 @@ The run identified services on standard and non-standard ports, including Java R
 
 This benchmark is a practical local-lab reference, not a universal performance guarantee. Metasploitable services can restart or expose dynamic ports between runs. It is not directly comparable with the historical HTB benchmark above: that benchmark used a different target, network path, and port set.
 
+## Per-Host Settings And Unknown Evidence
+
+Use `--host-config host-settings.json` to override CONNECT/UDP settings for exact unzoned literal IPs in the expanded target scope. For example:
+
+```json
+{
+  "10.0.11.6": {"timeout_ms": 800, "max_timeout_ms": 2000, "retries": 2, "adaptive_timeout": false},
+  "10.0.11.9": {"timeout_ms": 300, "retries": 0}
+}
+```
+
+```bash
+./gomap -s --host-config host-settings.json 10.0.11.6,10.0.11.9
+./gomap --capture-unknown --evidence-bytes 128 --format json --out private-report.json 10.0.11.6
+```
+
+Unspecified fields inherit scan-wide flags; explicit `0` retries and `false` adaptive timing override them. Timeout values are integer milliseconds; zero requests automatic defaults. Host retries are bounded to 0-10, and a nonzero maximum timeout cannot be below a nonzero configured timeout. The file is limited to 64 KiB; duplicate IPs/settings, unknown fields, nulls, malformed values and IPs outside the expanded scope are rejected before probes or output truncation. IPv4-mapped aliases normalize to the same IP. Overrides apply after host discovery, not to CIDR discovery itself. Native SYN does not support these overrides and rejects the combination. JSON `metrics.hosts[].settings` records the initial per-host configuration; adaptive deadlines and protocol-specific timeout floors/caps may differ during execution. The config file path is not copied into reports.
+
+`--capture-unknown` enables `-s` and shows a compact evidence column in text mode. It adds a bounded `response_sample_hex` to the existing evidence field for unparsed TCP banners and unvalidated UDP payloads. JSON, JSONL and CSV retain their existing per-result shape/columns. Samples reuse already collected data, not capture-specific probes, and do not raise confidence. Empty responses produce no invented sample. The default prefix is 256 bytes, with a hard 1024-byte limit; observed/captured lengths and prefix truncation are reported. Existing readers may already bound the received response, so this is not a complete packet capture.
+
+**Treat capture output as sensitive.** Capture is off by default. Samples with common credential markers or a leading ASN.1 sequence are withheld entirely, including when the marker lies beyond the requested prefix. This conservative suppression cannot guarantee redaction of arbitrary binary or custom protocols. Review reports manually before sharing; do not commit them. Capture-enabled `--out` requires a regular file and uses mode `0600` on Unix, including existing files; Windows users must configure appropriate ACLs. stdout/stderr redirection permissions remain the caller's responsibility. Known protocol disclosures and specialized probes are not converted into exhaustive raw captures.
+
 ## Output Formats
 
 ### Text (`--format text`, default)
@@ -507,6 +533,7 @@ This benchmark is a practical local-lab reference, not a universal performance g
 - `--out` writes the report and summary to a file; progress messages may still appear on the terminal.
 - Optional `--details` adds `LAT(ms)`, `CONF`, `EVIDENCE`.
 - Final `Host Exposure Summary` with open ports, critical services, and exposure level.
+- Performance and coverage summaries per host and across the scanned scope, including inconclusive outcomes.
 
 ### JSON (`--format json`)
 
@@ -515,10 +542,19 @@ Single report document with metadata:
 - `schema_version`, `generated_at`, `target`, `duration_ms`
 - `hosts_scanned`, `ports_requested`, `total_open_ports`
 - `hosts[]` with per-port results
+- Additive `metrics` object with build/version, whitelisted requested scan options, per-host engine actually used, phase timings, throughput and coverage.
+
+Metrics count **host-port pairs**, not packets or connection attempts: two hosts and 100 ports mean a scope of 200. `scope_host_ports_per_second` divides that selected scope by the scan interval; `open_closed_host_ports_per_second` uses only confirmed open/closed states over the same interval. A high scope rate with low `open_closed_percent` is not evidence of a complete scan or successful service identification.
+
+Coverage separates `open`, `closed`, explicitly reported `filtered`, `open_filtered`, `unresolved` and `unreported`. Missing outcomes are never inferred closed or filtered. CONNECT uses refusal/unresolved diagnostics; UDP silence remains `open|filtered`; the current SYN engine lacks complete non-open diagnostics, so missing SYN outcomes remain `unreported`. Global percentages are weighted by host-port scope, not averaged per host. Empty scanned scopes report zero, not 100% coverage. Hosts omitted by discovery or `--max-hosts` are outside this denominator; `expanded_hosts` and `hosts_scanned` make that distinction visible.
+
+Timings distinguish preparation/orchestration, TCP host discovery, and the scan interval including inline service detection. `metrics.timings.total_ms` ends before report rendering and deferred cleanup; the legacy `duration_ms` remains the scan interval. Separate service-detection time is not measured because it overlaps port work. Rates use unrounded durations; timing fields are integer milliseconds. Requested option values of zero may mean automatic defaults; adaptive timing, network state, randomization and unrecorded source/header settings prevent exact replay. Metadata intentionally excludes raw argv, output paths, source-IP pools and raw response bytes.
 
 ### JSONL (`--format jsonl`)
 
 One JSON record per reported port, emitted after scanning completes (including uncertain and closed UDP outcomes). Consumers can process records line by line; this is not live result streaming.
+
+JSONL and CSV keep their existing per-result records/columns. Performance and coverage summaries go to stderr; use JSON when run metadata must be stored in one report document, or redirect stderr separately for a text summary.
 
 ### CSV (`--format csv`)
 

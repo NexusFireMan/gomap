@@ -7,10 +7,16 @@ Note: this changelog is maintained from this point forward in the project histor
 ## Unreleased
 
 ### Added
+- Add strict `--host-config` JSON overrides for exact-IP CONNECT/UDP timeout, adaptive timing and retry settings, with per-host initial settings in JSON run metrics.
+- Add opt-in `--capture-unknown` bounded hex samples in existing evidence fields and `--evidence-bytes` (1-1024); suppress common sensitive markers/ASN.1 samples and restrict capture output files to Unix mode 0600. Arbitrary payloads may still contain sensitive data.
+- Add guarded Linux namespace UDP validation for positive responses, silent listeners and closed ports, verifying the kernel ICMP type 3/code 3 quotation against the fixture's UDP destination.
+- Add per-host/global coverage and performance summaries, separating scope throughput from confirmed open/closed throughput without inferring closed states from silence or missing SYN diagnostics.
+- Add JSON run metrics with build/version, whitelisted requested options, actual per-host engine (including SYN fallback), and preparation/discovery/combined scan-service timings; retain legacy duration and per-result formats. JSONL/CSV summaries use stderr.
 
 ### Changed
 
 ### Fixed
+- Warn on inconclusive UDP and unreported SYN outcomes in the final text status, not only unresolved CONNECT results.
 
 ## [2.5.0] - 2026-10-07
 

@@ -37,6 +37,8 @@ type Scanner struct {
 	SourceIPs          []net.IP
 	DeepVersion        bool
 	Exhaustive         bool
+	CaptureUnknown     bool
+	EvidenceBytes      int
 	targetPrefix       netip.Prefix
 
 	adaptiveMu    sync.Mutex
@@ -62,6 +64,8 @@ type ScanConfig struct {
 	TargetCIDR      string
 	DeepVersion     bool
 	Exhaustive      bool
+	CaptureUnknown  bool
+	EvidenceBytes   int
 }
 
 // NewScanner creates a new Scanner instance
@@ -120,6 +124,8 @@ func (s *Scanner) Configure(cfg ScanConfig) {
 	s.SourceIPs = append([]net.IP(nil), cfg.SourceIPs...)
 	s.DeepVersion = cfg.DeepVersion
 	s.Exhaustive = cfg.Exhaustive
+	s.CaptureUnknown = cfg.CaptureUnknown
+	s.EvidenceBytes = evidenceByteLimit(cfg.EvidenceBytes)
 	if s.RandomIP {
 		s.targetPrefix = parseTargetPrefix(cfg.TargetCIDR, s.Host)
 	}
@@ -568,6 +574,13 @@ func (s *Scanner) addJitter() {
 // grabBanner attempts to grab the service banner
 func (s *Scanner) grabBanner(conn net.Conn, port int, result *ScanResult) {
 	var banner string
+	if s.CaptureUnknown {
+		defer func() {
+			if result.Confidence == "low" && (result.DetectionPath == "portmap-fallback" || result.DetectionPath == "open-port-fallback") {
+				result.Evidence = s.captureUnknownResponse(result.Evidence, []byte(banner))
+			}
+		}()
+	}
 	deepProbeUsed := false
 	deepProbeAttempted := false
 	mappedService := s.PortManager.GetServiceName(port, "")

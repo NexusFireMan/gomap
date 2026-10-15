@@ -52,7 +52,9 @@ func Run() {
 		os.Exit(0)
 	}
 
+	version, commit, date := EffectiveBuildInfo()
 	req := app.ScanRequest{
+		Build:           output.BuildInfo{Version: version, Commit: commit, Date: date},
 		Target:          opts.Host,
 		PortsFlag:       opts.PortsFlag,
 		ScanType:        opts.ScanType,
@@ -80,6 +82,9 @@ func Run() {
 		RandomIP:        opts.RandomIP,
 		SourceInterface: opts.SourceInterface,
 		SourceIPs:       opts.SourceIPs,
+		HostConfig:      opts.HostConfig,
+		CaptureUnknown:  opts.CaptureUnknown,
+		EvidenceBytes:   opts.EvidenceBytes,
 	}
 	if req.Format == "text" {
 		output.PrintBanner()
