@@ -82,6 +82,9 @@ func Run() {
 		RandomIP:        opts.RandomIP,
 		SourceInterface: opts.SourceInterface,
 		SourceIPs:       opts.SourceIPs,
+		HostConfig:      opts.HostConfig,
+		CaptureUnknown:  opts.CaptureUnknown,
+		EvidenceBytes:   opts.EvidenceBytes,
 	}
 	if req.Format == "text" {
 		output.PrintBanner()

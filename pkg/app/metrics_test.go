@@ -43,7 +43,8 @@ func TestExecuteScanJSONIncludesMetrics(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "report.json")
 	req := ScanRequest{
 		Target: "127.0.0.1", PortsFlag: strconv.Itoa(port), Format: "json", OutputPath: path,
-		Build: output.BuildInfo{Version: "fixture"}, TimeoutMS: 200, Workers: 1,
+		Build: output.BuildInfo{Version: "fixture"}, TimeoutMS: 300, Workers: 1,
+		HostConfig: hostConfigFixture(t, `{"127.0.0.1":{"timeout_ms":200,"max_timeout_ms":800,"retries":1,"adaptive_timeout":false}}`),
 	}
 	if err := ExecuteScan(req); err != nil {
 		t.Fatal(err)
@@ -63,8 +64,12 @@ func TestExecuteScanJSONIncludesMetrics(t *testing.T) {
 	if report.TotalOpenPorts != 1 || m.Build.Version != "fixture" || m.Coverage.Requested != 1 || m.Coverage.Open != 1 || m.Coverage.OpenClosedPercent != 100 || m.Coverage.Inconclusive() != 0 {
 		t.Fatalf("bad integrated counters: %+v", report)
 	}
-	if len(m.Hosts) != 1 || m.Hosts[0].Engine != "connect" || m.Options.Ports != req.PortsFlag || m.Options.TimeoutMS != 200 || m.ExpandedHosts != 1 {
+	if len(m.Hosts) != 1 || m.Hosts[0].Engine != "connect" || m.Options.Ports != req.PortsFlag || m.Options.TimeoutMS != 300 || m.ExpandedHosts != 1 {
 		t.Fatalf("missing host/config context: %+v", m)
+	}
+	settings := m.Hosts[0].Settings
+	if settings == nil || settings.TimeoutMS != 200 || settings.MaxTimeoutMS != 800 || settings.Retries != 1 || settings.AdaptiveTimeout {
+		t.Fatalf("per-host settings not applied/reported: %+v", settings)
 	}
 }
 

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/netip"
 	"os"
 	"sort"
 	"strings"
@@ -44,6 +45,9 @@ type ScanRequest struct {
 	RandomIP        bool
 	SourceInterface string
 	SourceIPs       string
+	HostConfig      string
+	CaptureUnknown  bool
+	EvidenceBytes   int
 }
 
 // ExecuteScan runs the complete scan workflow: target expansion, host discovery, scan, and rendering.
@@ -57,6 +61,22 @@ func ExecuteScan(req ScanRequest) (resultErr error) {
 	machineOutput := req.Format != "text"
 	if req.ScanType == "" {
 		req.ScanType = "connect"
+	}
+	if req.HostConfig != "" && req.ScanType == "syn" {
+		return errors.New("--host-config supports CONNECT/UDP, not native SYN")
+	}
+	hostConfig, err := loadHostConfig(req.HostConfig)
+	if err != nil {
+		return err
+	}
+	if req.CaptureUnknown {
+		req.ServiceDetect = true
+		if req.EvidenceBytes == 0 {
+			req.EvidenceBytes = scanner.DefaultEvidenceBytes
+		}
+		if req.EvidenceBytes < 1 || req.EvidenceBytes > scanner.MaxEvidenceBytes {
+			return errors.New("evidence bytes must be between 1 and 1024")
+		}
 	}
 	scanLabel := strings.ToUpper(req.ScanType)
 	if req.UDP {
@@ -75,7 +95,6 @@ func ExecuteScan(req ScanRequest) (resultErr error) {
 	portManager := scanner.NewPortManager()
 	var (
 		portsToScan []int
-		err         error
 	)
 	if req.TopPorts > 0 {
 		top := scanner.GetTop1000Ports()
@@ -109,14 +128,45 @@ func ExecuteScan(req ScanRequest) (resultErr error) {
 	if err != nil {
 		return fmt.Errorf("invalid target specification: %w", err)
 	}
+	if err := validateHostConfigScope(hostConfig, targets, req); err != nil {
+		return err
+	}
 	metrics := newScanMetrics(req, len(targets))
 	if req.OutputPath != "" {
-		outFile, err = os.Create(req.OutputPath)
+		if req.HostConfig != "" {
+			input, inputErr := os.Stat(req.HostConfig)
+			outputFile, outputErr := os.Stat(req.OutputPath)
+			if inputErr == nil && outputErr == nil && os.SameFile(input, outputFile) {
+				return errors.New("--out must not overwrite --host-config")
+			}
+		}
+		if req.CaptureUnknown {
+			if info, statErr := os.Stat(req.OutputPath); statErr == nil && !info.Mode().IsRegular() {
+				return errors.New("capture-enabled --out requires a regular file")
+			}
+			outFile, err = os.OpenFile(req.OutputPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0600)
+		} else {
+			outFile, err = os.Create(req.OutputPath)
+		}
 		if err != nil {
 			return fmt.Errorf("cannot create output file: %w", err)
 		}
 		defer func() { resultErr = errors.Join(resultErr, outFile.Close()) }()
+		if req.CaptureUnknown {
+			info, statErr := outFile.Stat()
+			if statErr != nil || !info.Mode().IsRegular() {
+				return errors.New("capture-enabled --out requires a regular file; redirect stdout explicitly for other destinations")
+			}
+			if err := outFile.Chmod(0600); err != nil {
+				return fmt.Errorf("cannot restrict evidence output permissions: %w", err)
+			}
+		}
 		destWriter = outFile
+	}
+	if req.CaptureUnknown {
+		if _, err := fmt.Fprintln(os.Stderr, "Evidence capture enabled: samples may contain sensitive data; filtering cannot guarantee redaction. Protect reports before sharing."); err != nil {
+			return err
+		}
 	}
 	if req.RandomIP && req.SourceInterface == "" && !machineOutput {
 		fmt.Printf("%s\n", output.StatusWarn("--random-ip without --source-interface changes HTTP headers only; TCP source addresses remain unchanged."))
@@ -243,44 +293,44 @@ func ExecuteScan(req ScanRequest) (resultErr error) {
 	}
 
 	formatter := output.NewOutputFormatter(req.ServiceDetect, req.Details)
-	if req.DeepVersion {
+	if req.DeepVersion || req.CaptureUnknown {
 		formatter = output.NewEvidenceOutputFormatter()
 	}
 	allResults := make(map[string][]scanner.ScanResult)
 	connectDiagnostics := make(map[string]scanner.ConnectDiagnostics)
 	scanStart := time.Now()
 
-	var timeoutDuration time.Duration
-	if req.TimeoutMS > 0 {
-		timeoutDuration = time.Duration(req.TimeoutMS) * time.Millisecond
-	}
-	var maxTimeoutDuration time.Duration
-	if req.MaxTimeoutMS > 0 {
-		maxTimeoutDuration = time.Duration(req.MaxTimeoutMS) * time.Millisecond
-	}
 	for _, targetIP := range targets {
 		hostStart := time.Now()
 		engineUsed := req.ScanType
 		s := scanner.NewScanner(targetIP, req.GhostMode)
+		hostReq := req
+		if len(hostConfig) > 0 {
+			if addr, err := netip.ParseAddr(targetIP); err == nil {
+				hostReq = applyHostOverride(req, hostConfig[addr.Unmap().String()])
+			}
+		}
 		cidrForHeaders := ""
 		if req.RandomIP && scanner.IsCIDR(req.Target) {
 			cidrForHeaders = req.Target
 		}
 		s.Configure(scanner.ScanConfig{
 			NumWorkers:      req.Workers,
-			Timeout:         timeoutDuration,
-			Retries:         req.Retries,
+			Timeout:         time.Duration(hostReq.TimeoutMS) * time.Millisecond,
+			Retries:         hostReq.Retries,
 			Rate:            req.Rate,
 			AttemptLimiter:  limiter,
-			AdaptiveTimeout: req.AdaptiveTimeout,
+			AdaptiveTimeout: hostReq.AdaptiveTimeout,
 			BackoffBase:     time.Duration(req.BackoffMS) * time.Millisecond,
-			MaxTimeout:      maxTimeoutDuration,
+			MaxTimeout:      time.Duration(hostReq.MaxTimeoutMS) * time.Millisecond,
 			RandomAgent:     req.RandomAgent,
 			RandomIP:        req.RandomIP,
 			SourceIPs:       sourceIPs,
 			TargetCIDR:      cidrForHeaders,
 			DeepVersion:     req.DeepVersion,
 			Exhaustive:      req.Exhaustive,
+			CaptureUnknown:  req.CaptureUnknown,
+			EvidenceBytes:   req.EvidenceBytes,
 		})
 		var openResults []scanner.ScanResult
 		if req.UDP {
@@ -320,6 +370,7 @@ func ExecuteScan(req ScanRequest) (resultErr error) {
 		metrics.Coverage.Add(coverage)
 		metrics.Hosts = append(metrics.Hosts, output.HostMetrics{
 			Host: targetIP, Engine: engineUsed, ScanAndServicesMS: time.Since(hostStart).Milliseconds(), Coverage: coverage,
+			Settings: &output.HostSettings{TimeoutMS: s.Timeout.Milliseconds(), Retries: s.Retries, MaxTimeoutMS: s.MaxAdaptiveTimeout.Milliseconds(), AdaptiveTimeout: s.AdaptiveTimeout},
 		})
 	}
 	scanDuration := time.Since(scanStart)

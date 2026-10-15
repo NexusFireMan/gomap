@@ -112,6 +112,8 @@ type ScanOptions struct {
 	BackoffMS       int    `json:"backoff_ms"`
 	Rate            int    `json:"rate"`
 	GlobalRate      int    `json:"global_rate"`
+	CaptureUnknown  bool   `json:"capture_unknown"`
+	EvidenceBytes   int    `json:"evidence_bytes"`
 }
 
 type PhaseTimings struct {
@@ -122,10 +124,19 @@ type PhaseTimings struct {
 }
 
 type HostMetrics struct {
-	Host              string   `json:"host"`
-	Engine            string   `json:"engine_used"`
-	ScanAndServicesMS int64    `json:"scan_and_services_ms"`
-	Coverage          Coverage `json:"coverage"`
+	Host              string        `json:"host"`
+	Engine            string        `json:"engine_used"`
+	ScanAndServicesMS int64         `json:"scan_and_services_ms"`
+	Coverage          Coverage      `json:"coverage"`
+	Settings          *HostSettings `json:"settings,omitempty"`
+}
+
+// HostSettings records initial configured values, not every adaptive deadline.
+type HostSettings struct {
+	TimeoutMS       int64 `json:"timeout_ms"`
+	MaxTimeoutMS    int64 `json:"max_timeout_ms"`
+	Retries         int   `json:"retries"`
+	AdaptiveTimeout bool  `json:"adaptive_timeout"`
 }
 
 type ScanMetrics struct {
