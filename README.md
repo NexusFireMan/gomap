@@ -232,8 +232,8 @@ With `-u -Dv` (also implied by `-De`), UDP/161 may send two additional queries
 only when the existing SNMPv1 probe has not identified the protocol: one SNMPv2c
 GET for `sysDescr.0` using the existing `public` community, then one SNMPv3
 noAuthNoPriv engine-discovery request. No additional queries run with `-g`,
-without service detection, after a confirmed identification, or after an initial
-connection refusal. Each fallback runs once through the global attempt limiter
+without service detection, after a confirmed identification, or when the initial
+probe/retries finish with connection refusal. Each fallback runs once through the global attempt limiter
 and existing UDP deadlines; `--retries` applies only to the initial probe.
 Silence can therefore cost two additional timeout intervals. A received reply
 is never discarded solely because a later variant times out or refuses.

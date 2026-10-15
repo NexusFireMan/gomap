@@ -148,6 +148,9 @@ func (s *Scanner) exchangeUDPPort(port int, detect bool, exchange func([]byte) (
 				return
 			}
 		} else if errors.Is(exchangeErr, syscall.ECONNREFUSED) {
+			if err != nil {
+				response, probe, err = nil, query, exchangeErr
+			}
 			break
 		}
 	}

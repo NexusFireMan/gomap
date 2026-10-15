@@ -198,6 +198,7 @@ func TestSNMPDeepExchangeBoundedFallbacks(t *testing.T) {
 		{"responsive unknown then refusal", "unknown-refused", 2, ""},
 		{"mismatched v2c", "mismatch", 3, ""},
 		{"refused", "closed", 1, ""},
+		{"refused on fallback", "closed-later", 2, ""},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			s := NewScanner("fixture.invalid", false)
@@ -215,6 +216,8 @@ func TestSNMPDeepExchangeBoundedFallbacks(t *testing.T) {
 				case (tt.mode == "unknown" || tt.mode == "unknown-refused") && calls == 1:
 					return []byte("unrecognized-fixture"), nil
 				case tt.mode == "unknown-refused" && calls == 2:
+					return nil, syscall.ECONNREFUSED
+				case tt.mode == "closed-later" && calls == 2:
 					return nil, syscall.ECONNREFUSED
 				case tt.mode == "mismatch" && calls == 2:
 					otherQuery, err := snmpV2cQuery(0)
@@ -239,6 +242,9 @@ func TestSNMPDeepExchangeBoundedFallbacks(t *testing.T) {
 			}
 			if tt.mode == "silent" && !errors.Is(err, os.ErrDeadlineExceeded) {
 				t.Fatal("silence not preserved")
+			}
+			if strings.HasPrefix(tt.mode, "closed") && !errors.Is(err, syscall.ECONNREFUSED) {
+				t.Fatal("connection refusal lost without a responsive observation")
 			}
 		})
 	}

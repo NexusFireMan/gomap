@@ -23,12 +23,9 @@ func udpProbeFieldsMatch(port int, probe, response []byte) (checked, matched boo
 		want, got := query.Questions[0], reply.Questions[0]
 		return true, query.ID == reply.ID && query.OpCode == reply.OpCode && want.Type == got.Type && want.Class == got.Class && strings.EqualFold(want.Name.String(), got.Name.String())
 	case 161:
-		if checked, matched := snmpV3DiscoveryMatches(probe, response); checked {
-			return checked, matched
-		}
 		query, valid := snmpCorrelationFields(probe, 0)
 		if !valid {
-			return false, false
+			return snmpV3DiscoveryMatches(probe, response)
 		}
 		if udpSNMPVersion(response) == "" {
 			return true, false
