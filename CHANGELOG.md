@@ -7,10 +7,13 @@ Note: this changelog is maintained from this point forward in the project histor
 ## Unreleased
 
 ### Added
+- Add per-host/global coverage and performance summaries, separating scope throughput from confirmed open/closed throughput without inferring closed states from silence or missing SYN diagnostics.
+- Add JSON run metrics with build/version, whitelisted requested options, actual per-host engine (including SYN fallback), and preparation/discovery/combined scan-service timings; retain legacy duration and per-result formats. JSONL/CSV summaries use stderr.
 
 ### Changed
 
 ### Fixed
+- Warn on inconclusive UDP and unreported SYN outcomes in the final text status, not only unresolved CONNECT results.
 
 ## [2.5.0] - 2026-10-07
 

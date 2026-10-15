@@ -13,6 +13,10 @@ GoMap's roadmap focuses on improving reliability, test coverage, documentation, 
 
 ## Detection and Scan Reliability
 
+- [x] Report per-host/global coverage and scope versus confirmed-state throughput, with JSON run context and combined phase timings.
+- [ ] Validate UDP positive responses, ICMP refusals and silence in a reproducible authorized lab; deterministic state fixtures do not replace kernel/network validation.
+- [ ] Design opt-in bounded/redacted evidence capture for unidentified services; do not log raw credentials or arbitrary response bytes by default.
+- [ ] Evaluate per-host timeout/retry overrides; retain existing adjustable scan-wide options and explicit inconclusive outcomes.
 - [x] Keep unvalidated UDP port hints low confidence and prevent arbitrary payload bytes from becoming product versions.
 - [x] Add bounded NTP/SSDP response-shape checks and deterministic negative/fuzz fixtures without new probes.
 - [x] Validate a bounded SNMPv1 response subset with standard ASN.1 decoding, negative fixtures, and metadata disclosure tests.

@@ -52,7 +52,9 @@ func Run() {
 		os.Exit(0)
 	}
 
+	version, commit, date := EffectiveBuildInfo()
 	req := app.ScanRequest{
+		Build:           output.BuildInfo{Version: version, Commit: commit, Date: date},
 		Target:          opts.Host,
 		PortsFlag:       opts.PortsFlag,
 		ScanType:        opts.ScanType,

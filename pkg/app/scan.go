@@ -16,6 +16,7 @@ import (
 
 // ScanRequest contains normalized scan options coming from CLI.
 type ScanRequest struct {
+	Build           output.BuildInfo
 	Target          string
 	PortsFlag       string
 	ScanType        string
@@ -47,6 +48,8 @@ type ScanRequest struct {
 
 // ExecuteScan runs the complete scan workflow: target expansion, host discovery, scan, and rendering.
 func ExecuteScan(req ScanRequest) (resultErr error) {
+	runStart := time.Now()
+	var discoveryDuration time.Duration
 	if req.GlobalRate < 0 {
 		return errors.New("--global-rate cannot be negative")
 	}
@@ -106,6 +109,7 @@ func ExecuteScan(req ScanRequest) (resultErr error) {
 	if err != nil {
 		return fmt.Errorf("invalid target specification: %w", err)
 	}
+	metrics := newScanMetrics(req, len(targets))
 	if req.OutputPath != "" {
 		outFile, err = os.Create(req.OutputPath)
 		if err != nil {
@@ -175,14 +179,17 @@ func ExecuteScan(req ScanRequest) (resultErr error) {
 			}
 		}
 		discoveryOpts.AttemptLimiter = limiter
+		discoveryStart := time.Now()
 		targets = scanner.DiscoverActiveHostsWithOptions(targets, discoveryOpts)
+		discoveryDuration = time.Since(discoveryStart)
 		if len(targets) == 0 {
+			metrics.SetTimings(time.Since(runStart), discoveryDuration, 0)
 			if machineOutput {
 				empty := map[string][]scanner.ScanResult{}
 				var renderErr error
 				switch req.Format {
 				case "json":
-					renderErr = output.PrintJSONReport(destWriter, req.Target, portsToScan, targets, empty, req.ServiceDetect, 0)
+					renderErr = output.PrintJSONReportWithMetrics(destWriter, req.Target, portsToScan, targets, empty, req.ServiceDetect, 0, nil, metrics)
 				case "jsonl":
 					renderErr = output.PrintJSONLReport(destWriter, req.Target, targets, empty)
 				case "csv":
@@ -191,13 +198,20 @@ func ExecuteScan(req ScanRequest) (resultErr error) {
 				if renderErr != nil {
 					return fmt.Errorf("failed to render %s output: %w", req.Format, renderErr)
 				}
+				if req.Format != "json" {
+					if err := output.WriteScanMetrics(os.Stderr, metrics); err != nil {
+						return fmt.Errorf("failed to write scan metrics: %w", err)
+					}
+				}
 				if req.OutputPath != "" {
 					fmt.Printf("%s\n", output.StatusOK(fmt.Sprintf("Saved %s output to %s", strings.ToUpper(req.Format), req.OutputPath)))
 				}
 				return nil
 			}
-			_, err := fmt.Fprintf(destWriter, "%s\n", output.StatusWarn("No active hosts found in the specified range."))
-			return err
+			if _, err := fmt.Fprintf(destWriter, "%s\n", output.StatusWarn("No active hosts found in the specified range.")); err != nil {
+				return err
+			}
+			return output.WriteScanMetrics(destWriter, metrics)
 		}
 
 		if !machineOutput {
@@ -245,6 +259,8 @@ func ExecuteScan(req ScanRequest) (resultErr error) {
 		maxTimeoutDuration = time.Duration(req.MaxTimeoutMS) * time.Millisecond
 	}
 	for _, targetIP := range targets {
+		hostStart := time.Now()
+		engineUsed := req.ScanType
 		s := scanner.NewScanner(targetIP, req.GhostMode)
 		cidrForHeaders := ""
 		if req.RandomIP && scanner.IsCIDR(req.Target) {
@@ -268,6 +284,7 @@ func ExecuteScan(req ScanRequest) (resultErr error) {
 		})
 		var openResults []scanner.ScanResult
 		if req.UDP {
+			engineUsed = "udp"
 			openResults = s.ScanUDP(portsToScan, req.ServiceDetect)
 		} else if req.ScanType == "syn" {
 			synOpenPorts, synErr := scanner.DiscoverOpenPortsSYN(targetIP, portsToScan, scanner.SYNConfig{
@@ -277,6 +294,7 @@ func ExecuteScan(req ScanRequest) (resultErr error) {
 				GhostMode:      req.GhostMode,
 			})
 			if synErr != nil {
+				engineUsed = "connect (syn fallback)"
 				if !machineOutput {
 					fmt.Printf("%s\n", output.StatusWarn(fmt.Sprintf("SYN scan unavailable on %s (%v). Falling back to connect scan.", targetIP, synErr)))
 				}
@@ -294,8 +312,18 @@ func ExecuteScan(req ScanRequest) (resultErr error) {
 		if len(openResults) > 0 {
 			allResults[targetIP] = openResults
 		}
+		var diag *scanner.ConnectDiagnostics
+		if d, ok := connectDiagnostics[targetIP]; ok {
+			diag = &d
+		}
+		coverage := output.SummarizeCoverage(portsToScan, openResults, diag)
+		metrics.Coverage.Add(coverage)
+		metrics.Hosts = append(metrics.Hosts, output.HostMetrics{
+			Host: targetIP, Engine: engineUsed, ScanAndServicesMS: time.Since(hostStart).Milliseconds(), Coverage: coverage,
+		})
 	}
 	scanDuration := time.Since(scanStart)
+	metrics.SetTimings(time.Since(runStart), discoveryDuration, scanDuration)
 
 	if machineOutput {
 		if warnings := connectWarnings(targets, connectDiagnostics); warnings != "" {
@@ -306,7 +334,7 @@ func ExecuteScan(req ScanRequest) (resultErr error) {
 		var renderErr error
 		switch req.Format {
 		case "json":
-			renderErr = output.PrintJSONReport(destWriter, req.Target, portsToScan, targets, allResults, req.ServiceDetect, scanDuration, connectDiagnostics)
+			renderErr = output.PrintJSONReportWithMetrics(destWriter, req.Target, portsToScan, targets, allResults, req.ServiceDetect, scanDuration, connectDiagnostics, metrics)
 		case "jsonl":
 			renderErr = output.PrintJSONLReport(destWriter, req.Target, targets, allResults)
 		case "csv":
@@ -316,6 +344,11 @@ func ExecuteScan(req ScanRequest) (resultErr error) {
 		}
 		if renderErr != nil {
 			return fmt.Errorf("failed to render %s output: %w", req.Format, renderErr)
+		}
+		if req.Format != "json" {
+			if err := output.WriteScanMetrics(os.Stderr, metrics); err != nil {
+				return fmt.Errorf("failed to write scan metrics: %w", err)
+			}
 		}
 		if req.OutputPath != "" {
 			fmt.Printf("%s\n", output.StatusOK(fmt.Sprintf("Saved %s output to %s", strings.ToUpper(req.Format), req.OutputPath)))
@@ -338,12 +371,12 @@ func ExecuteScan(req ScanRequest) (resultErr error) {
 	}
 	textReport.WriteString(connectWarnings(targets, connectDiagnostics))
 	textReport.WriteString(hostSummaries(targets, allResults, connectDiagnostics))
-	unresolved := 0
-	for _, diag := range connectDiagnostics {
-		unresolved += diag.UnresolvedPorts
+	if err := output.WriteScanMetrics(&textReport, metrics); err != nil {
+		return err
 	}
+	unresolved := metrics.Coverage.Inconclusive()
 	if unresolved > 0 {
-		fmt.Fprintf(&textReport, "\n%s\n", output.StatusWarn(fmt.Sprintf("Scan finished in %s | hosts: %d | open ports: %d | unresolved TCP ports: %d", scanDuration.Round(time.Millisecond), len(targets), totalOpen, unresolved)))
+		fmt.Fprintf(&textReport, "\n%s\n", output.StatusWarn(fmt.Sprintf("Scan finished in %s | hosts: %d | open ports: %d | inconclusive host-ports: %d", scanDuration.Round(time.Millisecond), len(targets), totalOpen, unresolved)))
 	} else {
 		fmt.Fprintf(&textReport, "\n%s\n", output.StatusOK(fmt.Sprintf("Completed scan in %s | hosts: %d | open ports: %d", scanDuration.Round(time.Millisecond), len(targets), totalOpen)))
 	}

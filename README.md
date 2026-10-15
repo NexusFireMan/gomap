@@ -507,6 +507,7 @@ This benchmark is a practical local-lab reference, not a universal performance g
 - `--out` writes the report and summary to a file; progress messages may still appear on the terminal.
 - Optional `--details` adds `LAT(ms)`, `CONF`, `EVIDENCE`.
 - Final `Host Exposure Summary` with open ports, critical services, and exposure level.
+- Performance and coverage summaries per host and across the scanned scope, including inconclusive outcomes.
 
 ### JSON (`--format json`)
 
@@ -515,10 +516,19 @@ Single report document with metadata:
 - `schema_version`, `generated_at`, `target`, `duration_ms`
 - `hosts_scanned`, `ports_requested`, `total_open_ports`
 - `hosts[]` with per-port results
+- Additive `metrics` object with build/version, whitelisted requested scan options, per-host engine actually used, phase timings, throughput and coverage.
+
+Metrics count **host-port pairs**, not packets or connection attempts: two hosts and 100 ports mean a scope of 200. `scope_host_ports_per_second` divides that selected scope by the scan interval; `open_closed_host_ports_per_second` uses only confirmed open/closed states over the same interval. A high scope rate with low `open_closed_percent` is not evidence of a complete scan or successful service identification.
+
+Coverage separates `open`, `closed`, explicitly reported `filtered`, `open_filtered`, `unresolved` and `unreported`. Missing outcomes are never inferred closed or filtered. CONNECT uses refusal/unresolved diagnostics; UDP silence remains `open|filtered`; the current SYN engine lacks complete non-open diagnostics, so missing SYN outcomes remain `unreported`. Global percentages are weighted by host-port scope, not averaged per host. Empty scanned scopes report zero, not 100% coverage. Hosts omitted by discovery or `--max-hosts` are outside this denominator; `expanded_hosts` and `hosts_scanned` make that distinction visible.
+
+Timings distinguish preparation/orchestration, TCP host discovery, and the scan interval including inline service detection. `metrics.timings.total_ms` ends before report rendering and deferred cleanup; the legacy `duration_ms` remains the scan interval. Separate service-detection time is not measured because it overlaps port work. Rates use unrounded durations; timing fields are integer milliseconds. Requested option values of zero may mean automatic defaults; adaptive timing, network state, randomization and unrecorded source/header settings prevent exact replay. Metadata intentionally excludes raw argv, output paths, source-IP pools and raw response bytes.
 
 ### JSONL (`--format jsonl`)
 
 One JSON record per reported port, emitted after scanning completes (including uncertain and closed UDP outcomes). Consumers can process records line by line; this is not live result streaming.
+
+JSONL and CSV keep their existing per-result records/columns. Performance and coverage summaries go to stderr; use JSON when run metadata must be stored in one report document, or redirect stderr separately for a text summary.
 
 ### CSV (`--format csv`)
 
