@@ -8,7 +8,11 @@ Note: this changelog is maintained from this point forward in the project histor
 
 ### Added
 
+- Add opt-in UDP/161 SNMPv2c GET and SNMPv3 noAuthNoPriv engine-discovery fallbacks under `-u -Dv`/`-De`, with randomized identifiers, strict response matching, bounded attempts and deterministic fake exchanges; no credential lists, authenticated sessions or encryption.
+
 ### Changed
+
+- Split future authenticated/encrypted SNMP, additional UDP queries and application-level reassembly into separate roadmap milestones; keep the default UDP scan unchanged.
 
 ### Fixed
 

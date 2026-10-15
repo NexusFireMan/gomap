@@ -26,7 +26,12 @@ GoMap's roadmap focuses on improving reliability, test coverage, documentation, 
 - [x] Recognize a bounded NetBIOS redirect subset with coherent NS/A records, without following redirects or disclosing targets; keep unsupported forms low confidence.
 - [x] Validate negative UDP/137 name-query replies with strict NULL-record framing, known error codes, legacy counter-layout fixtures and input/disclosure protections.
 - [x] Match DNS/SNMP replies against actual sent probe fields and review unsupported NetBIOS variants; document why existing generic/zero-timestamp probes cannot establish correlation. See [UDP validation scope](docs/UDP_VALIDATION.md).
-- Authenticated/encrypted SNMP and protocol-specific queries/reassembly remain outside the implemented UDP scope; completed validation/review tasks do not imply support for every variant.
+- [x] Add opt-in, bounded UDP/161 SNMPv2c GET and SNMPv3 engine-discovery fallbacks with per-query identifiers, response correlation and deterministic simulated exchanges.
+- [ ] Add optional authenticated SNMPv3 with explicit credential configuration, cryptographic verification, replay/timeliness checks and secret-disclosure tests.
+- [ ] Add optional encrypted SNMPv3 sessions after authenticated-session support, with independently validated cryptographic handling.
+- [ ] Define protocol-specific UDP query milestones beyond SNMP, including response correlation and bounded attempt budgets.
+- [ ] Identify a concrete protocol requiring application-level fragment reassembly and define size, lifetime and resource limits before implementation.
+- Authenticated/encrypted SNMP and application-level reassembly remain unsupported; the bounded SNMP discovery subset does not imply support for every variant or authenticated server identity.
 - [x] Keep identification evidence coherent when deduplicating observations; retain stronger confidence and avoid mixing TLS handshakes.
 - [x] Validate signal cleanup and error reporting in Linux subprocesses with fake address backends.
 - [x] Validate raw-socket deadlines and closure in an isolated loopback-only Linux namespace without sending probes.
