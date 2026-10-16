@@ -71,7 +71,7 @@ The wire format follows the [upstream protocol](https://github.com/memcached/mem
 | Other NetBIOS errors/redirect forms, WACK, registration/release replies | Low-confidence fallback | Outside the implemented name-query/status/redirect response subset |
 | UDP/138 datagrams, fragmented NetBIOS messages | Low-confidence fallback | No datagram decoder or reassembly is implemented |
 
-All response validators use the existing 2048-byte bound. A fallback never
+Existing single-datagram validators use the 2048-byte bound. A fallback never
 promotes raw response values, usernames, engine identifiers, communities,
 hostnames, workgroups or MAC addresses into identification metadata. Redirects
 are not followed. Completing this review does **not** mean every variant is
