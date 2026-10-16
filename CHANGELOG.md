@@ -8,7 +8,11 @@ Note: this changelog is maintained from this point forward in the project histor
 
 ### Added
 
+- Add private per-IP `--snmp-config` for optional SNMPv3 authNoPriv/authPriv queries using SHA-256/SHA-512 and optional AES-128; reuse GoSNMP v1.45.0 in-process for cryptography, with bounded transport, engine/time checks and synthetic loopback regressions.
+
 ### Changed
+
+- Require Go 1.26.9 and update `golang.org/x/net` to v0.60.0 after vulnerability scanning identified advisories in the preceding baseline; align the Docker builder and include GoSNMP license notices in distributions.
 
 ### Fixed
 

@@ -47,6 +47,7 @@ type CLIOptions struct {
 	SourceInterface string
 	SourceIPs       string
 	Host            string
+	SNMPConfig      string
 }
 
 var errUsage = errors.New("usage")
@@ -90,6 +91,7 @@ func ParseCLIOptions(args []string) (CLIOptions, error) {
 	fs.IntVar(&opts.MaxTimeoutMS, "max-timeout", 0, "maximum adaptive timeout in milliseconds (0 = automatic)")
 	fs.BoolVar(&opts.AdaptiveTimeout, "adaptive-timeout", true, "enable adaptive timeout tuning during scan")
 	fs.BoolVar(&opts.DetailsFlag, "details", false, "include latency/confidence/evidence columns in table output")
+	fs.StringVar(&opts.SNMPConfig, "snmp-config", "", "private per-IP SNMPv3 credential JSON file (UDP only)")
 	fs.BoolVar(&opts.RandomAgent, "random-agent", false, "randomize HTTP User-Agent on each request (service detection)")
 	fs.BoolVar(&opts.RandomIP, "random-ip", false, "enable randomized source-IP or HTTP identity controls")
 	fs.StringVar(&opts.SourceInterface, "source-interface", "", "interface used for real source-IP socket binding")
@@ -149,6 +151,12 @@ func interspersedFlags(fs *flag.FlagSet, args []string) []string {
 }
 
 func normalizeOptions(opts CLIOptions) (CLIOptions, error) {
+	if opts.SNMPConfig != "" {
+		if strings.TrimSpace(opts.SNMPConfig) == "" || !opts.UDPFlag || opts.GhostFlag || opts.RandomIP || opts.SourceInterface != "" {
+			return opts, errors.New("--snmp-config requires UDP and cannot combine with controlled-profile or source-identity options")
+		}
+		opts.ServiceFlag = true
+	}
 	opts.FormatFlag = strings.ToLower(strings.TrimSpace(opts.FormatFlag))
 	if opts.DeepVersionFlag {
 		opts.ServiceFlag = true
@@ -299,6 +307,7 @@ func printHelp(w *os.File) {
 %sTarget & Scan:%s
   -p <ports>                 ports to scan (80,443 | 1-1024 | -)
   -u                         scan UDP instead of TCP
+  --snmp-config <path>       private per-IP SNMPv3 credentials (UDP only)
   --scan-type <type>         connect|syn (syn requires root/CAP_NET_RAW)
   --top <N>                  scan top N ports from curated protocol list
   --top-ports <N>            alias of --top

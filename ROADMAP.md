@@ -26,7 +26,11 @@ GoMap's roadmap focuses on improving reliability, test coverage, documentation, 
 - [x] Recognize a bounded NetBIOS redirect subset with coherent NS/A records, without following redirects or disclosing targets; keep unsupported forms low confidence.
 - [x] Validate negative UDP/137 name-query replies with strict NULL-record framing, known error codes, legacy counter-layout fixtures and input/disclosure protections.
 - [x] Match DNS/SNMP replies against actual sent probe fields and review unsupported NetBIOS variants; document why existing generic/zero-timestamp probes cannot establish correlation. See [UDP validation scope](docs/UDP_VALIDATION.md).
-- Authenticated/encrypted SNMP and protocol-specific queries/reassembly remain outside the implemented UDP scope; completed validation/review tasks do not imply support for every variant.
+- [x] Implement opt-in per-IP SNMPv3 authNoPriv/authPriv sessions with SHA-256/SHA-512, optional AES-128, private credential files, bounded exchanges, correlation and time-window checks; validate positive/negative cases with loopback synthetic agents.
+- [x] Validate the supported authenticated/encrypted SNMP subset against a disconnected Net-SNMP agent with correct/incorrect credentials; record reproducible lab commands and redacted results.
+- [ ] Define and implement additional protocol-specific UDP queries with matching response fixtures and explicit attempt bounds.
+- [ ] Select the required application-level fragmentation protocol and implement bounded reassembly with expiry, duplicate, overlap and resource-limit tests.
+- Authenticated SNMP is a bounded optional subset, not support for every security model, cipher, credential workflow or UDP variant. Other protocol queries and application-level reassembly remain separate work.
 - [x] Keep identification evidence coherent when deduplicating observations; retain stronger confidence and avoid mixing TLS handshakes.
 - [x] Validate signal cleanup and error reporting in Linux subprocesses with fake address backends.
 - [x] Validate raw-socket deadlines and closure in an isolated loopback-only Linux namespace without sending probes.

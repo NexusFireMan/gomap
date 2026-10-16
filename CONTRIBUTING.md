@@ -73,6 +73,21 @@ go test ./pkg/app -run LabIntegration -v
 
 Do not run integration tests against systems you are not authorized to scan.
 
+Optional SNMPv3 interoperability tests use a real Net-SNMP agent in a disposable
+Docker container with no network other than its own loopback. They are skipped
+by normal CI, generate private temporary credentials and remove their container:
+
+```bash
+docker build -t gomap-snmp-agent:local scripts/lab/snmp
+GOMAP_RUN_SNMP_AGENT_TESTS=1 GOMAP_SNMP_AGENT_IMAGE=gomap-snmp-agent:local \
+  go test ./pkg/app -run '^TestSNMPAgentInterop$' -count=3 -v
+```
+
+Building the fixture image requires package downloads; runtime has no external
+route or published ports. See [SNMP sessions](docs/SNMP_SESSIONS.md) for the
+supported algorithm matrix and limitations. Never publish generated keys or
+agent state. Docker is a test-fixture dependency, not a GoMap runtime dependency.
+
 ## Pull Request Expectations
 
 - Add or update tests when behavior changes.

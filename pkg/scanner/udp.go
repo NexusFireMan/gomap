@@ -87,6 +87,9 @@ func (s *Scanner) ScanUDP(ports []int, detectServices bool) []ScanResult {
 }
 
 func (s *Scanner) scanUDPPort(port int, detectServices bool) ScanResult {
+	if port == 161 && detectServices && s.SNMPCredentials != nil {
+		return s.scanAuthenticatedSNMP(port)
+	}
 	address := net.JoinHostPort(s.Host, fmt.Sprintf("%d", port))
 	start := time.Now()
 	probe := udpProbePayload(port)

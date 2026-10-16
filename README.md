@@ -15,7 +15,7 @@
 
 [![CI](https://github.com/NexusFireMan/gomap/actions/workflows/ci.yml/badge.svg)](https://github.com/NexusFireMan/gomap/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/NexusFireMan/gomap?display_name=tag)](https://github.com/NexusFireMan/gomap/releases)
-[![Go](https://img.shields.io/badge/Go-1.26.8%2B-00ADD8?logo=go&logoColor=white)](https://go.dev/)
+[![Go](https://img.shields.io/badge/Go-1.26.9%2B-00ADD8?logo=go&logoColor=white)](https://go.dev/)
 [![Docker](https://img.shields.io/badge/Docker-GHCR-2496ED?logo=docker&logoColor=white)](https://github.com/NexusFireMan/gomap/pkgs/container/gomap)
 [![CLI](https://img.shields.io/badge/Interface-CLI-2C2C2C)](https://github.com/NexusFireMan/gomap)
 [![License](https://img.shields.io/github/license/NexusFireMan/gomap)](https://github.com/NexusFireMan/gomap/blob/main/LICENSE)
@@ -28,6 +28,7 @@
 - [Current scope](#current-scope)
 - [Installation](#installation)
 - [Quick Start](#quick-start)
+- [Authenticated SNMPv3](#authenticated-snmpv3)
 - [Example Output](#example-output)
 - [CLI Reference](#cli-reference)
 - [Detection Realism (`-s`)](#detection-realism--s)
@@ -67,7 +68,7 @@ A fast TCP/UDP port scanner written in Go, with optional service/version detecti
 
 ### Build from source
 
-Use Go 1.26.8 or newer. CI and release builds follow `go.mod`; the Docker builder uses the same baseline to avoid shipping older standard-library security defects.
+Use Go 1.26.9 or newer. CI and release builds follow `go.mod`; the Docker builder uses the same baseline to avoid shipping older standard-library security defects.
 
 ```bash
 git clone https://github.com/NexusFireMan/gomap.git
@@ -224,6 +225,25 @@ sudo ./gomap --random-ip --source-interface eth0 \
 # Conservative CIDR scan (skip discovery entirely)
 ./gomap -g -nd -s --random-agent --random-ip -p 22,80,443 10.0.11.0/24
 ```
+
+## Authenticated SNMPv3
+
+Use a private, per-IP credential file for an explicitly authorized, read-only
+SNMPv3 session on UDP/161:
+
+```bash
+chmod 600 /path/to/snmp-private.json
+./gomap -u -p 161 --snmp-config /path/to/snmp-private.json 10.0.11.9
+```
+
+Supported authentication is `sha256` or `sha512`; privacy is explicitly `none`
+(authNoPriv) or `aes128` (authPriv). No credentials are accepted directly as CLI
+arguments. This option enables service detection and requires UDP. It cannot
+combine with `-g` or source-identity options. Without it, existing scans are
+unchanged. The bounded session sends at most two messages: engine discovery and
+one authenticated GET. It does not walk MIBs or change device configuration.
+See [SNMP sessions](docs/SNMP_SESSIONS.md) for the JSON schema, limits, privacy
+requirements and validation scope. Do not commit credential files or captures.
 
 ## Example Output
 

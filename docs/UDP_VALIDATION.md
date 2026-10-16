@@ -3,7 +3,10 @@
 This document records the supported parsing/correlation scope and the review
 of unsupported variants. A received datagram establishes responsiveness, not
 authenticated identity or complete discovery. These checks add no queries,
-multicast listeners, credentials or external scanner dependencies.
+multicast listeners or external scanner dependencies. Optional authenticated
+UDP/161 sessions are separately documented in [SNMP sessions](SNMP_SESSIONS.md);
+the table below describes the default structural response classifier, not that
+credentialed client.
 
 ## Query Matching
 
