@@ -8,6 +8,8 @@ Note: this changelog is maintained from this point forward in the project histor
 
 ### Added
 
+- Add optional UDP/138 datagram queries, correlated control/error replies and bounded two-part NetBIOS application reassembly under `-u -Dv`/`-De`; preserve uncertainty, suppress names/payloads and keep default/controlled scans unchanged.
+- Add opt-in disconnected Linux IPv4/IPv6 fragment tests through the production UDP socket reader; validate ordering, missing/mixed fragments and UDP checksum rejection without introducing a raw-IP receiver in normal scans.
 - Add an optional single unicast NBSTAT query on UDP/137 under `-u -Dv`/`-De`, with random transaction IDs, strict response correlation, bounded attempts and no node-name/MAC disclosure; preserve default and controlled-profile behavior.
 - Add private per-IP `--snmp-config` for optional SNMPv3 authNoPriv/authPriv queries using SHA-256/SHA-512 and optional AES-128; reuse GoSNMP v1.45.0 in-process for cryptography, with bounded transport, engine/time checks and synthetic loopback regressions.
 - Add optional `-u -Dv`/`-De` Memcached UDP/11211 stats queries with request correlation and bounded application-fragment reassembly; preserve responsive unconfirmed results, validate disclosed versions and suppress raw statistics. Add deterministic and opt-in isolated-agent tests; default/controlled-profile scans remain unchanged.

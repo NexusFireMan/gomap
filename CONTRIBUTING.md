@@ -52,6 +52,28 @@ This test refuses the initial network namespace or a namespace with other interf
 
 Successful lifecycle tests do not establish end-to-end SYN discovery accuracy or native netlink address rollback. Those remain separate validation tasks in a disposable, disconnected lab.
 
+Fragment handling has a separate Linux kernel test, guarded by the same
+loopback-only namespace restrictions:
+
+```bash
+test_dir=$(mktemp -d)
+go test -c -o "$test_dir/scanner.test" ./pkg/scanner
+unshare -Urn env GOMAP_RUN_ISOLATED_TESTS=1 "$test_dir/scanner.test" -test.run '^TestIsolatedUDPIPFragments$' -test.v -test.count=3
+rm -r "$test_dir"
+```
+
+This sends synthetic IPv4/IPv6 fragments only to loopback inside the disposable
+namespace. It validates in-order/out-of-order delivery, missing fragments,
+mixed IDs and invalid UDP checksums through the production UDP socket reader.
+Raw sockets are used by the test injector only, never by normal UDP scans.
+No host NIC, route, firewall or VM configuration is changed. NetBIOS UDP/138
+query/reassembly regressions run without privileges:
+
+```bash
+go test -race ./pkg/scanner -run '^TestNetBIOSDatagram' -count=3
+go test ./pkg/scanner -run '^$' -fuzz '^FuzzNetBIOSDatagramAssembly$' -fuzztime=10s -parallel=2
+```
+
 Deterministic transport and cleanup tests run without VM targets, root, or changes to interface addresses:
 
 ```bash

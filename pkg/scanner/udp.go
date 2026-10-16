@@ -87,6 +87,9 @@ func (s *Scanner) ScanUDP(ports []int, detectServices bool) []ScanResult {
 }
 
 func (s *Scanner) scanUDPPort(port int, detectServices bool) ScanResult {
+	if port == 138 && detectServices && s.DeepVersion && !s.GhostMode {
+		return s.scanNetBIOSDatagram(port)
+	}
 	if port == 161 && detectServices && s.SNMPCredentials != nil {
 		return s.scanAuthenticatedSNMP(port)
 	}
