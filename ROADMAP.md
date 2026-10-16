@@ -32,6 +32,8 @@ GoMap's roadmap focuses on improving reliability, test coverage, documentation, 
 - [x] Add an opt-in framed Memcached UDP stats query with per-request correlation and conservative version disclosure.
 - [x] Implement bounded Memcached application-fragment reassembly with fixed expiry, out-of-order delivery, duplicate/conflict handling, memory/read caps and deterministic tests.
 - [x] Validate default/deep behavior and multi-datagram reassembly against an isolated real Memcached agent; record a reproducible lab recipe.
+- [x] Add an opt-in unicast NetBIOS NBSTAT query with random transaction IDs, strict response correlation, deterministic negative/fuzz tests and a redacted Windows lab check.
+- [x] Consolidate authenticated SNMP, protocol-specific discovery and Memcached reassembly into one integration branch with explicit supported/unsupported scopes and combined validation.
 - Authenticated SNMP and Memcached reassembly are bounded optional subsets, not support for every security model, cipher, credential workflow or UDP variant. Raw IP and fragmented NetBIOS datagram reassembly remain outside this implementation.
 - [x] Keep identification evidence coherent when deduplicating observations; retain stronger confidence and avoid mixing TLS handshakes.
 - [x] Validate signal cleanup and error reporting in Linux subprocesses with fake address backends.

@@ -9,9 +9,10 @@ import (
 )
 
 // Matching fixed query fields does not authenticate the sender or prevent replay.
-// Other current probes contain no usable per-request identifier.
 func udpProbeFieldsMatch(port int, probe, response []byte) (checked, matched bool) {
 	switch port {
+	case 137:
+		return netbiosNodeStatusMatches(probe, response)
 	case 53:
 		var query, reply dnsmessage.Message
 		if !udpDNSFrameValid(probe) || query.Unpack(probe) != nil || query.Response || query.OpCode != 0 || len(query.Questions) != 1 {

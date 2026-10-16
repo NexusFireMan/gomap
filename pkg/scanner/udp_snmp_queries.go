@@ -117,6 +117,14 @@ func snmpAdditionalQueries(random io.Reader) ([][]byte, error) {
 
 // Keep a responsive observation even when later protocol variants time out or refuse.
 func (s *Scanner) exchangeUDPPort(port int, detect bool, exchange func([]byte) ([]byte, error)) (response, probe []byte, err error) {
+	if port == 137 && detect && s.DeepVersion && !s.GhostMode {
+		probe, err = netbiosNodeStatusQuery(rand.Reader)
+		if err != nil {
+			return nil, nil, err
+		}
+		response, err = exchange(probe)
+		return // One query only; no broadcast, redirects, or automatic retries.
+	}
 	probe = udpProbePayload(port)
 	for attempt := 0; attempt <= s.Retries; attempt++ {
 		response, err = exchange(probe)

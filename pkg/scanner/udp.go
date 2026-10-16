@@ -139,7 +139,7 @@ func (s *Scanner) classifyUDPResponseForProbe(port int, response, probe []byte, 
 			return service, version, "medium", version + "; discovery message ID matched; Report fields validated; not authenticated"
 		}
 		identifiers := "; fixed identifiers"
-		if port == 161 && version != "SNMPv1 response" {
+		if port == 137 || port == 161 && version != "SNMPv1 response" {
 			identifiers = ""
 		}
 		return service, version, "medium", version + "; sent probe fields matched" + identifiers + "; not authenticated"
@@ -173,9 +173,10 @@ func (s *Scanner) exchangeUDP(address string, payload []byte) ([]byte, error) {
 		return nil, err
 	}
 
-	buf := make([]byte, maxUDPResponseBytes)
+	// Keep one overflow byte so a truncated valid-looking prefix is never parsed.
+	buf := make([]byte, maxUDPResponseBytes+1)
 	n, err := conn.Read(buf)
-	if err != nil {
+	if err != nil && n == 0 {
 		return nil, err
 	}
 	return buf[:n], nil
