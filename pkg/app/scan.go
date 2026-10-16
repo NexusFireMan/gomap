@@ -43,10 +43,21 @@ type ScanRequest struct {
 	RandomIP        bool
 	SourceInterface string
 	SourceIPs       string
+	SNMPConfig      string
 }
 
 // ExecuteScan runs the complete scan workflow: target expansion, host discovery, scan, and rendering.
 func ExecuteScan(req ScanRequest) (resultErr error) {
+	if req.SNMPConfig != "" && (!req.UDP || req.GhostMode || req.RandomIP || req.SourceInterface != "") {
+		return errors.New("--snmp-config requires UDP and cannot combine with controlled-profile or source-identity options")
+	}
+	snmpConfig, configErr := loadSNMPConfig(req.SNMPConfig, req.OutputPath)
+	if configErr != nil {
+		return configErr
+	}
+	if req.SNMPConfig != "" {
+		req.ServiceDetect = true
+	}
 	if req.GlobalRate < 0 {
 		return errors.New("--global-rate cannot be negative")
 	}
@@ -105,6 +116,9 @@ func ExecuteScan(req ScanRequest) (resultErr error) {
 	targets, err := scanner.ParseTargets(req.Target)
 	if err != nil {
 		return fmt.Errorf("invalid target specification: %w", err)
+	}
+	if err := validateSNMPScope(snmpConfig, targets); err != nil {
+		return err
 	}
 	if req.OutputPath != "" {
 		outFile, err = os.Create(req.OutputPath)
@@ -246,6 +260,7 @@ func ExecuteScan(req ScanRequest) (resultErr error) {
 	}
 	for _, targetIP := range targets {
 		s := scanner.NewScanner(targetIP, req.GhostMode)
+		s.SNMPCredentials = snmpConfig[targetIP]
 		cidrForHeaders := ""
 		if req.RandomIP && scanner.IsCIDR(req.Target) {
 			cidrForHeaders = req.Target

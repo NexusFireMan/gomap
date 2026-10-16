@@ -37,6 +37,7 @@ type Scanner struct {
 	SourceIPs          []net.IP
 	DeepVersion        bool
 	Exhaustive         bool
+	SNMPCredentials    *SNMPCredentials
 	targetPrefix       netip.Prefix
 
 	adaptiveMu    sync.Mutex
