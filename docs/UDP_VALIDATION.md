@@ -2,11 +2,12 @@
 
 This document records the supported parsing/correlation scope and the review
 of unsupported variants. A received datagram establishes responsiveness, not
-authenticated identity or complete discovery. These checks add no queries,
-multicast listeners or external scanner dependencies. Optional authenticated
+authenticated identity or complete discovery. Default structural checks add no
+queries, multicast listeners or external scanner dependencies. Optional authenticated
 UDP/161 sessions are separately documented in [SNMP sessions](SNMP_SESSIONS.md);
 the table below describes the default structural response classifier, not that
 credentialed client.
+The optional framed UDP/11211 path below performs its own bounded exchange.
 
 ## Query Matching
 
@@ -27,6 +28,34 @@ The pure SNMP matcher also handles matching v2c query/response fixtures, but the
 scanner currently sends only its existing v1 query. A v2c/v3 reply cannot be
 presented as matching that v1 query. A schema-valid reply observed without query
 context remains structural evidence only.
+
+## Memcached Query And Reassembly
+
+`-u -Dv`/`-De` on UDP/11211 sends one framed stats request with a fresh 16-bit
+identifier. A connected socket restricts the peer; matching headers contribute
+to a session-local assembly. This is correlation, not authentication. Default
+and controlled-profile scans keep their existing behavior.
+
+The implementation bounds datagrams to 2048 bytes, assemblies to 16 fragments
+and 16 KiB, and processing to 32 reads. One fixed deadline covers the response,
+capped at five seconds; fragments and duplicates never renew it. Sequence slots
+may arrive out of order; identical duplicates do not consume additional payload
+memory. Conflicting duplicates, inconsistent totals, invalid reserved fields and
+oversize/expired messages abort identification. Unknown request IDs contribute
+no payload. The state exists only for one query and is discarded afterward.
+
+Complete stats framing is required. Returned values are excluded from metadata;
+only a bounded, validated version field may identify the product version.
+Evidence includes actual fragment/byte counts. Missing or malformed fragments
+do not erase an observed responsive port or invent a product identification.
+No SET, flush, cache-key enumeration or item retrieval is implemented.
+
+On October 16, 2026, an isolated Memcached 1.6.45 container returned two fragments
+and 2238 payload bytes. The opt-in CLI test verified the reassembled version and
+confirmed that the default path remained unconfirmed. See CONTRIBUTING.md for
+reproduction; record the image digest when comparing later runs. This validates
+Memcached application fragments, not generic IP or NetBIOS datagram reassembly.
+The wire format follows the [upstream protocol](https://github.com/memcached/memcached/blob/master/doc/protocol.txt).
 
 ## Variant Review
 
@@ -49,8 +78,8 @@ All response validators use the existing 2048-byte bound. A fallback never
 promotes raw response values, usernames, engine identifiers, communities,
 hostnames, workgroups or MAC addresses into identification metadata. Redirects
 are not followed. Completing this review does **not** mean every variant is
-implemented; expanding authenticated SNMP or protocol-specific queries would
-require a separately scoped change.
+implemented; authenticated SNMP and other protocol-specific queries/reassembly
+require separately scoped changes.
 
 ## Deterministic Validation
 

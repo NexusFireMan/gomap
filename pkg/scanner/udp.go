@@ -93,6 +93,9 @@ func (s *Scanner) scanUDPPort(port int, detectServices bool) ScanResult {
 	address := net.JoinHostPort(s.Host, fmt.Sprintf("%d", port))
 	start := time.Now()
 	probe := udpProbePayload(port)
+	if port == 11211 && detectServices && s.DeepVersion && !s.GhostMode {
+		return s.scanMemcachedUDP(port)
+	}
 
 	var (
 		response []byte

@@ -29,6 +29,7 @@
 - [Installation](#installation)
 - [Quick Start](#quick-start)
 - [Authenticated SNMPv3](#authenticated-snmpv3)
+- [UDP Queries And Reassembly](#udp-queries-and-reassembly)
 - [Example Output](#example-output)
 - [CLI Reference](#cli-reference)
 - [Detection Realism (`-s`)](#detection-realism--s)
@@ -244,6 +245,28 @@ unchanged. The bounded session sends at most two messages: engine discovery and
 one authenticated GET. It does not walk MIBs or change device configuration.
 See [SNMP sessions](docs/SNMP_SESSIONS.md) for the JSON schema, limits, privacy
 requirements and validation scope. Do not commit credential files or captures.
+
+## UDP Queries And Reassembly
+
+```bash
+./gomap -u -Dv -p 11211 --timeout 1000 10.0.11.9
+```
+
+On UDP/11211, `-Dv` (also implied by `-De`) sends one framed, read-only
+Memcached `stats` query. The response is correlated by request ID and may be
+reassembled out of order. Limits are 16 fragments, 16 KiB total, 2048 bytes per
+datagram, 32 reads and one fixed receive deadline (configured timeout, capped
+at five seconds). Identical duplicates are tolerated; conflicting duplicates,
+inconsistent counts, invalid reserved fields and expired responses are rejected.
+The deadline is never extended by incoming fragments.
+
+Evidence reports fragment/byte counts, not raw statistics. Only a validated
+numeric `version` field becomes a product version; a complete stats response
+without one is labeled generically. Incomplete/malformed replies remain
+responsive but low confidence. No cache keys or items are read or modified.
+The query is not repeated by `--retries`; default scans and `-g` are unchanged.
+This is Memcached application-level reassembly, not universal UDP/IP or NetBIOS
+fragment support. See [UDP validation](docs/UDP_VALIDATION.md).
 
 ## Example Output
 
