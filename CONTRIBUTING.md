@@ -73,6 +73,19 @@ go test ./pkg/app -run LabIntegration -v
 
 Do not run integration tests against systems you are not authorized to scan.
 
+Optional Memcached interoperability runs the agent and CLI in one disconnected
+container, without host ports, cache-item requests or host-network changes:
+
+```bash
+docker pull memcached:1.6-alpine
+GOMAP_RUN_MEMCACHED_AGENT_TESTS=1 GOMAP_MEMCACHED_AGENT_IMAGE=memcached:1.6-alpine \
+  go test ./pkg/app -run '^TestMemcachedAgentInterop$' -count=3 -v
+```
+
+Image downloading needs network access; runtime uses `--network none` and a
+read-only filesystem. The test removes its container. Docker is only a lab
+fixture dependency; GoMap uses native Go for the query and reassembly.
+
 ## Pull Request Expectations
 
 - Add or update tests when behavior changes.

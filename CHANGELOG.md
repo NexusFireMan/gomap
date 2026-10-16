@@ -8,6 +8,8 @@ Note: this changelog is maintained from this point forward in the project histor
 
 ### Added
 
+- Add optional `-u -Dv`/`-De` Memcached UDP/11211 stats queries with request correlation and bounded application-fragment reassembly; preserve responsive unconfirmed results, validate disclosed versions and suppress raw statistics. Add deterministic and opt-in isolated-agent tests; default/controlled-profile scans remain unchanged.
+
 ### Changed
 
 ### Fixed

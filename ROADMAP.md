@@ -26,7 +26,10 @@ GoMap's roadmap focuses on improving reliability, test coverage, documentation, 
 - [x] Recognize a bounded NetBIOS redirect subset with coherent NS/A records, without following redirects or disclosing targets; keep unsupported forms low confidence.
 - [x] Validate negative UDP/137 name-query replies with strict NULL-record framing, known error codes, legacy counter-layout fixtures and input/disclosure protections.
 - [x] Match DNS/SNMP replies against actual sent probe fields and review unsupported NetBIOS variants; document why existing generic/zero-timestamp probes cannot establish correlation. See [UDP validation scope](docs/UDP_VALIDATION.md).
-- Authenticated/encrypted SNMP and protocol-specific queries/reassembly remain outside the implemented UDP scope; completed validation/review tasks do not imply support for every variant.
+- [x] Add an opt-in framed Memcached UDP stats query with per-request correlation and conservative version disclosure.
+- [x] Implement bounded Memcached application-fragment reassembly with fixed expiry, out-of-order delivery, duplicate/conflict handling, memory/read caps and deterministic tests.
+- [x] Validate default/deep behavior and multi-datagram reassembly against an isolated real Memcached agent; record a reproducible lab recipe.
+- Authenticated/encrypted SNMP is tracked separately. Memcached query/reassembly support does not imply support for every UDP variant, raw IP reassembly or fragmented NetBIOS datagrams.
 - [x] Keep identification evidence coherent when deduplicating observations; retain stronger confidence and avoid mixing TLS handshakes.
 - [x] Validate signal cleanup and error reporting in Linux subprocesses with fake address backends.
 - [x] Validate raw-socket deadlines and closure in an isolated loopback-only Linux namespace without sending probes.
