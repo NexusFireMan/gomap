@@ -10,6 +10,7 @@ Note: this changelog is maintained from this point forward in the project histor
 
 - Add private per-IP `--snmp-config` for optional SNMPv3 authNoPriv/authPriv queries using SHA-256/SHA-512 and optional AES-128; reuse GoSNMP v1.45.0 in-process for cryptography, with bounded transport, engine/time checks and synthetic loopback regressions.
 - Add optional `-u -Dv`/`-De` Memcached UDP/11211 stats queries with request correlation and bounded application-fragment reassembly; preserve responsive unconfirmed results, validate disclosed versions and suppress raw statistics. Add deterministic and opt-in isolated-agent tests; default/controlled-profile scans remain unchanged.
+- Add opt-in UDP/161 SNMPv2c GET and SNMPv3 noAuthNoPriv engine-discovery fallbacks under `-u -Dv`/`-De`, with randomized identifiers, strict response matching, bounded attempts and deterministic fake exchanges; no credential lists.
 
 ### Changed
 

@@ -200,6 +200,9 @@ sudo dpkg -i gomap_<version>_linux_amd64.deb
 # UDP scan on selected ports
 ./gomap -u -s -p 53,123,137,161,1900 10.0.11.6
 
+# Optional bounded SNMP variant discovery (UDP/161)
+./gomap -u -Dv -p 161 --timeout 500 --retries 0 10.0.11.6
+
 # Service/version detection on selected ports
 ./gomap -s -p 21,22,80,135,139,445,5985 10.0.11.6
 
@@ -267,6 +270,22 @@ responsive but low confidence. No cache keys or items are read or modified.
 The query is not repeated by `--retries`; default scans and `-g` are unchanged.
 This is Memcached application-level reassembly, not universal UDP/IP or NetBIOS
 fragment support. See [UDP validation](docs/UDP_VALIDATION.md).
+
+### SNMP Variant Discovery
+
+With `-u -Dv` (also implied by `-De`), UDP/161 may send two additional queries
+only when the existing SNMPv1 probe has not identified the protocol: one SNMPv2c
+GET for `sysDescr.0` using the existing `public` community, then one SNMPv3
+noAuthNoPriv engine-discovery request. No additional queries run with `-g`,
+without service detection, after a confirmed identification, or when the initial
+probe/retries finish with connection refusal. Each fallback runs once through the global attempt limiter
+and existing UDP deadlines; `--retries` applies only to the initial probe.
+Silence can therefore cost two additional timeout intervals. A received reply
+is never discarded solely because a later variant times out or refuses.
+Matching replies remain unauthenticated, medium-confidence protocol evidence,
+not a confirmed product version. Communities, engine IDs and returned values
+are not included in identification metadata. Credentialed sessions use the
+separate `--snmp-config` option described above. See [UDP validation scope](docs/UDP_VALIDATION.md).
 
 ## Example Output
 

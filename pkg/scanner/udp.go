@@ -92,24 +92,12 @@ func (s *Scanner) scanUDPPort(port int, detectServices bool) ScanResult {
 	}
 	address := net.JoinHostPort(s.Host, fmt.Sprintf("%d", port))
 	start := time.Now()
-	probe := udpProbePayload(port)
 	if port == 11211 && detectServices && s.DeepVersion && !s.GhostMode {
 		return s.scanMemcachedUDP(port)
 	}
-
-	var (
-		response []byte
-		err      error
-	)
-	for attempt := 0; attempt <= s.Retries; attempt++ {
-		response, err = s.exchangeUDP(address, probe)
-		if err == nil {
-			break
-		}
-		if attempt < s.Retries && !s.GhostMode {
-			time.Sleep(s.retryBackoff(attempt))
-		}
-	}
+	response, probe, err := s.exchangeUDPPort(port, detectServices, func(probe []byte) ([]byte, error) {
+		return s.exchangeUDP(address, probe)
+	})
 
 	latency := time.Since(start)
 	latencyMs := latency.Milliseconds()
@@ -147,7 +135,14 @@ func (s *Scanner) classifyUDPResponseForProbe(port int, response, probe []byte, 
 		return service, "", "low", "UDP response received; protocol-shaped payload does not match sent probe fields"
 	}
 	if checked {
-		return service, version, "medium", version + "; sent probe fields matched; fixed identifiers; not authenticated"
+		if port == 161 && version == "SNMPv3 report (unauthenticated)" {
+			return service, version, "medium", version + "; discovery message ID matched; Report fields validated; not authenticated"
+		}
+		identifiers := "; fixed identifiers"
+		if port == 161 && version != "SNMPv1 response" {
+			identifiers = ""
+		}
+		return service, version, "medium", version + "; sent probe fields matched" + identifiers + "; not authenticated"
 	}
 	return
 }
