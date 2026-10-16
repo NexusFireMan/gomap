@@ -25,7 +25,7 @@ func udpProbeFieldsMatch(port int, probe, response []byte) (checked, matched boo
 	case 161:
 		query, valid := snmpCorrelationFields(probe, 0)
 		if !valid {
-			return false, false
+			return snmpV3DiscoveryMatches(probe, response)
 		}
 		if udpSNMPVersion(response) == "" {
 			return true, false

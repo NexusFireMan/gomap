@@ -80,6 +80,7 @@ func Run() {
 		RandomIP:        opts.RandomIP,
 		SourceInterface: opts.SourceInterface,
 		SourceIPs:       opts.SourceIPs,
+		SNMPConfig:      opts.SNMPConfig,
 	}
 	if req.Format == "text" {
 		output.PrintBanner()

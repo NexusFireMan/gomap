@@ -15,7 +15,7 @@
 
 [![CI](https://github.com/NexusFireMan/gomap/actions/workflows/ci.yml/badge.svg)](https://github.com/NexusFireMan/gomap/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/NexusFireMan/gomap?display_name=tag)](https://github.com/NexusFireMan/gomap/releases)
-[![Go](https://img.shields.io/badge/Go-1.26.8%2B-00ADD8?logo=go&logoColor=white)](https://go.dev/)
+[![Go](https://img.shields.io/badge/Go-1.26.9%2B-00ADD8?logo=go&logoColor=white)](https://go.dev/)
 [![Docker](https://img.shields.io/badge/Docker-GHCR-2496ED?logo=docker&logoColor=white)](https://github.com/NexusFireMan/gomap/pkgs/container/gomap)
 [![CLI](https://img.shields.io/badge/Interface-CLI-2C2C2C)](https://github.com/NexusFireMan/gomap)
 [![License](https://img.shields.io/github/license/NexusFireMan/gomap)](https://github.com/NexusFireMan/gomap/blob/main/LICENSE)
@@ -28,6 +28,8 @@
 - [Current scope](#current-scope)
 - [Installation](#installation)
 - [Quick Start](#quick-start)
+- [Authenticated SNMPv3](#authenticated-snmpv3)
+- [UDP Queries And Reassembly](#udp-queries-and-reassembly)
 - [Example Output](#example-output)
 - [CLI Reference](#cli-reference)
 - [Detection Realism (`-s`)](#detection-realism--s)
@@ -67,7 +69,7 @@ A fast TCP/UDP port scanner written in Go, with optional service/version detecti
 
 ### Build from source
 
-Use Go 1.26.8 or newer. CI and release builds follow `go.mod`; the Docker builder uses the same baseline to avoid shipping older standard-library security defects.
+Use Go 1.26.9 or newer. CI and release builds follow `go.mod`; the Docker builder uses the same baseline to avoid shipping older standard-library security defects.
 
 ```bash
 git clone https://github.com/NexusFireMan/gomap.git
@@ -198,6 +200,9 @@ sudo dpkg -i gomap_<version>_linux_amd64.deb
 # UDP scan on selected ports
 ./gomap -u -s -p 53,123,137,161,1900 10.0.11.6
 
+# Optional bounded SNMP variant discovery (UDP/161)
+./gomap -u -Dv -p 161 --timeout 500 --retries 0 10.0.11.6
+
 # Service/version detection on selected ports
 ./gomap -s -p 21,22,80,135,139,445,5985 10.0.11.6
 
@@ -224,6 +229,63 @@ sudo ./gomap --random-ip --source-interface eth0 \
 # Conservative CIDR scan (skip discovery entirely)
 ./gomap -g -nd -s --random-agent --random-ip -p 22,80,443 10.0.11.0/24
 ```
+
+## Authenticated SNMPv3
+
+Use a private, per-IP credential file for an explicitly authorized, read-only
+SNMPv3 session on UDP/161:
+
+```bash
+chmod 600 /path/to/snmp-private.json
+./gomap -u -p 161 --snmp-config /path/to/snmp-private.json 10.0.11.9
+```
+
+Supported authentication is `sha256` or `sha512`; privacy is explicitly `none`
+(authNoPriv) or `aes128` (authPriv). No credentials are accepted directly as CLI
+arguments. This option enables service detection and requires UDP. It cannot
+combine with `-g` or source-identity options. Without it, existing scans are
+unchanged. The bounded session sends at most two messages: engine discovery and
+one authenticated GET. It does not walk MIBs or change device configuration.
+See [SNMP sessions](docs/SNMP_SESSIONS.md) for the JSON schema, limits, privacy
+requirements and validation scope. Do not commit credential files or captures.
+
+## UDP Queries And Reassembly
+
+```bash
+./gomap -u -Dv -p 11211 --timeout 1000 10.0.11.9
+```
+
+On UDP/11211, `-Dv` (also implied by `-De`) sends one framed, read-only
+Memcached `stats` query. The response is correlated by request ID and may be
+reassembled out of order. Limits are 16 fragments, 16 KiB total, 2048 bytes per
+datagram, 32 reads and one fixed receive deadline (configured timeout, capped
+at five seconds). Identical duplicates are tolerated; conflicting duplicates,
+inconsistent counts, invalid reserved fields and expired responses are rejected.
+The deadline is never extended by incoming fragments.
+
+Evidence reports fragment/byte counts, not raw statistics. Only a validated
+numeric `version` field becomes a product version; a complete stats response
+without one is labeled generically. Incomplete/malformed replies remain
+responsive but low confidence. No cache keys or items are read or modified.
+The query is not repeated by `--retries`; default scans and `-g` are unchanged.
+This is Memcached application-level reassembly, not universal UDP/IP or NetBIOS
+fragment support. See [UDP validation](docs/UDP_VALIDATION.md).
+
+### SNMP Variant Discovery
+
+With `-u -Dv` (also implied by `-De`), UDP/161 may send two additional queries
+only when the existing SNMPv1 probe has not identified the protocol: one SNMPv2c
+GET for `sysDescr.0` using the existing `public` community, then one SNMPv3
+noAuthNoPriv engine-discovery request. No additional queries run with `-g`,
+without service detection, after a confirmed identification, or when the initial
+probe/retries finish with connection refusal. Each fallback runs once through the global attempt limiter
+and existing UDP deadlines; `--retries` applies only to the initial probe.
+Silence can therefore cost two additional timeout intervals. A received reply
+is never discarded solely because a later variant times out or refuses.
+Matching replies remain unauthenticated, medium-confidence protocol evidence,
+not a confirmed product version. Communities, engine IDs and returned values
+are not included in identification metadata. Credentialed sessions use the
+separate `--snmp-config` option described above. See [UDP validation scope](docs/UDP_VALIDATION.md).
 
 ## Example Output
 
