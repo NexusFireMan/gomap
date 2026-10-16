@@ -131,14 +131,14 @@ The wire format follows the [upstream protocol](https://github.com/memcached/mem
 | NetBIOS negative name-query replies, codes 1/2/3/5 | Bounded structural validation, medium confidence | Encoded name and empty NULL record required; no query correlation or server identity |
 | NetBIOS redirects with encoded NS target and matching A owner | Bounded structural validation, medium confidence | Exact decoded-name match, RFC flags/counts and IN class; never followed, targets not disclosed, no query correlation |
 | Other NetBIOS errors/redirect forms, WACK, registration/release replies | Low-confidence fallback | Outside the implemented name-query/status/redirect response subset |
-| UDP/138 datagrams, fragmented NetBIOS messages | Low-confidence fallback | No datagram decoder or reassembly is implemented |
+| UDP/138 control/error replies and data datagrams | Optional bounded query/reassembly path | Matched control replies, unauthenticated structural data validation; see [fragment handling](UDP_FRAGMENTS.md) |
 
 Existing single-datagram validators use the 2048-byte bound. A fallback never
 promotes raw response values, usernames, engine identifiers, communities,
 hostnames, workgroups or MAC addresses into identification metadata. Redirects
 are not followed. Completing this review does **not** mean every variant is
 implemented; other authenticated security workflows, protocol-specific queries
-and application-level reassembly schemes require separately scoped changes.
+and application-level reassembly schemes outside the documented paths require separately scoped changes.
 
 ## Deterministic Validation
 

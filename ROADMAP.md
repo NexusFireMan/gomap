@@ -34,7 +34,9 @@ GoMap's roadmap focuses on improving reliability, test coverage, documentation, 
 - [x] Validate default/deep behavior and multi-datagram reassembly against an isolated real Memcached agent; record a reproducible lab recipe.
 - [x] Add an opt-in unicast NetBIOS NBSTAT query with random transaction IDs, strict response correlation, deterministic negative/fuzz tests and a redacted Windows lab check.
 - [x] Consolidate authenticated SNMP, protocol-specific discovery and Memcached reassembly into one integration branch with explicit supported/unsupported scopes and combined validation.
-- Authenticated SNMP and Memcached reassembly are bounded optional subsets, not support for every security model, cipher, credential workflow or UDP variant. Raw IP and fragmented NetBIOS datagram reassembly remain outside this implementation.
+- [x] Add a bounded UDP/138 datagram query, correlated control/error replies and RFC-style two-fragment NetBIOS reassembly, including ordering, duplicates, tuple/length consistency, expiry and disclosure tests.
+- [x] Validate IPv4/IPv6 fragment delivery through GoMap's production UDP socket path in a disposable loopback-only namespace, including ordering, loss, mixed IDs and invalid UDP checksums.
+- Authenticated SNMP and application reassembly support documented bounded subsets, not every cipher or protocol variant. IPv4/IPv6 packet reassembly is delegated to the OS socket stack, not a second user-space IP engine; NetBIOS datagram interoperability is fixture-tested, not certified against every server implementation. See [fragment handling](docs/UDP_FRAGMENTS.md).
 - [x] Keep identification evidence coherent when deduplicating observations; retain stronger confidence and avoid mixing TLS handshakes.
 - [x] Validate signal cleanup and error reporting in Linux subprocesses with fake address backends.
 - [x] Validate raw-socket deadlines and closure in an isolated loopback-only Linux namespace without sending probes.

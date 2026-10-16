@@ -275,8 +275,17 @@ numeric `version` field becomes a product version; a complete stats response
 without one is labeled generically. Incomplete/malformed replies remain
 responsive but low confidence. No cache keys or items are read or modified.
 The query is not repeated by `--retries`; default scans and `-g` are unchanged.
-This is Memcached application-level reassembly, not universal UDP/IP or NetBIOS
-fragment support. See [UDP validation](docs/UDP_VALIDATION.md).
+On UDP/138, deep scans send one read-only unicast NetBIOS datagram query.
+Control replies are matched to its identifier/name; data datagrams use a bounded
+two-fragment assembler and are explicitly not claimed to match that query.
+No broadcast or application operation follows a positive reply. Names, MAC
+addresses and reconstructed payloads are excluded from metadata.
+
+IPv4/IPv6 fragments are reassembled by the operating system before GoMap reads
+the UDP socket. Linux isolated tests exercise that production path with real
+fragments; this is not a second raw-packet capture/reassembly engine. Per-protocol
+size bounds still apply to the complete datagram. See [fragment handling](docs/UDP_FRAGMENTS.md)
+and [UDP validation](docs/UDP_VALIDATION.md) for limits and test commands.
 
 ### SNMP Variant Discovery
 
