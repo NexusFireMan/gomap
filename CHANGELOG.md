@@ -8,6 +8,7 @@ Note: this changelog is maintained from this point forward in the project histor
 
 ### Added
 
+- Add deterministic CLI parser regressions for defaults, invalid arguments, normalization, aliases, unchanged caller arguments, duration boundaries and maintenance-option validation; no scan or maintenance actions run in these tests.
 - Add opt-in `--stream` for completed CONNECT open-port results in text or JSONL, with serialized writes, completion-order delivery, unchanged JSONL records and no duplicate final table/records.
 - Add CONNECT inferred-filtered counts and per-issue states plus configured/last-attempt timeout budgets in milliseconds; keep local and routing failures distinct from silent ports.
 - Add optional UDP/138 datagram queries, correlated control/error replies and bounded two-part NetBIOS application reassembly under `-u -Dv`/`-De`; preserve uncertainty, suppress names/payloads and keep default/controlled scans unchanged.
@@ -19,6 +20,7 @@ Note: this changelog is maintained from this point forward in the project histor
 
 ### Changed
 
+- Raise the minimum total statement coverage from 10% to 40% in local coverage checks and CI; retain 60% as a future roadmap milestone.
 - Require Go 1.26.9 and update `golang.org/x/net` to v0.60.0 after vulnerability scanning identified advisories in the preceding baseline; align the Docker builder and include GoSNMP license notices in distributions.
 
 ### Fixed
