@@ -412,6 +412,10 @@ Generic banner descriptions carry medium confidence. High banner confidence mean
 
 HTTP page titles are content hints and carry medium confidence, even when they mention a product version. A TLS-only handshake confirms the transport, not the application: an application label inferred from its port stays low confidence. HTTP and SSH response lines must be syntactically valid before their banners are accepted.
 
+TCP CHAOS `version.bind` replies are reported as `DNS version.bind: <declared text>` at medium confidence, not automatically as BIND. This bounded path requires matching query ID/name/type/class, successful response flags and one unambiguous TXT answer; its fixed query ID and server-configurable text do not authenticate identity. See [ISC's explanation of configurable version replies](https://kb.isc.org/docs/aa-00359).
+
+The existing `OPTIONS /wsman` probe on candidate WinRM ports reports confirmed HTTP/HTTPS and an independently complete Server header, if present. HTTPAPI and Negotiate also occur outside WinRM; evidence therefore explicitly says `WinRM not confirmed`. It does not perform a WS-Management exchange or authentication. Header/body separation, duplicate-header rejection and bounded fragmented-response collection apply here too. See [Microsoft's WinRM overview](https://learn.microsoft.com/windows/desktop/winrm/portal) and [HTTP.sys server documentation](https://learn.microsoft.com/en-us/aspnet/core/fundamentals/servers/httpsys).
+
 Operational limits:
 - CONNECT completes one requested connection attempt before releasing the remaining workers; this avoids the initial parallel burst without adding probes. Banner reads do not block that release. A silent first port can add one attempt's wait before parallel scanning starts.
 - `--retries` applies to timeouts and transient connection errors, not explicit connection refusals or permission errors. Its default remains zero; bounded scans can still miss temporarily unavailable services.
@@ -564,6 +568,7 @@ Representative full-port additional finding:
 
 Notes:
 
+- This is historical captured output, not the current identification policy: current TCP DNS disclosures use `DNS version.bind: <declared text>` rather than assuming BIND.
 - `SMTP service (no greeting)` means the TCP port is open, but the server did not return an SMTP greeting within GoMap's bounded service-detection window.
 - `MySQL service (no handshake)` means the TCP port is open, but the server did not emit a standard MySQL handshake, so GoMap reports the service without inventing a product version.
 - The full-port profile found `33060/mysqlx`, which is outside the default quick scan set.
@@ -592,6 +597,8 @@ Host                         Open ports  Service highlights
 The run identified services on standard and non-standard ports, including Java RMI on `8686`, GlassFish on `8080/8181`, JMS on `7676`, IRC on `6667/6697`, and `rpc.statd` on `57086`. Open ports without a recognizable application response are retained as `unknown` with low confidence. `unresolved` ports did not provide a completed TCP response within the bounded discovery window and must not be interpreted as closed.
 
 This benchmark is a practical local-lab reference, not a universal performance guarantee. Metasploitable services can restart or expose dynamic ports between runs. It is not directly comparable with the historical HTB benchmark above: that benchmark used a different target, network path, and port set.
+
+The historical `WinRM` highlight predates the current confidence review. A generic response to `OPTIONS /wsman` now reports HTTP/HTTPS with `WinRM not confirmed`; no new benchmark measurement is implied by this documentation update.
 
 ## Per-Host Settings And Unknown Evidence
 

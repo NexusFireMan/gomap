@@ -26,6 +26,23 @@ scanners are required. IP/application UDP fragments are covered separately in
 | IRC registration | Complete classic IRC lines, initial NOTICE plus later numerics, registration/error termination, matching version/evidence lines, line/count caps and incomplete trailing-line suppression |
 | Generic write-first | Numeric multiline, SMTP EHLO, POP3 dot termination, tagged IMAP CAPABILITY, HTTP length/chunk/close framing and RTSP/SIP headers/bodies; fixed deadlines, short-write failures and buffered next-message preservation |
 | Runtime confidence | Truncated SSH/mail/FTP and HTTP-like disclosures, malformed RESP/control bytes, complete earlier disclosures and opt-in raw evidence without manufacturing a version |
+| TCP DNS version disclosure | Exact frame boundary; successful, non-truncated response; fixed ID and question/answer name/type/class correlation; one TXT value; malformed, ambiguous and control-containing replies rejected; no automatic BIND attribution |
+| Candidate WSMan HTTP | Existing OPTIONS request over chunked loopback; every-split header assembly; complete headers, ambiguous Server suppression and body isolation; no authentication-token disclosure or WinRM confirmation from generic HTTP |
+
+The DNS/WSMan confidence review covers these two paths, not every specialized
+fingerprint. `version.bind` is server-configurable text, and HTTPAPI/Negotiate do
+not uniquely identify WinRM. Other product/platform attributions remain tracked
+in `ROADMAP.md`. The WSMan candidate probe sends the same OPTIONS request and
+uses one existing deadline with a 4096-byte header cap and at most 34 lines;
+collection stops at the header terminator without waiting for a body or close.
+Complete Server headers remain usable even when the later body is incomplete. DNS reuses the
+existing conservative DNS frame validator and `dnsmessage` decoder. Multiple
+answers or TXT chunks are deliberately unsupported for this disclosure path.
+
+```bash
+go test -race ./pkg/scanner -run 'Test(DNSDisclosure|WSMan)' -count=20
+go test ./pkg/scanner -run '^$' -fuzz '^FuzzProtocolDisclosures$' -fuzztime=15s -parallel=2
+```
 
 The stream fixtures deliberately split writes/reads without sleeps. TCP is free
 to coalesce writes; deterministic one-byte/every-split readers separately prove

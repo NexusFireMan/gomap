@@ -1488,7 +1488,7 @@ func (s *Scanner) tryProtocolFingerprint(port int) (service, version, confidence
 		}
 	case 53:
 		if version = s.detectDNSVersionTCP(port); version != "" {
-			return "domain", version, "high", "dns chaos version.bind", "protocol-fingerprint", true
+			return "domain", version, "medium", "CHAOS TXT version.bind reply; fixed query ID matched; server-declared text, not authenticated product identity", "protocol-fingerprint", true
 		}
 	case 111:
 		if ver, detected := s.detectONCRPCProgram(port, 100000, []uint32{4, 3, 2}); detected {
@@ -1514,13 +1514,13 @@ func (s *Scanner) tryProtocolFingerprint(port int) (service, version, confidence
 		if s.detectLDAPBind(port, true) {
 			return "ldaps", "LDAP over TLS", "medium", "ldap bind response (tls)", "protocol-fingerprint", true
 		}
-	case 5985, 5986:
-		if version, evidence := s.detectWinRM(port); version != "" {
-			return "winrm", version, "high", evidence, "protocol-fingerprint", true
-		}
-	case 47001:
-		if version, evidence := s.detectWinRM(port); version != "" {
-			return "winrm", version, "high", evidence, "protocol-fingerprint", true
+	case 5985, 5986, 47001:
+		if version, evidence := s.detectWSManHTTP(port); evidence != "" {
+			service := "http"
+			if port == 5986 {
+				service = "https"
+			}
+			return service, version, bannerConfidence(version), evidence, "protocol-fingerprint", true
 		}
 	case 8009:
 		if s.detectAJP(port) {
@@ -1793,55 +1793,6 @@ func buildDNSVersionBindQuery() []byte {
 	return msg
 }
 
-func parseDNSVersionBindResponse(data []byte) string {
-	if len(data) < 2 {
-		return ""
-	}
-	msgLen := int(binary.BigEndian.Uint16(data[0:2]))
-	if msgLen <= 0 || 2+msgLen > len(data) {
-		return ""
-	}
-	msg := data[2 : 2+msgLen]
-	if len(msg) < 12 || binary.BigEndian.Uint16(msg[0:2]) != 0x1337 {
-		return ""
-	}
-	answerCount := int(binary.BigEndian.Uint16(msg[6:8]))
-	offset := 12
-	for offset < len(msg) && msg[offset] != 0 {
-		offset += int(msg[offset]) + 1
-	}
-	offset += 1 + 4
-	for i := 0; i < answerCount && offset+12 <= len(msg); i++ {
-		if msg[offset]&0xc0 == 0xc0 {
-			offset += 2
-		} else {
-			for offset < len(msg) && msg[offset] != 0 {
-				offset += int(msg[offset]) + 1
-			}
-			offset++
-		}
-		if offset+10 > len(msg) {
-			return ""
-		}
-		typ := binary.BigEndian.Uint16(msg[offset : offset+2])
-		class := binary.BigEndian.Uint16(msg[offset+2 : offset+4])
-		rdLen := int(binary.BigEndian.Uint16(msg[offset+8 : offset+10]))
-		offset += 10
-		if offset+rdLen > len(msg) {
-			return ""
-		}
-		rdata := msg[offset : offset+rdLen]
-		offset += rdLen
-		if typ == 16 && class == 3 && len(rdata) > 1 {
-			txtLen := int(rdata[0])
-			if txtLen > 0 && 1+txtLen <= len(rdata) {
-				return "BIND " + sanitizeVersionString(string(rdata[1:1+txtLen]))
-			}
-		}
-	}
-	return ""
-}
-
 func detectMySQLGreetingFromConn(conn net.Conn, timeout time.Duration) (string, string) {
 	_ = conn.SetReadDeadline(time.Now().Add(timeout))
 	buf, err := readMySQLPacket(conn)
@@ -2029,7 +1980,7 @@ func (s *Scanner) detectLDAPBind(port int, useTLS bool) bool {
 	return probeLDAPBind(conn, timeout)
 }
 
-func (s *Scanner) detectWinRM(port int) (string, string) {
+func (s *Scanner) detectWSManHTTP(port int) (string, string) {
 	address := net.JoinHostPort(s.Host, fmt.Sprintf("%d", port))
 	timeout := s.ioTimeout(1500 * time.Millisecond)
 	if timeout < 1500*time.Millisecond {
@@ -2053,58 +2004,7 @@ func (s *Scanner) detectWinRM(port int) (string, string) {
 	}
 	defer func() { _ = conn.Close() }()
 
-	_ = conn.SetDeadline(time.Now().Add(timeout))
-	_, _ = conn.Write([]byte(s.buildHTTPRequest("OPTIONS", "/wsman")))
-
-	buf := make([]byte, 4096)
-	n, err := conn.Read(buf)
-	if err != nil || n == 0 {
-		return "", ""
-	}
-
-	raw := string(buf[:n])
-	resp := strings.ToLower(raw)
-	if strings.Contains(resp, "wsman") || strings.Contains(resp, "microsoft-httpapi") || strings.Contains(resp, "www-authenticate: negotiate") {
-		if server := httpHeaderValue(raw, "Server"); server != "" {
-			return winRMVersionFromServerHeader(server), "Server: " + server
-		}
-		if auth := httpHeaderValue(raw, "WWW-Authenticate"); auth != "" {
-			return "Microsoft WinRM", "WWW-Authenticate: " + auth
-		}
-		if status := firstHTTPStatusLine(raw); status != "" {
-			return "Microsoft WinRM", status
-		}
-		return "Microsoft WinRM", "WSMan/HTTPAPI response"
-	}
-	return "", ""
-}
-
-func httpHeaderValue(response, header string) string {
-	prefix := strings.ToLower(header) + ":"
-	for _, line := range strings.Split(response, "\n") {
-		line = strings.TrimSpace(strings.TrimRight(line, "\r"))
-		if strings.HasPrefix(strings.ToLower(line), prefix) {
-			return strings.TrimSpace(line[len(prefix):])
-		}
-	}
-	return ""
-}
-
-func firstHTTPStatusLine(response string) string {
-	for _, line := range strings.Split(response, "\n") {
-		line = strings.TrimSpace(strings.TrimRight(line, "\r"))
-		if strings.HasPrefix(strings.ToUpper(line), "HTTP/") {
-			return line
-		}
-	}
-	return ""
-}
-
-func winRMVersionFromServerHeader(server string) string {
-	if strings.Contains(strings.ToLower(server), "microsoft-httpapi") {
-		return "Microsoft HTTPAPI httpd " + strings.TrimPrefix(server, "Microsoft-HTTPAPI/")
-	}
-	return "Microsoft WinRM"
+	return probeWSManHTTP(conn, s.buildHTTPRequest("OPTIONS", "/wsman"), timeout)
 }
 
 // detectSMBVersion attempts to detect SMB version through multiple methods

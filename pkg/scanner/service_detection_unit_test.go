@@ -2,6 +2,7 @@ package scanner
 
 import (
 	"net"
+	"strings"
 	"testing"
 	"time"
 )
@@ -231,11 +232,8 @@ func TestRDPAndWinRMDetectionHelpers(t *testing.T) {
 	}
 
 	response := "HTTP/1.1 404 Not Found\r\nServer: Microsoft-HTTPAPI/2.0\r\nWWW-Authenticate: Negotiate\r\n\r\n"
-	if got := httpHeaderValue(response, "Server"); got != "Microsoft-HTTPAPI/2.0" {
-		t.Fatalf("unexpected server header: %q", got)
-	}
-	if got := winRMVersionFromServerHeader("Microsoft-HTTPAPI/2.0"); got != "Microsoft HTTPAPI httpd 2.0" {
-		t.Fatalf("unexpected WinRM version: %q", got)
+	if version, evidence := wsmanHTTPDisclosure(response); version != "Microsoft-HTTPAPI/2.0" || !strings.Contains(evidence, "WinRM not confirmed") {
+		t.Fatalf("unexpected HTTP disclosure: %q %q", version, evidence)
 	}
 }
 

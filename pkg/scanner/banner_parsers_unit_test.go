@@ -74,7 +74,7 @@ func TestParseDNSVersionBindResponse(t *testing.T) {
 		0x0d, '9', '.', '1', '6', '.', '1', '-', 'U', 'b', 'u', 'n', 't', 'u',
 	}
 	got := parseDNSVersionBindResponse(response)
-	if got != "BIND 9.16.1-Ubuntu" {
+	if got != "DNS version.bind: 9.16.1-Ubuntu" {
 		t.Fatalf("unexpected DNS version: %q", got)
 	}
 }
