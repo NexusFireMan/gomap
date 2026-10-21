@@ -109,7 +109,7 @@ func streamFixtureTLSConfig(t *testing.T) *tls.Config {
 
 func TestRDPStreamConfirmationAndTLSUpgrade(t *testing.T) {
 	cfg := streamFixtureTLSConfig(t)
-	for _, mode := range []string{"standard", "legacy", "failure", "tls", "request-echo", "truncated"} {
+	for _, mode := range []string{"standard", "legacy", "failure", "tls", "tls-failed", "request-echo", "truncated"} {
 		t.Run(mode, func(t *testing.T) {
 			response := rdpConfirmFixture()
 			response[15] = 0
@@ -119,7 +119,7 @@ func TestRDPStreamConfirmationAndTLSUpgrade(t *testing.T) {
 				response[3], response[4] = 11, 6
 			case "failure":
 				response[11], response[15] = 3, 1
-			case "tls":
+			case "tls", "tls-failed":
 				response[15] = 1
 			case "request-echo":
 				response[5] = 0xe0
@@ -143,17 +143,29 @@ func TestRDPStreamConfirmationAndTLSUpgrade(t *testing.T) {
 				return nil
 			})
 			s := NewScanner("127.0.0.1", false)
-			version, evidence, ok := s.detectRDPInfo(port)
+			version, confidence, evidence, ok := s.detectRDPInfo(port)
 			waitStreamFixture(t, done)
 			valid := mode != "request-echo" && mode != "truncated"
 			if ok != valid || (version != "") != valid || (evidence != "") != valid {
 				t.Fatalf("mode %s: ok=%t version=%q evidence=%q", mode, ok, version, evidence)
 			}
-			if mode == "tls" && !strings.Contains(evidence, "cert CN=rdp.fixture.invalid") {
+			if mode == "tls" && (!strings.Contains(evidence, "cert CN=rdp.fixture.invalid") || !strings.Contains(evidence, "certificate not verified")) {
 				t.Fatal("fragmented confirmation consumed or lost the subsequent TLS handshake")
 			}
-			if mode == "failure" && evidence != "RDP negotiation failure: code=1" {
+			if mode == "failure" && (!strings.Contains(evidence, "RDP negotiation failure: code=1") || version != "RDP service (negotiation rejected)") {
 				t.Fatal("negotiation failure confused with a successful selection")
+			}
+			if mode == "tls-failed" && !strings.Contains(evidence, "TLS handshake not completed") {
+				t.Fatal("selected TLS incorrectly reported as an established handshake")
+			}
+			if valid {
+				wantConfidence := "medium"
+				if mode == "legacy" {
+					wantConfidence = "low"
+				}
+				if confidence != wantConfidence || strings.Contains(version, "Microsoft") || !strings.Contains(evidence, "product/OS not established") {
+					t.Fatalf("unsupported product confidence: %q %q %q", version, confidence, evidence)
+				}
 			}
 		})
 	}

@@ -3,6 +3,7 @@ package scanner
 import (
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"time"
@@ -109,7 +110,31 @@ func validTDSPrelogin(data []byte) bool {
 	return true
 }
 
-func probeTDSPrelogin(conn net.Conn, timeout time.Duration) bool {
+func tdsPreloginDisclosure(data []byte) (version, evidence string) {
+	if !validTDSPrelogin(data) {
+		return "", ""
+	}
+	version = "TDS PRELOGIN"
+	evidence = "validated TDS PRELOGIN"
+	for pos := 0; data[pos] != 0xff; pos += 5 {
+		offset := int(binary.BigEndian.Uint16(data[pos+1:]))
+		switch data[pos] {
+		case 0:
+			// VERSION describes the sender, not the negotiated TDS wire version.
+			declared := fmt.Sprintf("%d.%d.%d", data[offset], data[offset+1], binary.BigEndian.Uint16(data[offset+2:]))
+			if declared != "0.0.0" {
+				version += " (server-declared " + declared + ")"
+				evidence += "; server-declared VERSION=" + declared
+			}
+		case 1:
+			names := [...]string{"ENCRYPT_OFF", "ENCRYPT_ON", "ENCRYPT_NOT_SUP", "ENCRYPT_REQ"}
+			evidence += "; server ENCRYPTION=" + names[data[offset]]
+		}
+	}
+	return version, evidence + "; no TLS/login exchange performed; product/OS not established"
+}
+
+func probeTDSPrelogin(conn net.Conn, timeout time.Duration) (string, string) {
 	// Preserve the existing bounded PRELOGIN request; no login or query follows.
 	prelogin := []byte{
 		0x12, 0x01, 0x00, 0x34, 0x00, 0x00, 0x00, 0x00,
@@ -121,11 +146,14 @@ func probeTDSPrelogin(conn net.Conn, timeout time.Duration) bool {
 		0x00, 0x00, 0x00, 0x00,
 	}
 	if err := conn.SetDeadline(time.Now().Add(timeout)); err != nil {
-		return false
+		return "", ""
 	}
 	if n, err := conn.Write(prelogin); err != nil || n != len(prelogin) {
-		return false
+		return "", ""
 	}
-	_, err := readTDSPrelogin(conn)
-	return err == nil
+	data, err := readTDSPrelogin(conn)
+	if err != nil {
+		return "", ""
+	}
+	return tdsPreloginDisclosure(data)
 }
