@@ -38,7 +38,10 @@ type Scanner struct {
 	DeepVersion        bool
 	Exhaustive         bool
 	SNMPCredentials    *SNMPCredentials
-	targetPrefix       netip.Prefix
+	// OnResult is called serially as CONNECT results finish, before the full scan returns.
+	// Set it before starting a scan; callbacks should return promptly.
+	OnResult     func(ScanResult)
+	targetPrefix netip.Prefix
 
 	adaptiveMu    sync.Mutex
 	ewmaLatency   time.Duration
@@ -164,7 +167,7 @@ func (s *Scanner) ScanWithDiagnostics(ports []int, detectServices bool) ([]ScanR
 
 func (s *Scanner) scanPortsReportWithDial(ports []int, detectServices bool, dial tcpDialFunc) ([]ScanResult, ConnectDiagnostics) {
 	ports = uniquePortsOrdered(ports)
-	diagnostics := ConnectDiagnostics{AttemptedPorts: len(ports)}
+	diagnostics := ConnectDiagnostics{AttemptedPorts: len(ports), TimeoutMS: s.Timeout.Milliseconds()}
 	if len(ports) == 0 {
 		return nil, diagnostics
 	}
@@ -180,8 +183,9 @@ func (s *Scanner) scanPortsReportWithDial(ports []int, detectServices bool, dial
 		result    ScanResult
 		lastError error
 		attempts  int
+		timeoutMS int64
 	}
-	resultsChan := make(chan portOutcome, len(ports))
+	resultsChan := make(chan portOutcome, workers)
 	retrySlots := make(chan struct{}, min(8, workers))
 	var rateLimiter <-chan time.Time
 	if s.Rate > 0 {
@@ -220,6 +224,7 @@ func (s *Scanner) scanPortsReportWithDial(ports []int, detectServices bool, dial
 				}
 				var lastError error
 				attempts := 0
+				var timeoutMS int64
 				result := s.scanPortWithDial(port, detectServices, func(address string, timeout time.Duration) (net.Conn, error) {
 					if attempts > 0 {
 						retrySlots <- struct{}{}
@@ -229,30 +234,35 @@ func (s *Scanner) scanPortsReportWithDial(ports []int, detectServices bool, dial
 						}
 					}
 					attempts++
+					timeoutMS = timeout.Milliseconds()
 					conn, err := primingDial(address, timeout)
 					if err != nil {
 						lastError = err
 					}
 					return conn, err
 				})
-				resultsChan <- portOutcome{result, lastError, attempts}
+				resultsChan <- portOutcome{result, lastError, attempts, timeoutMS}
 			}
 		}(i)
 	}
 
-	for _, port := range ports {
-		portsChan <- port
-	}
-	close(portsChan)
-
-	wg.Wait()
-	close(resultsChan)
+	go func() {
+		for _, port := range ports {
+			portsChan <- port
+		}
+		close(portsChan)
+		wg.Wait()
+		close(resultsChan)
+	}()
 
 	var openPorts []ScanResult
 	for outcome := range resultsChan {
 		result := outcome.result
 		if result.IsOpen {
 			openPorts = append(openPorts, result)
+			if s.OnResult != nil {
+				s.OnResult(result)
+			}
 		}
 		if outcome.lastError == nil {
 			continue
@@ -266,10 +276,14 @@ func (s *Scanner) scanPortsReportWithDial(ports []int, detectServices bool, dial
 			diagnostics.RecoveredPorts++
 		} else {
 			diagnostics.UnresolvedPorts++
+			if kind == "timeout" {
+				diagnostics.FilteredPorts++
+			}
 		}
 		diagnostics.Issues = append(diagnostics.Issues, ConnectionIssue{
 			Port: result.Port, Attempts: outcome.attempts, Kind: kind,
 			Error: outcome.lastError.Error(), Recovered: result.IsOpen,
+			State: connectionIssueState(kind, result.IsOpen), TimeoutMS: outcome.timeoutMS,
 		})
 	}
 
