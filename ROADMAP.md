@@ -7,7 +7,13 @@ GoMap's roadmap focuses on improving reliability, test coverage, documentation, 
 - [ ] Improve CLI/parser test coverage.
 - [x] Add output format regression tests, including write failures.
 - [x] Add deterministic service detection unit tests for banners, protocol fixtures, and malformed packets.
-- [ ] Extend service detection tests to fragmented responses and malformed packets as new probes are added.
+- [x] Establish deterministic stream-framing regressions for DNS/TCP, MySQL, ONC RPC, SMB, AJP, DCE/RPC and JRMP: split reads, final EOF bytes, truncation, size/count limits and next-frame boundaries.
+- [x] Add passive/connected greeting and FTP/mail conversation regressions, including TLS, numeric multiline replies, capture limits and fixed per-read deadlines.
+- [x] Add strict RDP confirmation/negotiation tests, malformed/unoffered selections, failure replies and a loopback TLS certificate upgrade.
+- [x] Add HTTP/TLS collection and parser regressions for fragmented headers, incomplete/ambiguous headers, body/header separation, chunked titles and redirect non-following.
+- [ ] Extend equivalent deterministic stream/negative fixtures to LDAP and TDS before considering those readers fully reviewed.
+- [ ] Add protocol-complete RESP/IRC/generic write-first transaction framing and review truncated-text identification confidence separately from retaining partial evidence.
+- Require new service probes to extend the [regression matrix](docs/SERVICE_DETECTION_TESTS.md); a completed baseline does not certify every protocol variant.
 - Raise minimum coverage progressively from 10% to 25%, 40%, and 60%.
 - Integrated v2.5.0 validation reaches 59.3% total coverage; the enforced minimum remains 10% until separately reviewed threshold changes.
 

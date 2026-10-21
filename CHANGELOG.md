@@ -8,6 +8,7 @@ Note: this changelog is maintained from this point forward in the project histor
 
 ### Added
 
+- Add deterministic stream-framing, greeting/conversation and HTTP/TLS regressions across DNS/TCP, MySQL, ONC RPC, SMB, AJP, DCE/RPC, JRMP, RDP and mail/FTP paths, with bounded-reader and handshake/header fuzz invariants.
 - Add optional UDP/138 datagram queries, correlated control/error replies and bounded two-part NetBIOS application reassembly under `-u -Dv`/`-De`; preserve uncertainty, suppress names/payloads and keep default/controlled scans unchanged.
 - Add opt-in disconnected Linux IPv4/IPv6 fragment tests through the production UDP socket reader; validate ordering, missing/mixed fragments and UDP checksum rejection without introducing a raw-IP receiver in normal scans.
 - Add an optional single unicast NBSTAT query on UDP/137 under `-u -Dv`/`-De`, with random transaction IDs, strict response correlation, bounded attempts and no node-name/MAC disclosure; preserve default and controlled-profile behavior.
@@ -21,6 +22,9 @@ Note: this changelog is maintained from this point forward in the project histor
 
 ### Fixed
 
+- Collect fragmented text greetings and numeric multiline FTP/SMTP replies under existing deadlines; stop FTP/mail command progression on incomplete greetings/replies and enforce the generic FTP capture limit before appending excess data.
+- Read and validate complete RDP confirmations instead of interpreting partial frames, request/data packets or negotiation-shaped bytes at arbitrary offsets; retain valid negotiation failures as protocol evidence.
+- Require complete unambiguous HTTP headers before reporting a Server product, and parse titles only from the correctly framed/decoded body, without following redirects.
 - Retain an overflow byte in generic UDP reads so oversized datagrams cannot be classified from a silently truncated prefix; preserve final received bytes when a read also returns an error.
 - Reconcile UDP documentation with optional authenticated sessions and discovery queries instead of retaining obsolete claims that these paths are unimplemented.
 
