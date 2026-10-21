@@ -42,6 +42,7 @@ type CLIOptions struct {
 	MaxTimeoutMS    int
 	AdaptiveTimeout bool
 	DetailsFlag     bool
+	Stream          bool
 	RandomAgent     bool
 	RandomIP        bool
 	SourceInterface string
@@ -91,6 +92,7 @@ func ParseCLIOptions(args []string) (CLIOptions, error) {
 	fs.IntVar(&opts.MaxTimeoutMS, "max-timeout", 0, "maximum adaptive timeout in milliseconds (0 = automatic)")
 	fs.BoolVar(&opts.AdaptiveTimeout, "adaptive-timeout", true, "enable adaptive timeout tuning during scan")
 	fs.BoolVar(&opts.DetailsFlag, "details", false, "include latency/confidence/evidence columns in table output")
+	fs.BoolVar(&opts.Stream, "stream", false, "emit completed open-port results immediately (CONNECT, text or JSONL)")
 	fs.StringVar(&opts.SNMPConfig, "snmp-config", "", "private per-IP SNMPv3 credential JSON file (UDP only)")
 	fs.BoolVar(&opts.RandomAgent, "random-agent", false, "randomize HTTP User-Agent on each request (service detection)")
 	fs.BoolVar(&opts.RandomIP, "random-ip", false, "enable randomized source-IP or HTTP identity controls")
@@ -249,6 +251,9 @@ func normalizeOptions(opts CLIOptions) (CLIOptions, error) {
 	if opts.DetailsFlag && opts.FormatFlag != "text" {
 		return opts, errors.New("--details is only valid with text output")
 	}
+	if opts.Stream && (opts.UDPFlag || opts.ScanType != "connect" || (opts.FormatFlag != "text" && opts.FormatFlag != "jsonl")) {
+		return opts, errors.New("--stream requires CONNECT scanning with text or JSONL output")
+	}
 	opts.SourceInterface = strings.TrimSpace(opts.SourceInterface)
 	opts.SourceIPs = strings.TrimSpace(opts.SourceIPs)
 	if opts.SourceIPs != "" && opts.SourceInterface == "" {
@@ -335,6 +340,7 @@ func printHelp(w *os.File) {
   --csv                      shortcut for --format csv
   --out <path>               write output to file
   --details                  add latency/confidence/evidence columns (text only)
+  --stream                   emit completed open-port results immediately (CONNECT, text/JSONL)
 
 %sSource & HTTP Identity Controls:%s
   --random-agent             random User-Agent per request

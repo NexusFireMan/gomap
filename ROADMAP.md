@@ -47,6 +47,8 @@ GoMap's roadmap focuses on improving reliability, test coverage, documentation, 
 - [ ] Extend confidence review across all protocol-specific detection paths; distinguish protocol evidence from product/version disclosure.
 - [x] Preserve explicit UDP states in text, JSON, JSONL, and CSV; count only confirmed open ports.
 - [x] Support `--version` and options before or after the CLI target.
+- [x] Separate CONNECT timeout port counters from actual timeout budgets; distinguish inferred-filtered timeouts, confirmed refusals and unknown failures without concealing incomplete coverage.
+- [x] Add opt-in completion-order text/JSONL streaming for CONNECT results with deterministic delivery, deduplication and writer-error regressions.
 
 - [ ] Stabilize full-range CONNECT results across constrained VirtualBox and VPN lab networks.
 - [ ] Expand native fingerprints for SMB server identity, NetBIOS workgroup data, and IRC product/version banners.

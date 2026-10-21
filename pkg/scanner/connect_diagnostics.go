@@ -12,14 +12,30 @@ type ConnectionIssue struct {
 	Kind      string `json:"kind"`
 	Error     string `json:"error"`
 	Recovered bool   `json:"recovered,omitempty"`
+	State     string `json:"state,omitempty"`
+	TimeoutMS int64  `json:"timeout_ms,omitempty"`
 }
 
 type ConnectDiagnostics struct {
-	AttemptedPorts  int               `json:"attempted_ports"`
-	RefusedPorts    int               `json:"refused_ports"`
+	AttemptedPorts int `json:"attempted_ports"`
+	RefusedPorts   int `json:"refused_ports"`
+	// UnresolvedPorts includes FilteredPorts for compatibility and completeness checks.
 	UnresolvedPorts int               `json:"unresolved_ports"`
 	RecoveredPorts  int               `json:"recovered_ports"`
+	FilteredPorts   int               `json:"filtered_ports"`
+	TimeoutMS       int64             `json:"configured_timeout_ms"`
 	Issues          []ConnectionIssue `json:"issues,omitempty"`
+}
+
+// A timeout is consistent with filtering, but cannot prove a firewall dropped a packet.
+func connectionIssueState(kind string, recovered bool) string {
+	if recovered {
+		return "open"
+	}
+	if kind == "timeout" {
+		return "filtered"
+	}
+	return "unknown"
 }
 
 func dialErrorKind(err error) string {

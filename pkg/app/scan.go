@@ -39,6 +39,7 @@ type ScanRequest struct {
 	MaxTimeoutMS    int
 	AdaptiveTimeout bool
 	Details         bool
+	Stream          bool
 	RandomAgent     bool
 	RandomIP        bool
 	SourceInterface string
@@ -65,6 +66,9 @@ func ExecuteScan(req ScanRequest) (resultErr error) {
 	machineOutput := req.Format != "text"
 	if req.ScanType == "" {
 		req.ScanType = "connect"
+	}
+	if req.Stream && (req.UDP || req.ScanType != "connect" || (req.Format != "text" && req.Format != "jsonl")) {
+		return errors.New("--stream requires CONNECT scanning with text or JSONL output")
 	}
 	scanLabel := strings.ToUpper(req.ScanType)
 	if req.UDP {
@@ -249,6 +253,7 @@ func ExecuteScan(req ScanRequest) (resultErr error) {
 	allResults := make(map[string][]scanner.ScanResult)
 	connectDiagnostics := make(map[string]scanner.ConnectDiagnostics)
 	scanStart := time.Now()
+	var streamErr error
 
 	var timeoutDuration time.Duration
 	if req.TimeoutMS > 0 {
@@ -281,6 +286,18 @@ func ExecuteScan(req ScanRequest) (resultErr error) {
 			DeepVersion:     req.DeepVersion,
 			Exhaustive:      req.Exhaustive,
 		})
+		if req.Stream {
+			s.OnResult = func(result scanner.ScanResult) {
+				if streamErr != nil {
+					return
+				}
+				if req.Format == "jsonl" {
+					streamErr = output.PrintJSONLReport(destWriter, req.Target, []string{targetIP}, map[string][]scanner.ScanResult{targetIP: {result}})
+				} else {
+					streamErr = formatter.WriteStreamResult(destWriter, targetIP, result)
+				}
+			}
+		}
 		var openResults []scanner.ScanResult
 		if req.UDP {
 			openResults = s.ScanUDP(portsToScan, req.ServiceDetect)
@@ -309,6 +326,9 @@ func ExecuteScan(req ScanRequest) (resultErr error) {
 		if len(openResults) > 0 {
 			allResults[targetIP] = openResults
 		}
+		if streamErr != nil {
+			return fmt.Errorf("failed to write streaming output: %w", streamErr)
+		}
 	}
 	scanDuration := time.Since(scanStart)
 
@@ -323,7 +343,9 @@ func ExecuteScan(req ScanRequest) (resultErr error) {
 		case "json":
 			renderErr = output.PrintJSONReport(destWriter, req.Target, portsToScan, targets, allResults, req.ServiceDetect, scanDuration, connectDiagnostics)
 		case "jsonl":
-			renderErr = output.PrintJSONLReport(destWriter, req.Target, targets, allResults)
+			if !req.Stream {
+				renderErr = output.PrintJSONLReport(destWriter, req.Target, targets, allResults)
+			}
 		case "csv":
 			renderErr = output.PrintCSVReport(destWriter, allResults, targets)
 		default:
@@ -343,6 +365,9 @@ func ExecuteScan(req ScanRequest) (resultErr error) {
 	for _, targetIP := range targets {
 		if results, exists := allResults[targetIP]; exists {
 			totalOpen += scanner.CountOpen(results)
+			if req.Stream {
+				continue
+			}
 			if len(targets) > 1 {
 				fmt.Fprintf(&textReport, "\n%s\n", output.Highlight(fmt.Sprintf("═══ %s ═══", output.Host(targetIP))))
 			}
@@ -412,12 +437,18 @@ func hostSummaries(targets []string, allResults map[string][]scanner.ScanResult,
 		if len(critical) > 0 {
 			criticalStr = strings.Join(critical, ", ")
 		}
-		fmt.Fprintf(&report, "- %s | open ports: %d | critical: %s | exposure: %s\n",
+		fmt.Fprintf(&report, "- %s | open ports: %d | critical: %s | exposure: %s",
 			host,
 			open,
 			criticalStr,
 			exposure,
 		)
+		if len(diagnostics) > 0 {
+			if diag, ok := diagnostics[0][host]; ok {
+				fmt.Fprintf(&report, " | TCP closed: %d | filtered: %d | unknown: %d", diag.RefusedPorts, diag.FilteredPorts, diag.UnresolvedPorts-diag.FilteredPorts)
+			}
+		}
+		report.WriteByte('\n')
 	}
 	return report.String()
 }
@@ -442,9 +473,24 @@ func connectWarnings(targets []string, diagnostics map[string]scanner.ConnectDia
 		sort.Strings(kinds)
 		var parts []string
 		for _, kind := range kinds {
-			parts = append(parts, fmt.Sprintf("%s=%d", kind, counts[kind]))
+			parts = append(parts, fmt.Sprintf("%s_ports=%d", kind, counts[kind]))
 		}
 		fmt.Fprintf(&report, "TCP discovery inconclusive on %s: %d unresolved ports (%s); these are not confirmed closed.\n", host, diag.UnresolvedPorts, strings.Join(parts, ", "))
+		fmt.Fprintf(&report, "TCP states on %s: closed=%d (connection refused), filtered=%d (inferred from timeout), unknown=%d; configured_timeout_ms=%d", host, diag.RefusedPorts, diag.FilteredPorts, diag.UnresolvedPorts-diag.FilteredPorts, diag.TimeoutMS)
+		var minTimeout, maxTimeout int64
+		for _, issue := range diag.Issues {
+			if issue.Recovered || issue.TimeoutMS <= 0 {
+				continue
+			}
+			if minTimeout == 0 || issue.TimeoutMS < minTimeout {
+				minTimeout = issue.TimeoutMS
+			}
+			maxTimeout = max(maxTimeout, issue.TimeoutMS)
+		}
+		if minTimeout > 0 {
+			fmt.Fprintf(&report, "; last_attempt_timeout_ms=%d..%d", minTimeout, maxTimeout)
+		}
+		report.WriteByte('\n')
 	}
 	return report.String()
 }
