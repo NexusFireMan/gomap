@@ -12,12 +12,12 @@ GoMap's roadmap focuses on improving reliability, test coverage, documentation, 
 - [x] Add strict RDP confirmation/negotiation tests, malformed/unoffered selections, failure replies and a loopback TLS certificate upgrade.
 - [x] Add HTTP/TLS collection and parser regressions for fragmented headers, incomplete/ambiguous headers, body/header separation, chunked titles and redirect non-following.
 - [x] Review bounded LDAP/LDAPS anonymous BindResponse and TDS 7.x PRELOGIN readers with deterministic split/truncation/negative fixtures, response structure/correlation checks, fixed deadlines, loopback exchanges and fuzz tests; broader LDAP operations and TDS sessions remain outside this review.
-- [ ] Add protocol-complete RESP/IRC/generic write-first transaction framing and review truncated-text identification confidence separately from retaining partial evidence.
+- [x] Frame the current RESP2 INFO, IRC registration and generic write-first probe transactions with byte/line/depth/count limits, deterministic negative fixtures and fixed deadlines; withhold incomplete version disclosures while retaining complete earlier evidence. RESP3 negotiation and general-purpose client sessions remain outside this scope.
 - Require new service probes to extend the [regression matrix](docs/SERVICE_DETECTION_TESTS.md); a completed baseline does not certify every protocol variant.
 - [x] Raise the enforced total statement coverage floor past 25% to 40%, consistently in local checks and CI.
 - [ ] Raise the enforced total statement coverage floor to 60% with sufficient headroom and meaningful tests.
 - Integrated v2.5.0 validation reached 59.3% total coverage. Parser regressions do not imply complete installer/updater or CLI entry-point coverage; those remain follow-up work.
-- Development validation including the LDAP/TDS reader review reaches 68.9% total statement coverage; the enforced floor is 40%, not 60%.
+- Development validation including the text-transaction/confidence review reaches 70.6% total statement coverage; the enforced floor is 40%, not 60%.
 
 ## Detection and Scan Reliability
 

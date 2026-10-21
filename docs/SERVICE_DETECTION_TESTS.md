@@ -22,6 +22,10 @@ scanners are required. IP/application UDP fragments are covered separately in
 | HTTP/TLS | Small stream writes, metadata retention, malformed status lines, complete/unambiguous headers, body/header separation, framed/chunked titles and redirect non-following |
 | LDAP/LDAPS | Complete definite-BER frames, non-minimal length forms up to four length octets, matching request IDs, BindResponse results/optional fields, malformed primitives, request echoes, size/count limits and a loopback TLS exchange |
 | TDS 7.x PRELOGIN | Complete server reply packets, bounded multi-packet assembly, EOM/sequence/SPID checks, option-table framing/ranges, reflected request rejection, invalid values, fixed deadlines and loopback exchanges |
+| RESP2 INFO | Simple/error/integer/bulk/array framing, nulls, binary bulk bodies, byte/depth/node/element caps, complete version fields, request-before-response and incomplete/ambiguous payload rejection |
+| IRC registration | Complete classic IRC lines, initial NOTICE plus later numerics, registration/error termination, matching version/evidence lines, line/count caps and incomplete trailing-line suppression |
+| Generic write-first | Numeric multiline, SMTP EHLO, POP3 dot termination, tagged IMAP CAPABILITY, HTTP length/chunk/close framing and RTSP/SIP headers/bodies; fixed deadlines, short-write failures and buffered next-message preservation |
+| Runtime confidence | Truncated SSH/mail/FTP and HTTP-like disclosures, malformed RESP/control bytes, complete earlier disclosures and opt-in raw evidence without manufacturing a version |
 
 The stream fixtures deliberately split writes/reads without sleeps. TCP is free
 to coalesce writes; deterministic one-byte/every-split readers separately prove
@@ -37,9 +41,9 @@ truncated/contradictory HTTP headers or HTML titles placed in headers.
 Greeting collection now completes one line or a matching numeric multiline
 reply without renewing the caller's deadline per fragment. Complete replies
 return immediately; partial replies may use the remainder of the existing
-timeout and remain available as evidence. This is not full RESP, IRC, POP3
-capability-list or IMAP transaction reassembly. The generic FTP-lines path has
-a strict 4096-byte capture bound.
+timeout and remain available as evidence. Greeting-only reads are distinct from
+the protocol-specific write-first transaction readers below. The generic
+FTP-lines path has a strict 4096-byte capture bound.
 
 RDP confirms only the class-0 server confirmation and the supported selections
 offered by the existing probe (standard RDP, TLS, CredSSP). A failure code is
@@ -70,6 +74,36 @@ overlap each other or the option table. The existing request is unchanged; no
 login, TLS negotiation or SQL statement follows. Option payloads are not
 promoted to product-version or server-identity claims.
 
+Existing INFO and IRC registration requests now precede response reads; their
+payloads, number of probes and configured timeouts are unchanged. RESP2 values
+use a 64 KiB wire-byte cap, eight nested levels, 64 array entries and 128 total
+nodes. Complete INFO bulk bodies, including versions after the first line, are
+parsed without treating embedded data as a separate greeting. Raw unframed
+Redis text is not sufficient runtime product evidence. Default reports expose
+only the selected version, not the full INFO body.
+
+IRC collection stops at MYINFO/ISUPPORT, a registration error or ERROR, with
+512 bytes per classic line, 32 lines and 4096 total bytes. It sends no PONG,
+VERSION, WHO, authentication or other follow-up command. A blocked registration
+can still time out; only already complete disclosures may then be used.
+
+Generic write-first collection recognizes the response framing used by existing
+probes: numeric multiline replies, EHLO replies, POP3 CAPA's terminal dot, IMAP's
+matching a001 completion, and HTTP-like headers/bodies. Generic text has a
+4096-byte/32-line cap; HTTP GET/HEAD uses 64 KiB, with 64 chunks and 32 trailers.
+Known terminal replies return without waiting for connection closure. Next
+messages remain in the supplied buffered reader; probe connections are single
+use and closed afterward. Close-delimited HTTP bodies still require EOF or the
+existing deadline. No redirect is followed.
+
+Runtime observation checks are separate from pure fixture parsers. A missing
+line/multiline/frame terminator prevents promotion of that disclosure's version,
+even if a regex could recognize its prefix. Raw partial bytes remain available
+to the existing evidence/capture paths, but their presence is not a confirmed
+version. Complete earlier lines/headers remain independently useful. Unsupported
+binary/control-containing text is not sanitized into a stronger text identity.
+These rules do not certify every grammar or authenticate disclosures.
+
 ## Run Locally
 
 ```bash
@@ -81,6 +115,9 @@ go test ./pkg/scanner -run '^$' -fuzz '^FuzzHTTPHeaderBoundaries$' -fuzztime=15s
 go test -race ./pkg/scanner -run 'Test(LDAP|TDS)' -count=10
 go test ./pkg/scanner -run '^$' -fuzz '^FuzzLDAPBindFraming$' -fuzztime=15s -parallel=2
 go test ./pkg/scanner -run '^$' -fuzz '^FuzzTDSPreloginFraming$' -fuzztime=15s -parallel=2
+go test -race ./pkg/scanner -run 'Test(TextTransactions|RESP|Transaction|CloseDelimited|WriteFirstText|GenericProbeKeeps|ObservedBanner|RedisBulk|IRCAndRESP)' -count=20
+go test ./pkg/scanner -run '^$' -fuzz '^FuzzTextTransactionFragmentation$' -fuzztime=15s -parallel=2
+go test ./pkg/scanner -run '^$' -fuzz '^FuzzObservedBannerConfidence$' -fuzztime=15s -parallel=2
 ```
 
 The fuzz targets compare complete/fragmented reader outcomes, input ownership,
@@ -99,10 +136,13 @@ protocol parsing; update this matrix with new negative cases and limits.
   token streams, TDS 8 TLS-first sessions, legacy 4.2 or unknown future options.
   Packet numbering and fixed-connection context are structural checks, not a
   cryptographic response identifier or authentication.
-- RESP/IRC/generic write-first probes need protocol-specific transaction
-  termination, not a generic greeting reader substituted for binary/bulk data.
-- Retaining partial text bytes does not establish a complete product/version;
-  truncated-text confidence policies need their own protocol-specific review.
+- RESP framing covers RESP2 used by INFO, not HELLO/RESP3, streaming aggregates,
+  subscriptions or authenticated sessions. A generic RESP value alone does not
+  identify a Redis product/version.
+- IRC framing covers the existing registration exchange, not a full client,
+  IRCv3 capability/tag negotiation or all server-specific numeric sequences.
+- Generic readers cover the listed probe transactions, not arbitrary binary
+  protocols, general IMAP literals, every HTTP extension or pipelined sessions.
 - These tests do not certify all server implementations, hostile timing/loss,
   or all TLS/protocol variants. Live lab validation remains opt-in.
 
@@ -114,3 +154,5 @@ protocol parsing; update this matrix with new negative cases and limits.
 - [LDAP protocol and encoding](https://www.rfc-editor.org/rfc/rfc4511.html)
 - [TDS PRELOGIN](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-tds/60f56408-0188-4cd5-8b90-25c6f2423868)
 - [TDS packet sequencing](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-tds/3420734b-287b-4cde-a0dd-538c770a89a1)
+- [RESP wire format](https://redis.io/docs/latest/develop/reference/protocol-spec/)
+- [IRC client protocol](https://www.rfc-editor.org/rfc/rfc2812.html)

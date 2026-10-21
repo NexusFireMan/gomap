@@ -1,6 +1,7 @@
 package scanner
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/binary"
 	"fmt"
@@ -16,6 +17,10 @@ func readTextGreeting(r io.Reader) string {
 		n, err := r.Read(buffer[used:])
 		chunk := buffer[used : used+n]
 		used += n
+		if err == nil && used >= 2 && respPrefix(buffer[0], buffer[1]) {
+			response, _ := readTextTransaction(bufio.NewReaderSize(io.MultiReader(bytes.NewReader(buffer[:used]), r), 512), "")
+			return response
+		}
 		binaryData := false
 		for _, c := range chunk {
 			if c < 32 && c != '\r' && c != '\n' && c != '\t' {

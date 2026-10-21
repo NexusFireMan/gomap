@@ -589,6 +589,16 @@ func (s *Scanner) addJitter() {
 // grabBanner attempts to grab the service banner
 func (s *Scanner) grabBanner(conn net.Conn, port int, result *ScanResult) {
 	var banner string
+	defer func() {
+		path := result.DetectionPath
+		if banner != "" && (strings.HasPrefix(path, "banner-parser") || strings.HasPrefix(path, "deep-version") || path == "active-probe" || path == "portmap-fallback" || path == "open-port-fallback") {
+			if _, incomplete := observedBannerText(banner); incomplete {
+				result.Confidence = "low"
+				result.Version = ""
+				result.Evidence += "; incomplete or malformed response; product/version withheld"
+			}
+		}
+	}()
 	if s.CaptureUnknown {
 		defer func() {
 			if result.Confidence == "low" && (result.DetectionPath == "portmap-fallback" || result.DetectionPath == "open-port-fallback") {
@@ -788,10 +798,10 @@ func (s *Scanner) grabBanner(conn net.Conn, port int, result *ScanResult) {
 	}
 
 	// Parse the banner to extract service and version
-	serviceName, version := parseBanner(banner)
+	serviceName, version := parseObservedBanner(banner)
 	if !s.GhostMode && (port == 21 || serviceName == "ftp") && (serviceName == "" || (serviceName == "ftp" && isWeakFTPVersion(version))) {
 		if ftpBanner := s.probeFTP(port); ftpBanner != "" {
-			if ftpService, ftpVersion := parseBanner(ftpBanner); ftpService == "ftp" {
+			if ftpService, ftpVersion := parseObservedBanner(ftpBanner); ftpService == "ftp" {
 				serviceName = ftpService
 				if ftpVersion != "" && (version == "" || !isWeakFTPVersion(ftpVersion)) {
 					version = ftpVersion
@@ -802,7 +812,7 @@ func (s *Scanner) grabBanner(conn net.Conn, port int, result *ScanResult) {
 	}
 	if !s.GhostMode && s.DeepVersion && serviceName != "" && shouldDeepenVersion(serviceName, version) {
 		if deepBanner := s.tryDeepVersionProbe(port, serviceName); deepBanner != "" {
-			if deepService, deepVersion := parseBanner(deepBanner); deepService != "" {
+			if deepService, deepVersion := parseObservedBanner(deepBanner); deepService != "" && deepVersion != "" {
 				deepProbeUsed = true
 				serviceName = deepService
 				if deepVersion != "" && (version == "" || isWeakVersion(version)) {
@@ -833,7 +843,7 @@ func (s *Scanner) grabBanner(conn net.Conn, port int, result *ScanResult) {
 			result.Confidence = bannerIdentificationConfidence(banner, version)
 			result.Evidence = "protocol banner"
 		} else {
-			result.Confidence = "medium"
+			result.Confidence = bannerIdentificationConfidence(banner, "")
 			if fallback := unparsedVersionForPort(port); fallback != "" {
 				result.Version = fallback
 				result.Evidence = "protocol response received but not recognized"
@@ -886,13 +896,11 @@ func (s *Scanner) grabBanner(conn net.Conn, port int, result *ScanResult) {
 	} else {
 		if !s.GhostMode && shouldRetryMappedTextProbe(port, result.ServiceName) {
 			if retryBanner := s.tryServiceProbe(port); retryBanner != "" {
-				if retryService, retryVersion := parseBanner(retryBanner); retryService != "" {
+				if retryService, retryVersion := parseObservedBanner(retryBanner); retryService != "" {
+					banner = retryBanner
 					result.ServiceName = retryService
 					result.Version = retryVersion
 					result.Confidence = bannerIdentificationConfidence(retryBanner, retryVersion)
-					if retryVersion == "" {
-						result.Confidence = "medium"
-					}
 					result.Evidence = "protocol probe"
 					result.DetectionPath = "active-probe"
 					return
@@ -968,13 +976,7 @@ func (s *Scanner) tryConnectedTextProbe(conn net.Conn, port int) (string, bool) 
 
 func (s *Scanner) probeTextServiceOnConn(conn net.Conn, payload string) string {
 	timeout := s.boundedServiceTimeout(900*time.Millisecond, 1800*time.Millisecond)
-	if err := conn.SetDeadline(time.Now().Add(timeout)); err != nil {
-		return ""
-	}
-	if _, err := conn.Write([]byte(payload)); err != nil {
-		return ""
-	}
-	return readTextGreeting(conn)
+	return exchangeTextTransaction(conn, payload, timeout)
 }
 
 func noGreetingVersionForPort(port int) string {
@@ -1246,7 +1248,7 @@ func (s *Scanner) tryDeepVersionProbe(port int, serviceName string) string {
 	}
 	for _, payload := range deepVersionPayloads(port, serviceName) {
 		if response := s.probeTextServiceWriteFirstWithTimeout(port, payload, 700*time.Millisecond, 1500*time.Millisecond); response != "" {
-			if service, _ := parseBanner(response); service != "" {
+			if service, _ := parseObservedBanner(response); service != "" {
 				return response
 			}
 		}
@@ -1330,6 +1332,19 @@ func evidenceFromBanner(banner string) string {
 	if evidence := httpBannerEvidence(banner); evidence != "" {
 		return evidence
 	}
+	if payload, ok := respBulkPayload(banner); ok {
+		if matches := redisInfoVersionRE.FindAllSubmatch(payload, -1); len(matches) == 1 {
+			return "RESP bulk reply; redis_version:" + string(matches[0][1])
+		}
+	}
+	if end := strings.LastIndexByte(banner, '\n'); end >= 0 {
+		if service, _ := parseObservedBanner(banner); service == "irc" {
+			_, evidence := ircDisclosure(banner[:end+1])
+			if evidence != "" {
+				return evidence
+			}
+		}
+	}
 	for _, line := range strings.Split(banner, "\n") {
 		line = sanitizeVersionString(line)
 		if line == "" {
@@ -1379,25 +1394,7 @@ func (s *Scanner) probeTextService(port int, payload string) string {
 	}
 	defer func() { _ = conn.Close() }()
 
-	_ = conn.SetDeadline(time.Now().Add(timeout))
-
-	var response strings.Builder
-	buf := make([]byte, 2048)
-
-	// Read initial greeting if present
-	if n, _ := conn.Read(buf); n > 0 {
-		response.Write(buf[:n])
-	}
-
-	_, _ = conn.Write([]byte(payload))
-
-	// Read probe response
-	if n, _ := conn.Read(buf); n > 0 {
-		response.WriteByte('\n')
-		response.Write(buf[:n])
-	}
-
-	return response.String()
+	return exchangeTextTransaction(conn, payload, timeout)
 }
 
 // tryGenericServiceProbes improves detection for services exposed on non-standard ports.
@@ -1410,7 +1407,7 @@ func (s *Scanner) tryGenericServiceProbes(port int) string {
 
 	for _, payload := range probes {
 		if response := s.probeTextServiceWriteFirst(port, payload); response != "" {
-			if service, _ := parseBanner(response); service != "" {
+			if service, _ := parseObservedBanner(response); service != "" {
 				return response
 			}
 		}
@@ -1424,7 +1421,7 @@ func (s *Scanner) tryGenericServiceProbes(port int) string {
 func (s *Scanner) tryExhaustiveServiceProbes(port int) string {
 	for _, payload := range exhaustiveServiceProbePayloads() {
 		if response := s.probeTextServiceWriteFirstWithTimeout(port, payload, 350*time.Millisecond, 700*time.Millisecond); response != "" {
-			if service, _ := parseBanner(response); service != "" {
+			if service, _ := parseObservedBanner(response); service != "" {
 				return response
 			}
 		}
@@ -1460,15 +1457,7 @@ func (s *Scanner) probeTextServiceWriteFirstWithTimeout(port int, payload string
 	}
 	defer func() { _ = conn.Close() }()
 
-	_ = conn.SetDeadline(time.Now().Add(timeout))
-	_, _ = conn.Write([]byte(payload))
-
-	buf := make([]byte, 2048)
-	n, _ := conn.Read(buf)
-	if n == 0 {
-		return ""
-	}
-	return string(buf[:n])
+	return exchangeTextTransaction(conn, payload, timeout)
 }
 
 // tryProtocolFingerprint performs protocol-aware detection for services that often need active handshakes.
@@ -1486,11 +1475,15 @@ func (s *Scanner) tryProtocolFingerprint(port int) (service, version, confidence
 		}
 	case 6667, 6697:
 		if response := s.probeTextService(port, "NICK gomap\r\nUSER gomap 0 * :GoMap\r\n"); response != "" {
-			if service, version := parseBanner(response); service == "irc" {
+			if service, version := parseObservedBanner(response); service == "irc" {
 				if version == "" {
 					version = "IRC service"
 				}
-				return service, version, bannerConfidence(version), "IRC protocol response", "protocol-fingerprint", true
+				evidence := evidenceFromBanner(response)
+				if _, incomplete := observedBannerText(response); incomplete {
+					evidence += "; incomplete disclosure; product/version withheld"
+				}
+				return service, version, bannerIdentificationConfidence(response, version), evidence, "protocol-fingerprint", true
 			}
 		}
 	case 53:
