@@ -56,6 +56,66 @@ These format comparisons deliberately do not rescan changing targets. Separate
 CLI/output regressions run in normal CI. Raw responses stay in temporary files;
 only reviewed, aggregate results belong in public documentation.
 
+## CONNECT Repeatability Matrix
+
+Use this narrower opt-in matrix to isolate discovery from service-probe time.
+It runs the curated TCP set three times at each of 32 and 128 workers on both
+authorized VMs, sequentially. Each scan uses a fixed 150 ms timeout, zero
+retries, and per-host/global limits of 500 connection attempts per second.
+This short timeout is a local-lab profile, not a VPN recommendation.
+
+```bash
+GOMAP_RUN_CONNECT_VARIANCE_TESTS=1 GOMAP_LAB_REVISION=$(git rev-parse HEAD) \
+  GOTOOLCHAIN=go1.26.9 go test ./pkg/scanner \
+  -run '^TestConnectVarianceLab$' -count=1 -timeout=4m -v
+```
+
+Set `GOMAP_LAB_WINDOWS_IP` and `GOMAP_LAB_LINUX_IP` to override the same two
+authorized defaults. `GOMAP_LAB_PORTS=-` explicitly opts into TCP 1-65535;
+increase the process timeout (for example `-timeout=60m`) for that silent-port-heavy matrix. The default
+command does not execute a full-range live benchmark. Keep these runs separate
+from other scans and record competing CPU/network workloads.
+
+The test reports scope/confirmed-state throughput and minimum, maximum, mean
+and spread for identical settings. It fails on missing baseline services,
+duplicate results, inconsistent accounting or any changed open-port set,
+including changes between worker profiles. Such failures require investigation:
+dynamic listeners, VM restarts and filtering are not automatically scanner bugs.
+Filtered/unknown ports remain inconclusive even when every repetition agrees.
+Do not select only passing/fast runs or treat the fixed fixture anchor list as
+an exhaustive inventory. Keep private logs outside the repository.
+
+Normal CI separately runs `TestConnectRepeatabilityUnderMixedFailures` without
+network access: 1024 and 65535 unique ports (plus duplicate inputs), 1/32/128
+workers and zero/one retry. Synthetic timeouts, refusals, successful retries and
+yielded completion order must preserve exact open sets, streamed results,
+connection closure and diagnostic accounting. This validates bookkeeping, not
+kernel packet delivery or live-network completeness.
+
+### Curated Matrix Record
+
+On October 21, 2026, the default matrix passed all twelve scans on production
+revision `3e7b8051d3ab5f74a9825108154a56134f753c21` with test-only additions.
+Windows retained the same 20 open ports and 976 refusals in every run; Linux
+retained the same seven open ports, two refusals and 987 timeout-inferred ports.
+The test compared port identities, not just these counts. No service detection,
+firewall/NIC changes or external scanner was involved in this matrix.
+
+| Host Role | Workers | Samples | Min / Max / Mean | Spread |
+| --- | ---: | ---: | --- | ---: |
+| Windows | 32 | 3 | 3.060 / 3.383 / 3.255 s | 0.322 s |
+| Windows | 128 | 3 | 3.355 / 3.441 / 3.387 s | 0.085 s |
+| Linux | 32 | 3 | 4.905 / 5.162 / 4.991 s | 0.256 s |
+| Linux | 128 | 3 | 3.391 / 3.956 / 3.681 s | 0.564 s |
+
+Durations/spreads are truncated from individual high-resolution measurements;
+rounded endpoint subtraction can differ by 1 ms. Local lint compilation
+overlapped part of the run, so this is a repeatability observation, not a
+CPU-isolated benchmark. More workers did not consistently improve Windows
+timings. These results justify neither changing defaults nor closing the
+full-range/VPN stability task. The live matrix covered 996 ports per host,
+not 65535; the full-range matrix in this change used simulated connections.
+
 ## Reporting Template
 
 Record the code revision (and dirty source diff, when applicable), toolchain,
