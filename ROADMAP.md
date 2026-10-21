@@ -11,13 +11,13 @@ GoMap's roadmap focuses on improving reliability, test coverage, documentation, 
 - [x] Add passive/connected greeting and FTP/mail conversation regressions, including TLS, numeric multiline replies, capture limits and fixed per-read deadlines.
 - [x] Add strict RDP confirmation/negotiation tests, malformed/unoffered selections, failure replies and a loopback TLS certificate upgrade.
 - [x] Add HTTP/TLS collection and parser regressions for fragmented headers, incomplete/ambiguous headers, body/header separation, chunked titles and redirect non-following.
-- [ ] Extend equivalent deterministic stream/negative fixtures to LDAP and TDS before considering those readers fully reviewed.
+- [x] Review bounded LDAP/LDAPS anonymous BindResponse and TDS 7.x PRELOGIN readers with deterministic split/truncation/negative fixtures, response structure/correlation checks, fixed deadlines, loopback exchanges and fuzz tests; broader LDAP operations and TDS sessions remain outside this review.
 - [ ] Add protocol-complete RESP/IRC/generic write-first transaction framing and review truncated-text identification confidence separately from retaining partial evidence.
 - Require new service probes to extend the [regression matrix](docs/SERVICE_DETECTION_TESTS.md); a completed baseline does not certify every protocol variant.
 - [x] Raise the enforced total statement coverage floor past 25% to 40%, consistently in local checks and CI.
 - [ ] Raise the enforced total statement coverage floor to 60% with sufficient headroom and meaningful tests.
 - Integrated v2.5.0 validation reached 59.3% total coverage. Parser regressions do not imply complete installer/updater or CLI entry-point coverage; those remain follow-up work.
-- Consolidated development validation reaches 67.1% total statement coverage; the enforced floor is 40%, not 60%.
+- Development validation including the LDAP/TDS reader review reaches 68.9% total statement coverage; the enforced floor is 40%, not 60%.
 
 ## Detection and Scan Reliability
 

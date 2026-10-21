@@ -1918,27 +1918,7 @@ func (s *Scanner) detectMSSQLTDS(port int) bool {
 	}
 	defer func() { _ = conn.Close() }()
 
-	prelogin := []byte{
-		0x12, 0x01, 0x00, 0x34, 0x00, 0x00, 0x00, 0x00,
-		0x00, 0x00, 0x1a, 0x00, 0x06, 0x01, 0x00, 0x20,
-		0x00, 0x01, 0x02, 0x00, 0x21, 0x00, 0x01, 0x03,
-		0x00, 0x22, 0x00, 0x04, 0x04, 0x00, 0x26, 0x00,
-		0x01, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-		0x00, 0x00, 0x00, 0x00,
-	}
-
-	_ = conn.SetDeadline(time.Now().Add(timeout))
-	_, _ = conn.Write(prelogin)
-
-	buf := make([]byte, 256)
-	n, err := conn.Read(buf)
-	if err != nil || n < 8 {
-		return false
-	}
-
-	// Typical TDS response packet type is 0x04 (tabular result) or 0x12 (prelogin response).
-	return buf[0] == 0x04 || buf[0] == 0x12
+	return probeTDSPrelogin(conn, timeout)
 }
 
 func (s *Scanner) detectRDPInfo(port int) (version, evidence string, ok bool) {
@@ -2053,22 +2033,7 @@ func (s *Scanner) detectLDAPBind(port int, useTLS bool) bool {
 	}
 	defer func() { _ = conn.Close() }()
 
-	// Anonymous LDAPv3 bind request.
-	bindReq := []byte{0x30, 0x0c, 0x02, 0x01, 0x01, 0x60, 0x07, 0x02, 0x01, 0x03, 0x04, 0x00, 0x80, 0x00}
-	_ = conn.SetDeadline(time.Now().Add(timeout))
-	_, _ = conn.Write(bindReq)
-
-	buf := make([]byte, 256)
-	n, err := conn.Read(buf)
-	if err != nil || n < 8 {
-		return false
-	}
-
-	// LDAPMessage sequence + bindResponse application tag.
-	if buf[0] != 0x30 {
-		return false
-	}
-	return strings.Contains(string(buf[:n]), "LDAP") || (n > 5 && buf[5] == 0x61)
+	return probeLDAPBind(conn, timeout)
 }
 
 func (s *Scanner) detectWinRM(port int) (string, string) {
