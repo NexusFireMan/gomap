@@ -17,7 +17,7 @@ GoMap's roadmap focuses on improving reliability, test coverage, documentation, 
 - [x] Raise the enforced total statement coverage floor past 25% to 40%, consistently in local checks and CI.
 - [ ] Raise the enforced total statement coverage floor to 60% with sufficient headroom and meaningful tests.
 - Integrated v2.5.0 validation reached 59.3% total coverage. Parser regressions do not imply complete installer/updater or CLI entry-point coverage; those remain follow-up work.
-- Development validation including the text-transaction/confidence review reaches 70.6% total statement coverage; the enforced floor is 40%, not 60%.
+- Development validation including the DNS/WSMan confidence review reaches 71.5% total statement coverage; the enforced floor is 40%, not 60%.
 
 ## Detection and Scan Reliability
 
@@ -57,6 +57,7 @@ GoMap's roadmap focuses on improving reliability, test coverage, documentation, 
 - [x] Extend isolated SYN response fixtures and cleanup failure tests without privileged sockets or NIC changes.
 - [x] Add negative fixtures for malformed SIP/RTSP, RFB, and Memcached signatures and forged body headers.
 - [ ] Extend confidence review across all protocol-specific detection paths; distinguish protocol evidence from product/version disclosure.
+- [x] Review TCP CHAOS `version.bind` and the HTTP response to `OPTIONS /wsman`: validate complete/correlated DNS fields, retain server-declared text without assuming BIND, and distinguish HTTP disclosures from confirmed WinRM. Other specialized paths remain under the confidence-review item above.
 - [x] Preserve explicit UDP states in text, JSON, JSONL, and CSV; count only confirmed open ports.
 - [x] Support `--version` and options before or after the CLI target.
 - [x] Separate CONNECT timeout port counters from actual timeout budgets; distinguish inferred-filtered timeouts, confirmed refusals and unknown failures without concealing incomplete coverage.
