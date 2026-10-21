@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestSMBNegotiationRequiresMatchingResponse(t *testing.T) {
@@ -100,5 +101,14 @@ func TestSpecializedGenericDisclosuresStayQualified(t *testing.T) {
 	}
 	if !strings.Contains(rpcAcceptedEvidence(100003, 3, 2049), "RPC #100003 accepted v3") {
 		t.Fatal("RPC evidence lost program/version scope")
+	}
+}
+
+func TestMySQLDeadlineFailureWithholdsIdentity(t *testing.T) {
+	trap := &greetingReadTrap{}
+	conn := &textFragmentConn{transportFixtureConn: transportFixtureConn{r: trap}, deadlineErr: io.ErrClosedPipe}
+	version, evidence := detectMySQLGreetingFromConn(conn, time.Second)
+	if version != "" || evidence != "" || trap.calls != 0 || conn.deadlines != 1 {
+		t.Fatal("MySQL continued reading without an enforceable deadline")
 	}
 }

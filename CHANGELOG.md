@@ -8,6 +8,7 @@ Note: this changelog is maintained from this point forward in the project histor
 
 ### Added
 
+- Add an opt-in two-VM release regression: repeated quick CONNECT scans, deep probes, full TCP range, explicit coverage accounting and JSON/JSONL/CSV preservation checks on the same captured observations. Fail rather than skip unavailable lab hosts or missing baseline services.
 - Add bounded RESP2 INFO, IRC registration and generic write-first transaction readers with deterministic split/truncation/error fixtures, loopback exchanges, early-completion/message-boundary tests and fuzz targets. Cover numeric replies, POP3 CAPA, tagged IMAP CAPABILITY and HTTP/RTSP/SIP response framing used by existing probes.
 - Add deterministic LDAP/LDAPS and TDS PRELOGIN regression fixtures covering split reads, truncation/errors, final EOF bytes, message boundaries, malformed fields, bounded packet assembly, unchanged requests and fixed deadlines; add loopback exchanges and fuzz targets without external hosts.
 - Add strict `--host-config` JSON overrides for exact-IP CONNECT/UDP timeout, adaptive timing and retry settings, with per-host initial settings in JSON run metrics.
@@ -34,6 +35,7 @@ Note: this changelog is maintained from this point forward in the project histor
 
 ### Fixed
 
+- Keep generic MySQL rejection packets and text-only SMB mentions at medium confidence, reject control-containing MySQL version fields and honor greeting deadline failures. Correlate native SMB2/3 negotiation with the request's message/session IDs, offered protocol family and bounded security buffer; report the selected dialect without OS attribution. Reject trailing procedure results in successful ONC RPC NULL replies. Remove Windows-release inference from IIS version numbers.
 - Separate RDP negotiation selections, rejections and X.224-only hints from Microsoft/Windows product claims. Report TLS completion separately from selection and label certificate names unverified; share the original RDP deadline across negotiation and TLS, and stop on deadline/write failures. Report validated TDS PRELOGIN sender-version/encryption fields without asserting Microsoft SQL Server, an OS, a negotiated TDS version or an established TLS/login session. Add deterministic negative, stream, loopback TLS and fuzz regressions.
 - Validate TCP `version.bind` framing, response flags, query/answer fields and a single complete TXT value before reporting server-declared text at medium confidence; do not infer BIND from arbitrary TXT content. Assemble existing `OPTIONS /wsman` replies within the same deadline and report HTTP/HTTPS disclosures rather than asserting WinRM from HTTPAPI, Negotiate, a port number or body text. Suppress ambiguous product headers and authentication tokens from this path's evidence.
 - Send existing Redis INFO and IRC registration payloads before waiting for responses; collect complete RESP bulk bodies and later IRC disclosure lines instead of reducing replies to a length line or initial NOTICE. Keep evidence and product/version tied to the same complete observation.
@@ -47,6 +49,13 @@ Note: this changelog is maintained from this point forward in the project histor
 - Rename ambiguous CONNECT warning counters such as `timeout=N` to `timeout_ports=N`; show timeout budgets separately and retain unresolved completeness warnings without treating silence as a confirmed closure.
 - Retain an overflow byte in generic UDP reads so oversized datagrams cannot be classified from a silently truncated prefix; preserve final received bytes when a read also returns an error.
 - Reconcile UDP documentation with optional authenticated sessions and discovery queries instead of retaining obsolete claims that these paths are unimplemented.
+
+### Compatibility And Known Limits
+
+- Structured per-result schemas and CSV headers remain unchanged. Identification labels/confidence are intentionally more conservative; consumers must not treat free-form version/evidence strings as stable product identifiers.
+- Fingerprints and declared versions are observations, not vulnerability or OS confirmation. Native SMB negotiates only offered SMB 2.0.2-3.0.2 dialects; text mentions/port hints do not establish SMB server identity. RDP certificate names are unverified, and HTTPAPI does not establish WinRM.
+- Silent CONNECT ports remain inconclusive/inferred filtered, never confirmed closed. A passing lab metadata regression does not certify full coverage or guarantee stable counts across VM restarts, filtering or dynamic services. See [release readiness](docs/RELEASE_READINESS.md).
+- End-to-end SYN and native netlink rollback validation remain pending in a disposable disconnected lab. Authenticated SNMP, application reassembly and IP fragment handling retain the documented bounded scopes; these changes do not add universal protocol support.
 
 ## [2.5.0] - 2026-10-07
 

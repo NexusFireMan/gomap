@@ -103,6 +103,16 @@ go test ./pkg/app -run LabIntegration -v
 
 Do not run integration tests against systems you are not authorized to scan.
 
+For the explicit two-Metasploitable release gate, including a full TCP range:
+
+```bash
+GOMAP_RUN_RELEASE_LAB_TESTS=1 go test ./pkg/app -run '^TestReleaseLabRegression$' -count=1 -timeout=15m -v
+```
+
+Unlike the older integration smoke tests, this gate fails on unavailable hosts
+or missing baseline services. See [release readiness](docs/RELEASE_READINESS.md)
+for its controlled profiles, reporting template and incomplete-coverage policy.
+
 Optional SNMPv3 interoperability tests use a real Net-SNMP agent in a disposable
 Docker container with no network other than its own loopback. They are skipped
 by normal CI, generate private temporary credentials and remove their container:

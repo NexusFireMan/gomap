@@ -29,10 +29,43 @@ scanners are required. IP/application UDP fragments are covered separately in
 | TCP DNS version disclosure | Exact frame boundary; successful, non-truncated response; fixed ID and question/answer name/type/class correlation; one TXT value; malformed, ambiguous and control-containing replies rejected; no automatic BIND attribution |
 | Candidate WSMan HTTP | Existing OPTIONS request over chunked loopback; every-split header assembly; complete headers, ambiguous Server suppression and body isolation; no authentication-token disclosure or WinRM confirmation from generic HTTP |
 
+## Identification Confidence Review
+
+This inventory covers current production routes through `grabBanner`,
+`tryProtocolFingerprint`, UDP classification and opt-in UDP sessions. Confidence
+applies to the stated observation, not automatically to a product, OS or owner.
+High confidence never means that all variants or malformed inputs are certified.
+
+| Route | Supported Observation And Confidence | Not Established |
+| --- | --- | --- |
+| MySQL initial packet | Complete bounded packet and declared version field; generic ERR rejection medium, absent/invalid greeting low | Full SQL session, authenticated vendor/build; control-containing version text rejected |
+| SMB native | High for validated offered SMB2/3 dialect, matching zero message/session IDs and bounded security buffer | Highest supported dialect, Windows/Samba identity, authentication or signing enforcement |
+| SMB text / TCP139 | Text mentions medium; unanswered NetBIOS session/port hint low | Native SMB negotiation or server OS |
+| ONC RPC / NFS / mountd / lock manager / status / ACL | High for correlated accepted NULL program/version reply with no procedure-result body | Daemon build, exports, OS or working non-NULL operations |
+| DCE/RPC | High for validated bind acknowledgment; accepted/rejected interface context retained | Windows identity; rejected context does not establish interface support |
+| JRMP / AJP | High for acknowledged transport ping / CPONG | JVM, Tomcat or application version; no remote calls/deserialization |
+| LDAP/LDAPS | Medium for correlated bounded anonymous BindResponse | Directory vendor/version or authenticated session |
+| DNS version.bind / WSMan candidate / RDP / TDS | Scope and confidence described in the dedicated regressions below | Automatic BIND/WinRM/Microsoft/Windows attribution |
+| TLS-only | High for transport; application port guess low | Certificate trust, host ownership or application identity |
+| HTTP and text banners | Complete disclosed fields may be high; generic descriptions/titles medium; incomplete disclosure low | Independent product/OS verification; IIS versions no longer imply Windows releases |
+| UDP shape/correlated discovery | Medium for bounded supported shapes and, when available, matching probe fields; unknown payload/port hint low | Server identity, replay resistance or actual closed state from silence |
+| Authenticated SNMPv3 | High for the supported cryptographically validated response, identifiers/engine/time window and optional AES-128 | Product version or support for every SNMP algorithm/variant |
+| Memcached UDP / NetBIOS datagrams | Medium for bounded correlated query/reassembly; incomplete/unmatched reply low | Cache contents, server identity or universal datagram interoperability |
+
+MySQL rejection, text SMB, native SMB correlation/security ranges, RPC NULL
+trailing results and IIS/Windows inference have dedicated negative fixtures in
+`specialized_confidence_test.go`. Existing framing, transport, UDP and secure
+session tests cover the other rows. Native SMB1 replies cannot satisfy this
+SMB2-only request, though legacy pure text parsers remain available for fixtures.
+SMB protocol details follow [Microsoft's negotiation example](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-smb2/c9efe8ca-ff34-44d0-bfbe-58a9b9db50d4);
+NULL procedure scope follows [RFC 5531](https://www.rfc-editor.org/rfc/rfc5531.html).
+
+## Disclosure And Framing Regressions
+
 The DNS/WSMan confidence review covers these two paths, not every specialized
 fingerprint. `version.bind` is server-configurable text, and HTTPAPI/Negotiate do
-not uniquely identify WinRM. Other product/platform attributions remain tracked
-in `ROADMAP.md`. The WSMan candidate probe sends the same OPTIONS request and
+not uniquely identify WinRM. The inventory above distinguishes the other current
+paths; new probes must add their own review. The WSMan candidate probe sends the same OPTIONS request and
 uses one existing deadline with a 4096-byte header cap and at most 34 lines;
 collection stops at the header terminator without waiting for a body or close.
 Complete Server headers remain usable even when the later body is incomplete. DNS reuses the
@@ -55,7 +88,7 @@ not a marketing release, TDS wire version or inferred Windows platform. Zero
 sender versions are withheld; ENCRYPTION values are declared options, not a
 completed TLS session. No TDS TLS/login/query traffic is added. Other optional
 fields and padding are not copied into evidence. These are bounded subsets,
-not a review of all RDP/TDS sessions or the remaining specialized fingerprints.
+not a review of all RDP/TDS sessions or a substitute for other paths' fixtures.
 
 ```bash
 go test -race ./pkg/scanner -run 'Test(RDP|TDS)' -count=20

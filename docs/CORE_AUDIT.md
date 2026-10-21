@@ -1,5 +1,11 @@
 # Core Reliability Audit
 
+This is the historical core-audit record, not the current release sign-off.
+Subsequent framing/confidence work is recorded in the
+[service regression matrix](SERVICE_DETECTION_TESTS.md), [roadmap](../ROADMAP.md)
+and [release readiness checklist](RELEASE_READINESS.md). Original toolchain and
+remaining-work statements below describe that earlier baseline.
+
 ## Scope
 
 Reviewed the CLI, target/port planning, TCP/UDP/SYN engines, protocol detection, source-address lifecycle, report rendering, updater, dependencies and tracked contributor/release documentation. Changes target `dev` through a PR; no release or new scan mode is included.

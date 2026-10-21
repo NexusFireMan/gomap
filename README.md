@@ -410,6 +410,8 @@ Important: banner-based detection is heuristic. Always validate critical finding
 
 Generic banner descriptions carry medium confidence. High banner confidence means a recognized disclosure, not independent confirmation of a product version or operating system. RFB and SMB versions describe their protocols; TLS metadata describes the encrypted transport. SIP/RTSP identification requires a valid response status line, and product headers are read only before the response body.
 
+IIS headers disclose the IIS version only, not a Windows release inferred from it. MySQL rejection packets and text-only SMB mentions remain medium-confidence hints. Native SMB accepts only responses matching its SMB2/3 request and an offered dialect; ONC RPC NULL success confirms the requested program/protocol version, not a daemon build or OS. The [current confidence review](docs/SERVICE_DETECTION_TESTS.md#identification-confidence-review) records the scope of each specialized path. See [release readiness and lab validation](docs/RELEASE_READINESS.md) before promoting development changes.
+
 HTTP page titles are content hints and carry medium confidence, even when they mention a product version. A TLS-only handshake confirms the transport, not the application: an application label inferred from its port stays low confidence. HTTP and SSH response lines must be syntactically valid before their banners are accepted.
 
 TCP CHAOS `version.bind` replies are reported as `DNS version.bind: <declared text>` at medium confidence, not automatically as BIND. This bounded path requires matching query ID/name/type/class, successful response flags and one unambiguous TXT answer; its fixed query ID and server-configurable text do not authenticate identity. See [ISC's explanation of configurable version replies](https://kb.isc.org/docs/aa-00359).
@@ -603,6 +605,19 @@ The run identified services on standard and non-standard ports, including Java R
 This benchmark is a practical local-lab reference, not a universal performance guarantee. Metasploitable services can restart or expose dynamic ports between runs. It is not directly comparable with the historical HTB benchmark above: that benchmark used a different target, network path, and port set.
 
 The historical `WinRM` highlight predates the current confidence review. A generic response to `OPTIONS /wsman` now reports HTTP/HTTPS with `WinRM not confirmed`; no new benchmark measurement is implied by this documentation update.
+
+### Controlled Release Regression, October 21, 2026
+
+A newer authorized two-VM regression on unreleased code used explicit rate and timeout limits, not the older default-speed profile:
+
+| Profile | Ports Per Host | Open Windows / Linux | Unresolved Windows / Linux | Duration, Both Hosts |
+| --- | ---: | ---: | ---: | ---: |
+| Quick, first run | 996 | 22 / 7 | 0 / 987 | 28.754 s |
+| Quick, second run | 996 | 22 / 7 | 0 / 987 | 27.526 s |
+| Deep, selected ports | 20 | 16 / 7 | 0 / 12 | 1.975 s |
+| Full TCP range | 65535 | 39 / 9 | 8 / 65524 | 332.694 s |
+
+Baseline services, coverage accounting and JSON/JSONL/CSV preservation passed in every final profile. This does **not** establish complete network coverage: silent ports remain inconclusive, and an earlier preliminary run missed Linux baseline services. Settings, revision, failed/aborted attempts and limitations are recorded in the [release readiness report](docs/RELEASE_READINESS.md). Rates were 500 starts/s per host and 1000 globally; the full profile used 128 workers and a 150 ms dial timeout, versus 32 workers and 750 ms for the other profiles. Hosts were scanned sequentially, with zero retries and adaptive dial timeouts disabled. These controlled, non-CPU-isolated measurements are not comparable to the older 23.84 s benchmark.
 
 ## Per-Host Settings And Unknown Evidence
 
