@@ -4,12 +4,13 @@ GoMap's roadmap focuses on improving reliability, test coverage, documentation, 
 
 ## Quality and Coverage
 
-- [ ] Improve CLI/parser test coverage.
+- [x] Extend deterministic CLI/parser regression coverage for defaults, validation errors, option normalization, aliases, argument preservation and duration boundaries.
 - [x] Add output format regression tests, including write failures.
 - [x] Add deterministic service detection unit tests for banners, protocol fixtures, and malformed packets.
 - [ ] Extend service detection tests to fragmented responses and malformed packets as new probes are added.
-- Raise minimum coverage progressively from 10% to 25%, 40%, and 60%.
-- Integrated v2.5.0 validation reaches 59.3% total coverage; the enforced minimum remains 10% until separately reviewed threshold changes.
+- [x] Raise the enforced total statement coverage floor past 25% to 40%, consistently in local checks and CI.
+- [ ] Raise the enforced total statement coverage floor to 60% with sufficient headroom and meaningful tests.
+- Integrated v2.5.0 validation reached 59.3% total coverage. Parser regressions do not imply complete installer/updater or CLI entry-point coverage; those remain follow-up work.
 
 ## Detection and Scan Reliability
 
