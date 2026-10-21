@@ -142,7 +142,7 @@ func TestNoGreetingDetectionMetadata(t *testing.T) {
 		{110, "POP3 service (no greeting)", "port open; no pop3 greeting"},
 		{143, "IMAP service (no greeting)", "port open; no imap greeting"},
 		{2525, "SMTP service (no greeting)", "port open; no smtp greeting"},
-		{3389, "Microsoft Terminal Services", "RDP TCP/3389 open; no negotiation response"},
+		{3389, "RDP service (unconfirmed)", "RDP TCP/3389 open; no negotiation response"},
 		{3920, "TLS service (no handshake)", "port open; no TLS handshake"},
 	}
 

@@ -18,10 +18,10 @@ scanners are required. IP/application UDP fragments are covered separately in
 | JRMP | Split stream negotiation and PingAck, endpoint-length limits, incomplete/error replies, final EOF and exact bounded request bytes; no remote calls/deserialization |
 | Text greetings | Passive/connected SSH, FTP, SMTP, POP3 and IMAP fixtures; first-line and numeric multiline assembly, fixed caller deadline, 4096-byte cap and final partial-byte retention |
 | FTP and mail conversations | Existing command sequences over chunked loopback connections, SMTP/POP3/IMAP TLS paths, complete numeric multiline replies and stopping on incomplete greetings |
-| RDP | Complete 11/19-byte TPKT/X.224 confirmations, offered selections, failure responses, strict lengths/types and an actual loopback TLS upgrade/certificate CN |
+| RDP | Complete 11/19-byte TPKT/X.224 confirmations, offered selections, failure responses, strict lengths/types, low-confidence X.224-only hints, no Microsoft/Windows attribution, checked I/O failures and an actual loopback TLS upgrade with unverified CN and one original deadline |
 | HTTP/TLS | Small stream writes, metadata retention, malformed status lines, complete/unambiguous headers, body/header separation, framed/chunked titles and redirect non-following |
 | LDAP/LDAPS | Complete definite-BER frames, non-minimal length forms up to four length octets, matching request IDs, BindResponse results/optional fields, malformed primitives, request echoes, size/count limits and a loopback TLS exchange |
-| TDS 7.x PRELOGIN | Complete server reply packets, bounded multi-packet assembly, EOM/sequence/SPID checks, option-table framing/ranges, reflected request rejection, invalid values, fixed deadlines and loopback exchanges |
+| TDS 7.x PRELOGIN | Complete server reply packets, bounded multi-packet assembly, EOM/sequence/SPID checks, option-table framing/ranges, reflected request rejection, invalid values, fixed deadlines and loopback exchanges; validated sender-version/encryption disclosures without vendor/OS or active TLS claims |
 | RESP2 INFO | Simple/error/integer/bulk/array framing, nulls, binary bulk bodies, byte/depth/node/element caps, complete version fields, request-before-response and incomplete/ambiguous payload rejection |
 | IRC registration | Complete classic IRC lines, initial NOTICE plus later numerics, registration/error termination, matching version/evidence lines, line/count caps and incomplete trailing-line suppression |
 | Generic write-first | Numeric multiline, SMTP EHLO, POP3 dot termination, tagged IMAP CAPABILITY, HTTP length/chunk/close framing and RTSP/SIP headers/bodies; fixed deadlines, short-write failures and buffered next-message preservation |
@@ -42,6 +42,24 @@ answers or TXT chunks are deliberately unsupported for this disclosure path.
 ```bash
 go test -race ./pkg/scanner -run 'Test(DNSDisclosure|WSMan)' -count=20
 go test ./pkg/scanner -run '^$' -fuzz '^FuzzProtocolDisclosures$' -fuzztime=15s -parallel=2
+```
+
+The RDP/TDS confidence review preserves existing requests, parser limits and
+service aliases. RDP selection/failure responses carry medium confidence;
+X.224-only confirmations carry low confidence. A failed TLS upgrade does not
+erase earlier RDP protocol evidence, but cannot produce a certificate hostname.
+The existing certificate probe does not validate trust or authenticate the host.
+RDP TLS shares the negotiation's original deadline rather than renewing it.
+TDS displays only the first four validated VERSION bytes (major/minor/build),
+not a marketing release, TDS wire version or inferred Windows platform. Zero
+sender versions are withheld; ENCRYPTION values are declared options, not a
+completed TLS session. No TDS TLS/login/query traffic is added. Other optional
+fields and padding are not copied into evidence. These are bounded subsets,
+not a review of all RDP/TDS sessions or the remaining specialized fingerprints.
+
+```bash
+go test -race ./pkg/scanner -run 'Test(RDP|TDS)' -count=20
+go test ./pkg/scanner -run '^$' -fuzz '^FuzzNegotiationDisclosures$' -fuzztime=15s -parallel=2
 ```
 
 The stream fixtures deliberately split writes/reads without sleeps. TCP is free

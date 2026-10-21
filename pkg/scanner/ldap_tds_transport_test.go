@@ -30,7 +30,11 @@ func (c *negotiationWriteConn) Write(p []byte) (int, error) {
 }
 
 func TestLDAPAndTDSProbeIOFailures(t *testing.T) {
-	for name, probe := range map[string]func(net.Conn, time.Duration) bool{"ldap": probeLDAPBind, "tds": probeTDSPrelogin} {
+	tdsProbe := func(conn net.Conn, timeout time.Duration) bool {
+		version, _ := probeTDSPrelogin(conn, timeout)
+		return version != ""
+	}
+	for name, probe := range map[string]func(net.Conn, time.Duration) bool{"ldap": probeLDAPBind, "tds": tdsProbe} {
 		t.Run(name, func(t *testing.T) {
 			for _, failure := range []string{"deadline", "write", "short-write"} {
 				trap := &greetingReadTrap{}
@@ -59,7 +63,7 @@ func TestTDSProbeFragmentedRequestAndFixedDeadline(t *testing.T) {
 	for cut := 0; cut <= len(frame); cut++ {
 		r := io.MultiReader(bytes.NewReader(frame[:cut]), iotest.OneByteReader(bytes.NewReader(frame[cut:])))
 		conn := &textFragmentConn{transportFixtureConn: transportFixtureConn{r: r}}
-		if !probeTDSPrelogin(conn, time.Second) || conn.deadlines != 1 {
+		if version, _ := probeTDSPrelogin(conn, time.Second); version == "" || conn.deadlines != 1 {
 			t.Fatalf("split=%d: response lost or deadline renewed", cut)
 		}
 		request := conn.w.Bytes()
@@ -173,8 +177,8 @@ func TestTDSFragmentedExchange(t *testing.T) {
 			})
 			s := NewScanner("127.0.0.1", false)
 			s.Configure(ScanConfig{Timeout: 3 * time.Second, NumWorkers: 1})
-			if got := s.detectMSSQLTDS(port); got != want {
-				t.Fatalf("detected=%v want=%v", got, want)
+			if version, evidence := s.detectTDSPrelogin(port); (version != "") != want || (evidence != "") != want {
+				t.Fatalf("version=%q evidence=%q want=%v", version, evidence, want)
 			}
 			waitStreamFixture(t, done)
 		})

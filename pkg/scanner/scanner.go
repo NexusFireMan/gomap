@@ -990,7 +990,7 @@ func noGreetingVersionForPort(port int) string {
 	case 143, 993:
 		return "IMAP service (no greeting)"
 	case 3389:
-		return "Microsoft Terminal Services"
+		return "RDP service (unconfirmed)"
 	case 4848:
 		return "HTTP service (no response)"
 	case 7676:
@@ -1499,12 +1499,12 @@ func (s *Scanner) tryProtocolFingerprint(port int) (service, version, confidence
 			return "nfs", fmt.Sprintf("NFS v%d", ver), "high", rpcAcceptedEvidence(100003, ver, port), "protocol-fingerprint", true
 		}
 	case 1433:
-		if s.detectMSSQLTDS(port) {
-			return "mssql", "Microsoft SQL Server (TDS)", "medium", "tds prelogin response", "protocol-fingerprint", true
+		if version, evidence := s.detectTDSPrelogin(port); version != "" {
+			return "mssql", version, "medium", evidence, "protocol-fingerprint", true
 		}
 	case 3389:
-		if version, evidence, detected := s.detectRDPInfo(port); detected {
-			return "ms-wbt-server", version, "high", evidence, "protocol-fingerprint", true
+		if version, confidence, evidence, detected := s.detectRDPInfo(port); detected {
+			return "ms-wbt-server", version, confidence, evidence, "protocol-fingerprint", true
 		}
 	case 389:
 		if s.detectLDAPBind(port, false) {
@@ -1849,7 +1849,7 @@ func sanitizeVersionString(version string) string {
 	return version
 }
 
-func (s *Scanner) detectMSSQLTDS(port int) bool {
+func (s *Scanner) detectTDSPrelogin(port int) (string, string) {
 	address := net.JoinHostPort(s.Host, fmt.Sprintf("%d", port))
 	timeout := s.ioTimeout(1200 * time.Millisecond)
 	if timeout < 1200*time.Millisecond {
@@ -1858,23 +1858,26 @@ func (s *Scanner) detectMSSQLTDS(port int) bool {
 
 	conn, err := s.dialTCP(address, timeout)
 	if err != nil {
-		return false
+		return "", ""
 	}
 	defer func() { _ = conn.Close() }()
 
 	return probeTDSPrelogin(conn, timeout)
 }
 
-func (s *Scanner) detectRDPInfo(port int) (version, evidence string, ok bool) {
+func (s *Scanner) detectRDPInfo(port int) (version, confidence, evidence string, ok bool) {
 	address := net.JoinHostPort(s.Host, fmt.Sprintf("%d", port))
 	timeout := s.boundedServiceTimeout(900*time.Millisecond, 1800*time.Millisecond)
 
 	conn, err := s.dialTCP(address, timeout)
 	if err != nil {
-		return "", "", false
+		return "", "", "", false
 	}
 	defer func() { _ = conn.Close() }()
+	return s.probeRDPInfo(conn, timeout)
+}
 
+func (s *Scanner) probeRDPInfo(conn net.Conn, timeout time.Duration) (version, confidence, evidence string, ok bool) {
 	// TPKT + X.224 connection request with RDP Negotiation Request:
 	// request SSL or CredSSP, then inspect the selected protocol.
 	req := []byte{
@@ -1883,30 +1886,30 @@ func (s *Scanner) detectRDPInfo(port int) (version, evidence string, ok bool) {
 		0x01, 0x00, 0x08, 0x00,
 		0x03, 0x00, 0x00, 0x00,
 	}
-	_ = conn.SetDeadline(time.Now().Add(timeout))
-	if _, err := conn.Write(req); err != nil {
-		return "", "", false
+	if err := conn.SetDeadline(time.Now().Add(timeout)); err != nil {
+		return "", "", "", false
+	}
+	if n, err := conn.Write(req); err != nil || n != len(req) {
+		return "", "", "", false
 	}
 
 	buf, err := readRDPConfirm(conn)
 	if err != nil {
-		return "", "", false
+		return "", "", "", false
 	}
-
+	version, confidence, evidence, ok = rdpDisclosure(buf)
 	selected, selectedOK := parseRDPNegotiationProtocol(buf)
-	evidence = "X.224 connection confirm"
-	if len(buf) == 19 && buf[11] == 3 {
-		evidence = fmt.Sprintf("RDP negotiation failure: code=%d", binary.LittleEndian.Uint32(buf[15:19]))
-	}
-	if selectedOK {
-		evidence = "RDP negotiation: " + rdpProtocolName(selected)
-		if selected != 0 {
-			if cn := s.readRDPTLSCertificateCN(conn, timeout); cn != "" {
+	if selectedOK && selected != 0 {
+		if cn, tlsOK := s.readRDPTLSCertificateCN(conn); tlsOK {
+			evidence += "; TLS handshake completed; certificate not verified"
+			if cn != "" {
 				evidence += "; cert CN=" + cn
 			}
+		} else {
+			evidence += "; TLS handshake not completed"
 		}
 	}
-	return "Microsoft Terminal Services", evidence, true
+	return
 }
 
 func parseRDPNegotiationProtocol(data []byte) (uint32, bool) {
@@ -1936,20 +1939,23 @@ func rdpProtocolName(protocol uint32) string {
 	return strings.Join(names, "/")
 }
 
-func (s *Scanner) readRDPTLSCertificateCN(conn net.Conn, timeout time.Duration) string {
+func (s *Scanner) readRDPTLSCertificateCN(conn net.Conn) (string, bool) {
 	tlsConn := tls.Client(conn, &tls.Config{
 		InsecureSkipVerify: true,
 		ServerName:         s.Host,
 	})
-	_ = tlsConn.SetDeadline(time.Now().Add(timeout))
 	if err := tlsConn.Handshake(); err != nil {
-		return ""
+		return "", false
 	}
 	state := tlsConn.ConnectionState()
 	if len(state.PeerCertificates) == 0 {
-		return ""
+		return "", true
 	}
-	return sanitizeVersionString(state.PeerCertificates[0].Subject.CommonName)
+	cn := state.PeerCertificates[0].Subject.CommonName
+	if binaryTextObservation(cn) || strings.ContainsAny(cn, ";,=\r\n\t") {
+		return "", true
+	}
+	return sanitizeVersionString(cn), true
 }
 
 func (s *Scanner) detectLDAPBind(port int, useTLS bool) bool {

@@ -1,6 +1,23 @@
 package scanner
 
-import "encoding/binary"
+import (
+	"encoding/binary"
+	"fmt"
+)
+
+func rdpDisclosure(frame []byte) (version, confidence, evidence string, ok bool) {
+	if !validRDPConfirm(frame) {
+		return "", "", "", false
+	}
+	if len(frame) == 11 {
+		return "RDP service (unconfirmed)", "low", "X.224 connection confirm; no RDP negotiation field; product/OS not established", true
+	}
+	if frame[11] == 3 {
+		return "RDP service (negotiation rejected)", "medium", fmt.Sprintf("RDP negotiation failure: code=%d; no session established; product/OS not established", binary.LittleEndian.Uint32(frame[15:19])), true
+	}
+	selected := binary.LittleEndian.Uint32(frame[15:19])
+	return "RDP service", "medium", "RDP negotiation selected " + rdpProtocolName(selected) + "; product/OS not established", true
+}
 
 // The probe offers standard RDP, TLS and CredSSP; do not infer a protocol
 // from bytes outside the fixed X.224 Connection Confirm negotiation field.
