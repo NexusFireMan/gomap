@@ -17,6 +17,7 @@ GoMap's roadmap focuses on improving reliability, test coverage, documentation, 
 - [x] Raise the enforced total statement coverage floor past 25% to 40%, consistently in local checks and CI.
 - [ ] Raise the enforced total statement coverage floor to 60% with sufficient headroom and meaningful tests.
 - Integrated v2.5.0 validation reached 59.3% total coverage. Parser regressions do not imply complete installer/updater or CLI entry-point coverage; those remain follow-up work.
+- Consolidated development validation reaches 67.1% total statement coverage; the enforced floor is 40%, not 60%.
 
 ## Detection and Scan Reliability
 
