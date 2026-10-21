@@ -35,6 +35,8 @@ archives:
       - goos: windows
         formats: [zip]
     files:
+      - LICENSE
+      - THIRD_PARTY_NOTICES.md
       - README.md
       - CHANGELOG.md
 
@@ -55,6 +57,8 @@ nfpms:
     builds:
       - gomap
     contents:
+      - src: THIRD_PARTY_NOTICES.md
+        dst: /usr/share/doc/gomap/THIRD_PARTY_NOTICES.md
       - src: README.md
         dst: /usr/share/doc/gomap/README.md
       - src: CHANGELOG.md

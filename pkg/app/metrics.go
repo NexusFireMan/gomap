@@ -17,6 +17,7 @@ func newScanMetrics(req ScanRequest, expandedHosts int) output.ScanMetrics {
 			TimeoutMS: req.TimeoutMS, Retries: req.Retries, AdaptiveTimeout: req.AdaptiveTimeout,
 			MaxTimeoutMS: req.MaxTimeoutMS, BackoffMS: req.BackoffMS, Rate: req.Rate, GlobalRate: req.GlobalRate,
 			CaptureUnknown: req.CaptureUnknown, EvidenceBytes: req.EvidenceBytes,
+			Stream: req.Stream,
 		},
 	}
 }

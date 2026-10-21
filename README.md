@@ -15,7 +15,7 @@
 
 [![CI](https://github.com/NexusFireMan/gomap/actions/workflows/ci.yml/badge.svg)](https://github.com/NexusFireMan/gomap/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/NexusFireMan/gomap?display_name=tag)](https://github.com/NexusFireMan/gomap/releases)
-[![Go](https://img.shields.io/badge/Go-1.26.8%2B-00ADD8?logo=go&logoColor=white)](https://go.dev/)
+[![Go](https://img.shields.io/badge/Go-1.26.9%2B-00ADD8?logo=go&logoColor=white)](https://go.dev/)
 [![Docker](https://img.shields.io/badge/Docker-GHCR-2496ED?logo=docker&logoColor=white)](https://github.com/NexusFireMan/gomap/pkgs/container/gomap)
 [![CLI](https://img.shields.io/badge/Interface-CLI-2C2C2C)](https://github.com/NexusFireMan/gomap)
 [![License](https://img.shields.io/github/license/NexusFireMan/gomap)](https://github.com/NexusFireMan/gomap/blob/main/LICENSE)
@@ -28,6 +28,8 @@
 - [Current scope](#current-scope)
 - [Installation](#installation)
 - [Quick Start](#quick-start)
+- [Authenticated SNMPv3](#authenticated-snmpv3)
+- [UDP Queries And Reassembly](#udp-queries-and-reassembly)
 - [Example Output](#example-output)
 - [CLI Reference](#cli-reference)
 - [Detection Realism (`-s`)](#detection-realism--s)
@@ -68,7 +70,7 @@ A fast TCP/UDP port scanner written in Go, with optional service/version detecti
 
 ### Build from source
 
-Use Go 1.26.8 or newer. CI and release builds follow `go.mod`; the Docker builder uses the same baseline to avoid shipping older standard-library security defects.
+Use Go 1.26.9 or newer. CI and release builds follow `go.mod`; the Docker builder uses the same baseline to avoid shipping older standard-library security defects.
 
 ```bash
 git clone https://github.com/NexusFireMan/gomap.git
@@ -199,6 +201,9 @@ sudo dpkg -i gomap_<version>_linux_amd64.deb
 # UDP scan on selected ports
 ./gomap -u -s -p 53,123,137,161,1900 10.0.11.6
 
+# Optional bounded SNMP variant discovery (UDP/161)
+./gomap -u -Dv -p 161 --timeout 500 --retries 0 10.0.11.6
+
 # Service/version detection on selected ports
 ./gomap -s -p 21,22,80,135,139,445,5985 10.0.11.6
 
@@ -225,6 +230,79 @@ sudo ./gomap --random-ip --source-interface eth0 \
 # Conservative CIDR scan (skip discovery entirely)
 ./gomap -g -nd -s --random-agent --random-ip -p 22,80,443 10.0.11.0/24
 ```
+
+## Authenticated SNMPv3
+
+Use a private, per-IP credential file for an explicitly authorized, read-only
+SNMPv3 session on UDP/161:
+
+```bash
+chmod 600 /path/to/snmp-private.json
+./gomap -u -p 161 --snmp-config /path/to/snmp-private.json 10.0.11.9
+```
+
+Supported authentication is `sha256` or `sha512`; privacy is explicitly `none`
+(authNoPriv) or `aes128` (authPriv). No credentials are accepted directly as CLI
+arguments. This option enables service detection and requires UDP. It cannot
+combine with `-g` or source-identity options. Without it, existing scans are
+unchanged. The bounded session sends at most two messages: engine discovery and
+one authenticated GET. It does not walk MIBs or change device configuration.
+See [SNMP sessions](docs/SNMP_SESSIONS.md) for the JSON schema, limits, privacy
+requirements and validation scope. Do not commit credential files or captures.
+
+## UDP Queries And Reassembly
+
+On UDP/137, `-u -Dv` (also implied by `-De`) replaces the generic probe with
+one read-only, unicast wildcard NBSTAT query. Responses must match its fresh
+transaction ID, name, type and class before identification. There are no
+broadcasts, redirects or automatic retries; default/`-g` scans are unchanged.
+Names and MAC addresses are not disclosed. A timeout stays `open|filtered`,
+not a confirmed closed port. See [UDP validation](docs/UDP_VALIDATION.md).
+
+```bash
+./gomap -u -Dv -p 11211 --timeout 1000 10.0.11.9
+```
+
+On UDP/11211, `-Dv` (also implied by `-De`) sends one framed, read-only
+Memcached `stats` query. The response is correlated by request ID and may be
+reassembled out of order. Limits are 16 fragments, 16 KiB total, 2048 bytes per
+datagram, 32 reads and one fixed receive deadline (configured timeout, capped
+at five seconds). Identical duplicates are tolerated; conflicting duplicates,
+inconsistent counts, invalid reserved fields and expired responses are rejected.
+The deadline is never extended by incoming fragments.
+
+Evidence reports fragment/byte counts, not raw statistics. Only a validated
+numeric `version` field becomes a product version; a complete stats response
+without one is labeled generically. Incomplete/malformed replies remain
+responsive but low confidence. No cache keys or items are read or modified.
+The query is not repeated by `--retries`; default scans and `-g` are unchanged.
+On UDP/138, deep scans send one read-only unicast NetBIOS datagram query.
+Control replies are matched to its identifier/name; data datagrams use a bounded
+two-fragment assembler and are explicitly not claimed to match that query.
+No broadcast or application operation follows a positive reply. Names, MAC
+addresses and reconstructed payloads are excluded from metadata.
+
+IPv4/IPv6 fragments are reassembled by the operating system before GoMap reads
+the UDP socket. Linux isolated tests exercise that production path with real
+fragments; this is not a second raw-packet capture/reassembly engine. Per-protocol
+size bounds still apply to the complete datagram. See [fragment handling](docs/UDP_FRAGMENTS.md)
+and [UDP validation](docs/UDP_VALIDATION.md) for limits and test commands.
+
+### SNMP Variant Discovery
+
+With `-u -Dv` (also implied by `-De`), UDP/161 may send two additional queries
+only when the existing SNMPv1 probe has not identified the protocol: one SNMPv2c
+GET for `sysDescr.0` using the existing `public` community, then one SNMPv3
+noAuthNoPriv engine-discovery request. No additional queries run with `-g`,
+without service detection, after a confirmed identification, or when the initial
+probe/retries finish with connection refusal. Each fallback runs once through the global attempt limiter
+and existing UDP deadlines; `--retries` applies only to the initial probe.
+Silence can therefore cost two additional timeout intervals. A received reply
+is never discarded solely because a later variant times out or refuses.
+Matching replies remain unauthenticated, medium-confidence protocol evidence,
+not a confirmed product version. Communities, engine IDs and returned values
+are not included in identification metadata. Credentialed sessions use the
+separate `--snmp-config` option described above. See [UDP validation scope](docs/UDP_VALIDATION.md).
 
 ## Example Output
 
@@ -283,6 +361,7 @@ Output:
   --details         add latency/confidence/evidence columns (text only)
   --capture-unknown opt-in bounded hex samples for unknown responses (implies -s)
   --evidence-bytes  sample size, 1-1024 bytes (default: 256)
+  --stream          emit completed open-port results immediately (CONNECT, text/JSONL)
 
 Source and HTTP identity controls:
   --random-agent    randomize HTTP User-Agent on each request
@@ -337,8 +416,10 @@ Operational limits:
 - CONNECT completes one requested connection attempt before releasing the remaining workers; this avoids the initial parallel burst without adding probes. Banner reads do not block that release. A silent first port can add one attempt's wait before parallel scanning starts.
 - `--retries` applies to timeouts and transient connection errors, not explicit connection refusals or permission errors. Its default remains zero; bounded scans can still miss temporarily unavailable services.
 - Configured CONNECT retries use at most eight concurrent connections (never more than the worker count) and share `--rate` with initial attempts. A successful retry retains its connection for banner detection. Many filtered ports can still make retries expensive; inspect diagnostics before retrying a full range.
-- JSON host entries include `connect_diagnostics` when CONNECT was used: attempted/refused/unresolved/recovered counts and per-port issues with attempts, last error and recovery status. Refused ports are aggregated; timeouts and other unresolved errors are not treated as confirmed closed. These diagnostics do not establish SYN/UDP completeness.
+- JSON host entries include `connect_diagnostics` when CONNECT was used: attempted/refused/unresolved/recovered/filtered counts and per-port issues with attempts, last error, state, recovery status and the last attempt's actual timeout budget (`timeout_ms`). `configured_timeout_ms` is the scanner's base timeout; adaptive tuning can change an individual attempt's budget. These values are milliseconds, not port counts.
+- CONNECT refusals count as `closed`; exhausted timeouts are labeled `filtered` (inferred from silence, not proof of a firewall). Local resource, permission, unreachable and other inconclusive errors remain `unknown`. Packet loss or an unavailable host can also cause timeouts. `filtered_ports` is a subset of `unresolved_ports`, retained for compatibility and completeness checks; it never inflates confirmed-open counts. Text warnings use unambiguous counters such as `timeout_ports=14`, separately from `configured_timeout_ms` and `last_attempt_timeout_ms`. These diagnostics do not establish SYN/UDP completeness.
 - Inconclusive CONNECT scans show a warning and `indeterminate (observed: ...)` text exposure. JSONL/CSV keep one record per open port and report the warning on stderr; use JSON for per-port failure details. A finished scan with unresolved ports still exits successfully; callers requiring completeness must inspect `unresolved_ports`.
+- `--stream` emits each completed CONNECT open-port result in completion order, before other ports or hosts finish. Text uses one self-contained `host:port open ...` line plus final diagnostics/summary; JSONL keeps its existing record schema and writes no duplicate final records. Without this flag, the sorted table/report is unchanged. With service detection, a result is emitted after its bounded detection finishes, not immediately after the TCP connection succeeds. Discovery still precedes port scanning; a slow output consumer can slow reporting. UDP, SYN, JSON documents and CSV do not support this flag. `--out` directs streamed records to the selected file instead of stdout.
 - Service names inferred only from ports do not prove a product or operating system. A missing banner may reflect filtering, a silent service, or a timeout.
 - Repeated unauthenticated connections can trigger server-side connection-error limits. MySQL errors such as 1129 (blocked host) and 1130 (host denied) are reported; GoMap does not authenticate or reset server limits automatically.
 - `--rate` limits initial CONNECT attempts and configured CONNECT retries per host; it is not a global limit for host discovery or additional service probes.
@@ -349,6 +430,14 @@ Operational limits:
 - Duplicate targets and ports are scanned once. CIDR discovery uses a bounded worker pool and preserves target order, including when applying `--max-hosts` afterward.
 - When duplicate observations are combined, service, version, confidence, evidence, and detection path stay together. Higher-confidence identifications take precedence; equal-confidence results prefer a known service and fuller metadata, retaining the first observation on a complete tie. This selects an observation, not independent confirmation or consensus. Complete TLS handshake metadata is not replaced by partial TLS fields.
 - IPv4 CIDRs omit network/broadcast addresses except for /31 and /32; IPv6 ranges preserve endpoints. Expansion is limited to 65,536 addresses per CIDR.
+
+```bash
+# Completion-order text results, followed by the final coverage summary
+gomap -s --stream -p - 10.0.11.6
+
+# One existing-schema JSONL record per completed open port; diagnostics use stderr
+gomap -s --stream --format jsonl -p 22,80,443 10.0.11.9
+```
 
 Non-standard port note:
 - For unknown open TCP ports, `-s` sends a bounded set of lightweight probes (`GET`, `CRLF`, and `HELP`) to identify moved services.
@@ -371,12 +460,12 @@ Non-standard port note:
 - A UDP reply establishes responsiveness, not the application identity. Port-only service hints use the UDP map (never TCP names) and remain low confidence with an empty version. Unknown payload text is not promoted to a product version.
 - NTP classification checks a bounded server-mode header and reports the protocol version at medium confidence, not a daemon version or correlated time exchange. The header layout follows [RFC 5905](https://www.rfc-editor.org/rfc/rfc5905.html).
 - SSDP classification requires a bounded HTTP/1.1 200 response with ST, USN, and a HTTP(S) LOCATION header; SERVER disclosure is read from headers only. LOCATION is never fetched. These are shape checks based on [UPnP Device Architecture](https://openconnectivity.org/upnp-specs/UPnP-arch-DeviceArchitecture-v2.0-20200417.pdf), not full device verification.
-- SNMP classification checks a bounded ASN.1 subset of v1/v2c Response-PDUs, including field bounds, binding types, and error indexes, based on [RFC 1157](https://www.rfc-editor.org/rfc/rfc1157.html) and [RFC 3416](https://www.rfc-editor.org/rfc/rfc3416.html). Bounded normalization also accepts non-minimal definite BER lengths allowed by [RFC 3417 section 8](https://www.rfc-editor.org/rfc/rfc3417.html#section-8); indefinite lengths and constructed simple values are rejected. V2c adds exception values and unsigned Counter64 bounds. The v3 subset supports plaintext USM `noAuthNoPriv` Response/Report PDUs with zero message flags, bounded header/security/context fields, and empty authentication/privacy parameters ([message format](https://www.rfc-editor.org/rfc/rfc3412.html), [USM format](https://www.rfc-editor.org/rfc/rfc3414.html)). V3 labels explicitly say `unauthenticated`. Standalone parsing remains structural evidence; runtime replies are matched only to compatible sent queries, never authenticated. Communities, usernames, engine/context identifiers and binding values never enter identification metadata. Unsupported BER forms, security models, authenticated/encrypted messages and PDUs remain low-confidence hints. No v2c/v3 queries or credential handling are added; the existing SNMP probe is unchanged.
+- Standalone SNMP classification validates bounded ASN.1 v1/v2c responses and plaintext v3 USM `noAuthNoPriv` responses/reports; it does not authenticate identity or expose communities, users, engine IDs or binding values. Non-minimal definite BER lengths are supported within bounds; indefinite lengths and constructed simple values are rejected. Deep scans can add correlated v2c/v3 discovery queries, while `--snmp-config` selects the separate authenticated SHA-256/SHA-512 session with optional AES-128. See [SNMP sessions](docs/SNMP_SESSIONS.md) and the [UDP variant matrix](docs/UDP_VALIDATION.md) for exact bounds and unsupported forms.
 - DNS, mDNS, and LLMNR classification uses the Go-native `golang.org/x/net/dns/dnsmessage` parser with bounded framing checks: section counts, names/compression, supported record bodies and lengths, response flags, and protocol-specific header/class rules. Validated shapes report only `DNS response`, `mDNS response`, or `LLMNR response` at medium confidence, not a server product/version or authenticated identity. Standalone shape checks do not correlate requests; runtime DNS replies are compared to the actual sent query as described below. Record names/values are not copied into identification metadata. See [DNS wire format](https://www.rfc-editor.org/rfc/rfc1035.html), [mDNS](https://www.rfc-editor.org/rfc/rfc6762.html), and [LLMNR](https://www.rfc-editor.org/rfc/rfc4795.html).
 - These DNS-format checks deliberately support a conservative subset up to 2048 bytes. Truncated packets, unsupported record bodies/classes, and tentative LLMNR replies remain low-confidence hints. No new mDNS/LLMNR queries or multicast listeners are added; their existing generic probes may elicit no reply.
-- NetBIOS name service on UDP/137 validates a bounded subset of positive NB/NBSTAT replies and negative name-query replies, based on [RFC 1002](https://www.rfc-editor.org/rfc/rfc1002.html). Positive checks cover encoded names, framing, IN class, address entries, node-name flags/counts and statistics. Negative checks require coherent response flags, a valid encoded name, zero-TTL empty NULL record and error code 1/2/3/5; the section 4.2.14 zero-answer-counter layout and the count-one layout are supported without changing input bytes. Output contains only a protocol/error label at medium confidence, not Windows/Samba versions, hostnames, workgroups or MAC addresses. An error does not mean the responsive port is closed or establish server identity. Header-only errors and unsupported variants remain low-confidence hints. UDP/138 datagrams and TCP/139 sessions are outside these checks; no new queries are added and the generic probe may elicit no reply.
+- NetBIOS name service on UDP/137 validates a bounded subset of positive NB/NBSTAT and negative name-query replies, based on [RFC 1002](https://www.rfc-editor.org/rfc/rfc1002.html). Deep scans use the correlated NBSTAT query described above; the default generic probe may elicit no reply. Metadata contains protocol/error labels, not Windows/Samba versions, hostnames, workgroups or MAC addresses. An application error does not mean a responsive port is closed. UDP/138 datagrams and TCP/139 sessions are outside these UDP/137 checks; see the [variant matrix](docs/UDP_VALIDATION.md).
 - NetBIOS redirects are recognized only when RFC 1002 section 4.2.15 flags and section counts match, with one IN-class NS record pointing to an encoded NetBIOS name and one matching IN-class A record. Targets must match exactly after name decompression. This conservative subset does not cover every redirect form or authenticate the sender. Redirects are never followed; names and destination addresses are not included in output.
-- Runtime DNS matching checks the transaction ID and echoed question name/type/class; SNMP matching checks version, community, request ID and binding OIDs/count/order against the actual sent probe. A mismatch keeps the responsive port but clears its version and lowers identification confidence. Matching fields stay medium confidence: identifiers are fixed, replay remains possible, and this is not authentication. Other current probes lack usable correlation fields (including NTP's zero transmit timestamp). See the reviewed [UDP validation and unsupported-variant matrix](docs/UDP_VALIDATION.md).
+- Runtime matching checks actual sent query fields for DNS, compatible SNMP queries and optional NetBIOS NBSTAT. A mismatch keeps responsiveness but clears its version and lowers identification confidence. Unauthenticated matching stays medium confidence and does not prevent replay; default DNS/SNMPv1 identifiers remain fixed, while optional discovery uses random identifiers. Other probes lack usable correlation fields, including NTP's zero transmit timestamp. Authenticated SNMP uses its separate session checks. See the [UDP validation and unsupported-variant matrix](docs/UDP_VALIDATION.md).
 
 ### Real Source-IP Selection
 

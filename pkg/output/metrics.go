@@ -56,7 +56,9 @@ func SummarizeCoverage(ports []int, results []scanner.ScanResult, diag *scanner.
 		c.Closed += closed
 		remaining -= closed
 		unresolved := min(remaining, max(0, diag.UnresolvedPorts))
-		c.Unresolved += unresolved
+		filtered := min(unresolved, max(0, diag.FilteredPorts))
+		c.Filtered += filtered
+		c.Unresolved += unresolved - filtered
 		remaining -= unresolved
 	}
 	c.Unreported = remaining
@@ -82,7 +84,7 @@ func (c *Coverage) Add(other Coverage) {
 }
 
 func (c Coverage) Inconclusive() int {
-	return c.OpenFiltered + c.Unresolved + c.Unreported
+	return c.Filtered + c.OpenFiltered + c.Unresolved + c.Unreported
 }
 
 type BuildInfo struct {
@@ -114,6 +116,7 @@ type ScanOptions struct {
 	GlobalRate      int    `json:"global_rate"`
 	CaptureUnknown  bool   `json:"capture_unknown"`
 	EvidenceBytes   int    `json:"evidence_bytes"`
+	Stream          bool   `json:"stream"`
 }
 
 type PhaseTimings struct {

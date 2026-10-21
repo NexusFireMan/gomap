@@ -78,6 +78,7 @@ func Run() {
 		MaxTimeoutMS:    opts.MaxTimeoutMS,
 		AdaptiveTimeout: opts.AdaptiveTimeout,
 		Details:         opts.DetailsFlag,
+		Stream:          opts.Stream,
 		RandomAgent:     opts.RandomAgent,
 		RandomIP:        opts.RandomIP,
 		SourceInterface: opts.SourceInterface,
@@ -85,6 +86,7 @@ func Run() {
 		HostConfig:      opts.HostConfig,
 		CaptureUnknown:  opts.CaptureUnknown,
 		EvidenceBytes:   opts.EvidenceBytes,
+		SNMPConfig:      opts.SNMPConfig,
 	}
 	if req.Format == "text" {
 		output.PrintBanner()

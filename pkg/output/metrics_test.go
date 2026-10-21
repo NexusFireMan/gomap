@@ -29,6 +29,12 @@ func TestCoveragePreservesUncertainty(t *testing.T) {
 			{Port: 1, State: "open"}, {Port: 2, State: "closed"}, {Port: 3, State: "filtered"},
 			{Port: 4, State: "open|filtered"}, {Port: 5, State: "unknown"}}, nil,
 			Coverage{Requested: 6, Open: 1, Closed: 1, Filtered: 1, OpenFiltered: 1, Unresolved: 1, Unreported: 1, OpenClosedPercent: 100.0 / 3}},
+		{"CONNECT filtered subset", []int{1, 2, 3, 4, 5}, []scanner.ScanResult{{Port: 1, IsOpen: true}},
+			&scanner.ConnectDiagnostics{RefusedPorts: 1, UnresolvedPorts: 3, FilteredPorts: 2},
+			Coverage{Requested: 5, Open: 1, Closed: 1, Filtered: 2, Unresolved: 1, OpenClosedPercent: 40}},
+		{"bounded filtered subset", []int{1, 2}, nil,
+			&scanner.ConnectDiagnostics{UnresolvedPorts: 1, FilteredPorts: 100},
+			Coverage{Requested: 2, Filtered: 1, Unreported: 1}},
 		{"SYN missing states", []int{1, 2}, []scanner.ScanResult{{Port: 1, IsOpen: true}}, nil,
 			Coverage{Requested: 2, Open: 1, Unreported: 1, OpenClosedPercent: 50}},
 		{"empty", nil, nil, nil, Coverage{}},
@@ -52,7 +58,7 @@ func TestCoveragePreservesUncertainty(t *testing.T) {
 			if sum := got.Open + got.Closed + got.Filtered + got.OpenFiltered + got.Unresolved + got.Unreported; sum != got.Requested {
 				t.Fatalf("outcomes do not partition requested scope: %+v", got)
 			}
-			if got.Inconclusive() != got.OpenFiltered+got.Unresolved+got.Unreported {
+			if got.Inconclusive() != got.Filtered+got.OpenFiltered+got.Unresolved+got.Unreported {
 				t.Fatal("lost inconclusive states")
 			}
 		})

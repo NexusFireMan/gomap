@@ -30,7 +30,17 @@ GoMap's roadmap focuses on improving reliability, test coverage, documentation, 
 - [x] Recognize a bounded NetBIOS redirect subset with coherent NS/A records, without following redirects or disclosing targets; keep unsupported forms low confidence.
 - [x] Validate negative UDP/137 name-query replies with strict NULL-record framing, known error codes, legacy counter-layout fixtures and input/disclosure protections.
 - [x] Match DNS/SNMP replies against actual sent probe fields and review unsupported NetBIOS variants; document why existing generic/zero-timestamp probes cannot establish correlation. See [UDP validation scope](docs/UDP_VALIDATION.md).
-- Authenticated/encrypted SNMP and protocol-specific queries/reassembly remain outside the implemented UDP scope; completed validation/review tasks do not imply support for every variant.
+- [x] Add opt-in, bounded UDP/161 SNMPv2c GET and SNMPv3 engine-discovery fallbacks with per-query identifiers, response correlation and deterministic simulated exchanges.
+- [x] Implement opt-in per-IP SNMPv3 authNoPriv/authPriv sessions with SHA-256/SHA-512, optional AES-128, private credential files, bounded exchanges, correlation and time-window checks; validate positive/negative cases with loopback synthetic agents.
+- [x] Validate the supported authenticated/encrypted SNMP subset against a disconnected Net-SNMP agent with correct/incorrect credentials; record reproducible lab commands and redacted results.
+- [x] Add an opt-in framed Memcached UDP stats query with per-request correlation and conservative version disclosure.
+- [x] Implement bounded Memcached application-fragment reassembly with fixed expiry, out-of-order delivery, duplicate/conflict handling, memory/read caps and deterministic tests.
+- [x] Validate default/deep behavior and multi-datagram reassembly against an isolated real Memcached agent; record a reproducible lab recipe.
+- [x] Add an opt-in unicast NetBIOS NBSTAT query with random transaction IDs, strict response correlation, deterministic negative/fuzz tests and a redacted Windows lab check.
+- [x] Consolidate authenticated SNMP, protocol-specific discovery and Memcached reassembly into one integration branch with explicit supported/unsupported scopes and combined validation.
+- [x] Add a bounded UDP/138 datagram query, correlated control/error replies and RFC-style two-fragment NetBIOS reassembly, including ordering, duplicates, tuple/length consistency, expiry and disclosure tests.
+- [x] Validate IPv4/IPv6 fragment delivery through GoMap's production UDP socket path in a disposable loopback-only namespace, including ordering, loss, mixed IDs and invalid UDP checksums.
+- Authenticated SNMP and application reassembly support documented bounded subsets, not every cipher or protocol variant. IPv4/IPv6 packet reassembly is delegated to the OS socket stack, not a second user-space IP engine; NetBIOS datagram interoperability is fixture-tested, not certified against every server implementation. See [fragment handling](docs/UDP_FRAGMENTS.md).
 - [x] Keep identification evidence coherent when deduplicating observations; retain stronger confidence and avoid mixing TLS handshakes.
 - [x] Validate signal cleanup and error reporting in Linux subprocesses with fake address backends.
 - [x] Validate raw-socket deadlines and closure in an isolated loopback-only Linux namespace without sending probes.
@@ -41,6 +51,8 @@ GoMap's roadmap focuses on improving reliability, test coverage, documentation, 
 - [ ] Extend confidence review across all protocol-specific detection paths; distinguish protocol evidence from product/version disclosure.
 - [x] Preserve explicit UDP states in text, JSON, JSONL, and CSV; count only confirmed open ports.
 - [x] Support `--version` and options before or after the CLI target.
+- [x] Separate CONNECT timeout port counters from actual timeout budgets; distinguish inferred-filtered timeouts, confirmed refusals and unknown failures without concealing incomplete coverage.
+- [x] Add opt-in completion-order text/JSONL streaming for CONNECT results with deterministic delivery, deduplication and writer-error regressions.
 
 - [ ] Stabilize full-range CONNECT results across constrained VirtualBox and VPN lab networks.
 - [ ] Expand native fingerprints for SMB server identity, NetBIOS workgroup data, and IRC product/version banners.

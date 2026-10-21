@@ -41,6 +41,7 @@ type ScanRequest struct {
 	MaxTimeoutMS    int
 	AdaptiveTimeout bool
 	Details         bool
+	Stream          bool
 	RandomAgent     bool
 	RandomIP        bool
 	SourceInterface string
@@ -48,12 +49,23 @@ type ScanRequest struct {
 	HostConfig      string
 	CaptureUnknown  bool
 	EvidenceBytes   int
+	SNMPConfig      string
 }
 
 // ExecuteScan runs the complete scan workflow: target expansion, host discovery, scan, and rendering.
 func ExecuteScan(req ScanRequest) (resultErr error) {
 	runStart := time.Now()
 	var discoveryDuration time.Duration
+	if req.SNMPConfig != "" && (!req.UDP || req.GhostMode || req.RandomIP || req.SourceInterface != "") {
+		return errors.New("--snmp-config requires UDP and cannot combine with controlled-profile or source-identity options")
+	}
+	snmpConfig, configErr := loadSNMPConfig(req.SNMPConfig, req.OutputPath)
+	if configErr != nil {
+		return configErr
+	}
+	if req.SNMPConfig != "" {
+		req.ServiceDetect = true
+	}
 	if req.GlobalRate < 0 {
 		return errors.New("--global-rate cannot be negative")
 	}
@@ -77,6 +89,9 @@ func ExecuteScan(req ScanRequest) (resultErr error) {
 		if req.EvidenceBytes < 1 || req.EvidenceBytes > scanner.MaxEvidenceBytes {
 			return errors.New("evidence bytes must be between 1 and 1024")
 		}
+	}
+	if req.Stream && (req.UDP || req.ScanType != "connect" || (req.Format != "text" && req.Format != "jsonl")) {
+		return errors.New("--stream requires CONNECT scanning with text or JSONL output")
 	}
 	scanLabel := strings.ToUpper(req.ScanType)
 	if req.UDP {
@@ -132,6 +147,9 @@ func ExecuteScan(req ScanRequest) (resultErr error) {
 		return err
 	}
 	metrics := newScanMetrics(req, len(targets))
+	if err := validateSNMPScope(snmpConfig, targets); err != nil {
+		return err
+	}
 	if req.OutputPath != "" {
 		if req.HostConfig != "" {
 			input, inputErr := os.Stat(req.HostConfig)
@@ -299,6 +317,7 @@ func ExecuteScan(req ScanRequest) (resultErr error) {
 	allResults := make(map[string][]scanner.ScanResult)
 	connectDiagnostics := make(map[string]scanner.ConnectDiagnostics)
 	scanStart := time.Now()
+	var streamErr error
 
 	for _, targetIP := range targets {
 		hostStart := time.Now()
@@ -310,6 +329,7 @@ func ExecuteScan(req ScanRequest) (resultErr error) {
 				hostReq = applyHostOverride(req, hostConfig[addr.Unmap().String()])
 			}
 		}
+		s.SNMPCredentials = snmpConfig[targetIP]
 		cidrForHeaders := ""
 		if req.RandomIP && scanner.IsCIDR(req.Target) {
 			cidrForHeaders = req.Target
@@ -332,6 +352,18 @@ func ExecuteScan(req ScanRequest) (resultErr error) {
 			CaptureUnknown:  req.CaptureUnknown,
 			EvidenceBytes:   req.EvidenceBytes,
 		})
+		if req.Stream {
+			s.OnResult = func(result scanner.ScanResult) {
+				if streamErr != nil {
+					return
+				}
+				if req.Format == "jsonl" {
+					streamErr = output.PrintJSONLReport(destWriter, req.Target, []string{targetIP}, map[string][]scanner.ScanResult{targetIP: {result}})
+				} else {
+					streamErr = formatter.WriteStreamResult(destWriter, targetIP, result)
+				}
+			}
+		}
 		var openResults []scanner.ScanResult
 		if req.UDP {
 			engineUsed = "udp"
@@ -372,6 +404,9 @@ func ExecuteScan(req ScanRequest) (resultErr error) {
 			Host: targetIP, Engine: engineUsed, ScanAndServicesMS: time.Since(hostStart).Milliseconds(), Coverage: coverage,
 			Settings: &output.HostSettings{TimeoutMS: s.Timeout.Milliseconds(), Retries: s.Retries, MaxTimeoutMS: s.MaxAdaptiveTimeout.Milliseconds(), AdaptiveTimeout: s.AdaptiveTimeout},
 		})
+		if streamErr != nil {
+			return fmt.Errorf("failed to write streaming output: %w", streamErr)
+		}
 	}
 	scanDuration := time.Since(scanStart)
 	metrics.SetTimings(time.Since(runStart), discoveryDuration, scanDuration)
@@ -387,7 +422,9 @@ func ExecuteScan(req ScanRequest) (resultErr error) {
 		case "json":
 			renderErr = output.PrintJSONReportWithMetrics(destWriter, req.Target, portsToScan, targets, allResults, req.ServiceDetect, scanDuration, connectDiagnostics, metrics)
 		case "jsonl":
-			renderErr = output.PrintJSONLReport(destWriter, req.Target, targets, allResults)
+			if !req.Stream {
+				renderErr = output.PrintJSONLReport(destWriter, req.Target, targets, allResults)
+			}
 		case "csv":
 			renderErr = output.PrintCSVReport(destWriter, allResults, targets)
 		default:
@@ -412,6 +449,9 @@ func ExecuteScan(req ScanRequest) (resultErr error) {
 	for _, targetIP := range targets {
 		if results, exists := allResults[targetIP]; exists {
 			totalOpen += scanner.CountOpen(results)
+			if req.Stream {
+				continue
+			}
 			if len(targets) > 1 {
 				fmt.Fprintf(&textReport, "\n%s\n", output.Highlight(fmt.Sprintf("═══ %s ═══", output.Host(targetIP))))
 			}
@@ -481,12 +521,18 @@ func hostSummaries(targets []string, allResults map[string][]scanner.ScanResult,
 		if len(critical) > 0 {
 			criticalStr = strings.Join(critical, ", ")
 		}
-		fmt.Fprintf(&report, "- %s | open ports: %d | critical: %s | exposure: %s\n",
+		fmt.Fprintf(&report, "- %s | open ports: %d | critical: %s | exposure: %s",
 			host,
 			open,
 			criticalStr,
 			exposure,
 		)
+		if len(diagnostics) > 0 {
+			if diag, ok := diagnostics[0][host]; ok {
+				fmt.Fprintf(&report, " | TCP closed: %d | filtered: %d | unknown: %d", diag.RefusedPorts, diag.FilteredPorts, diag.UnresolvedPorts-diag.FilteredPorts)
+			}
+		}
+		report.WriteByte('\n')
 	}
 	return report.String()
 }
@@ -511,9 +557,24 @@ func connectWarnings(targets []string, diagnostics map[string]scanner.ConnectDia
 		sort.Strings(kinds)
 		var parts []string
 		for _, kind := range kinds {
-			parts = append(parts, fmt.Sprintf("%s=%d", kind, counts[kind]))
+			parts = append(parts, fmt.Sprintf("%s_ports=%d", kind, counts[kind]))
 		}
 		fmt.Fprintf(&report, "TCP discovery inconclusive on %s: %d unresolved ports (%s); these are not confirmed closed.\n", host, diag.UnresolvedPorts, strings.Join(parts, ", "))
+		fmt.Fprintf(&report, "TCP states on %s: closed=%d (connection refused), filtered=%d (inferred from timeout), unknown=%d; configured_timeout_ms=%d", host, diag.RefusedPorts, diag.FilteredPorts, diag.UnresolvedPorts-diag.FilteredPorts, diag.TimeoutMS)
+		var minTimeout, maxTimeout int64
+		for _, issue := range diag.Issues {
+			if issue.Recovered || issue.TimeoutMS <= 0 {
+				continue
+			}
+			if minTimeout == 0 || issue.TimeoutMS < minTimeout {
+				minTimeout = issue.TimeoutMS
+			}
+			maxTimeout = max(maxTimeout, issue.TimeoutMS)
+		}
+		if minTimeout > 0 {
+			fmt.Fprintf(&report, "; last_attempt_timeout_ms=%d..%d", minTimeout, maxTimeout)
+		}
+		report.WriteByte('\n')
 	}
 	return report.String()
 }

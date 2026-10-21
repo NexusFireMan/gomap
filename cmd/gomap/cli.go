@@ -42,6 +42,7 @@ type CLIOptions struct {
 	MaxTimeoutMS    int
 	AdaptiveTimeout bool
 	DetailsFlag     bool
+	Stream          bool
 	RandomAgent     bool
 	RandomIP        bool
 	SourceInterface string
@@ -50,6 +51,7 @@ type CLIOptions struct {
 	CaptureUnknown  bool
 	EvidenceBytes   int
 	Host            string
+	SNMPConfig      string
 }
 
 var errUsage = errors.New("usage")
@@ -93,6 +95,8 @@ func ParseCLIOptions(args []string) (CLIOptions, error) {
 	fs.IntVar(&opts.MaxTimeoutMS, "max-timeout", 0, "maximum adaptive timeout in milliseconds (0 = automatic)")
 	fs.BoolVar(&opts.AdaptiveTimeout, "adaptive-timeout", true, "enable adaptive timeout tuning during scan")
 	fs.BoolVar(&opts.DetailsFlag, "details", false, "include latency/confidence/evidence columns in table output")
+	fs.BoolVar(&opts.Stream, "stream", false, "emit completed open-port results immediately (CONNECT, text or JSONL)")
+	fs.StringVar(&opts.SNMPConfig, "snmp-config", "", "private per-IP SNMPv3 credential JSON file (UDP only)")
 	fs.BoolVar(&opts.RandomAgent, "random-agent", false, "randomize HTTP User-Agent on each request (service detection)")
 	fs.BoolVar(&opts.RandomIP, "random-ip", false, "enable randomized source-IP or HTTP identity controls")
 	fs.StringVar(&opts.SourceInterface, "source-interface", "", "interface used for real source-IP socket binding")
@@ -159,6 +163,12 @@ func normalizeOptions(opts CLIOptions) (CLIOptions, error) {
 		return opts, errors.New("--evidence-bytes must be between 1 and 1024")
 	}
 	if opts.CaptureUnknown {
+		opts.ServiceFlag = true
+	}
+	if opts.SNMPConfig != "" {
+		if strings.TrimSpace(opts.SNMPConfig) == "" || !opts.UDPFlag || opts.GhostFlag || opts.RandomIP || opts.SourceInterface != "" {
+			return opts, errors.New("--snmp-config requires UDP and cannot combine with controlled-profile or source-identity options")
+		}
 		opts.ServiceFlag = true
 	}
 	opts.FormatFlag = strings.ToLower(strings.TrimSpace(opts.FormatFlag))
@@ -256,6 +266,9 @@ func normalizeOptions(opts CLIOptions) (CLIOptions, error) {
 	if opts.DetailsFlag && opts.FormatFlag != "text" {
 		return opts, errors.New("--details is only valid with text output")
 	}
+	if opts.Stream && (opts.UDPFlag || opts.ScanType != "connect" || (opts.FormatFlag != "text" && opts.FormatFlag != "jsonl")) {
+		return opts, errors.New("--stream requires CONNECT scanning with text or JSONL output")
+	}
 	opts.SourceInterface = strings.TrimSpace(opts.SourceInterface)
 	opts.SourceIPs = strings.TrimSpace(opts.SourceIPs)
 	if opts.SourceIPs != "" && opts.SourceInterface == "" {
@@ -314,6 +327,7 @@ func printHelp(w *os.File) {
 %sTarget & Scan:%s
   -p <ports>                 ports to scan (80,443 | 1-1024 | -)
   -u                         scan UDP instead of TCP
+  --snmp-config <path>       private per-IP SNMPv3 credentials (UDP only)
   --scan-type <type>         connect|syn (syn requires root/CAP_NET_RAW)
   --top <N>                  scan top N ports from curated protocol list
   --top-ports <N>            alias of --top
@@ -344,6 +358,7 @@ func printHelp(w *os.File) {
   --details                  add latency/confidence/evidence columns (text only)
   --capture-unknown          opt-in bounded hex evidence; enables -s (sensitive)
   --evidence-bytes <N>       sample limit, 1-1024 bytes (default: 256)
+  --stream                   emit completed open-port results immediately (CONNECT, text/JSONL)
 
 %sSource & HTTP Identity Controls:%s
   --random-agent             random User-Agent per request

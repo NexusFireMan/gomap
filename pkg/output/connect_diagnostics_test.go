@@ -10,8 +10,8 @@ import (
 
 func TestJSONConnectDiagnostics(t *testing.T) {
 	diag := map[string]scanner.ConnectDiagnostics{"fixture": {
-		AttemptedPorts: 2, RefusedPorts: 1, UnresolvedPorts: 1,
-		Issues: []scanner.ConnectionIssue{{Port: 80, Attempts: 2, Kind: "timeout", Error: "dial timeout"}},
+		AttemptedPorts: 2, RefusedPorts: 1, UnresolvedPorts: 1, FilteredPorts: 1, TimeoutMS: 750,
+		Issues: []scanner.ConnectionIssue{{Port: 80, Attempts: 2, Kind: "timeout", Error: "dial timeout", State: "filtered", TimeoutMS: 850}},
 	}}
 	var b bytes.Buffer
 	if err := PrintJSONReport(&b, "fixture", []int{1, 80}, []string{"fixture"}, nil, false, 0, diag); err != nil {
@@ -27,6 +27,9 @@ func TestJSONConnectDiagnostics(t *testing.T) {
 	got := report.Hosts[0].ConnectDiagnostics
 	if got == nil || got.UnresolvedPorts != 1 || got.RefusedPorts != 1 || got.Issues[0].Attempts != 2 {
 		t.Fatalf("diag=%+v", got)
+	}
+	if got.FilteredPorts != 1 || got.TimeoutMS != 750 || got.Issues[0].State != "filtered" || got.Issues[0].TimeoutMS != 850 {
+		t.Fatalf("lost state or timeout metadata: %+v", got)
 	}
 	b.Reset()
 	if err := PrintJSONReport(&b, "fixture", nil, []string{"fixture"}, nil, false, 0); err != nil {
