@@ -23,6 +23,11 @@ make coverage
 make ci
 ```
 
+`make coverage` and CI require at least **40% total statement coverage**. The
+25% and 40% roadmap milestones are enforced by this floor; 60% remains the next
+target, not the current requirement. Total coverage does not establish protocol
+accuracy or replace deterministic negative cases and isolated lab validation.
+
 If `golangci-lint` is not available in your `PATH`, use the pinned binary installed in `./bin` when present:
 
 ```bash
