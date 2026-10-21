@@ -57,6 +57,28 @@ This test refuses the initial network namespace or a namespace with other interf
 
 Successful lifecycle tests do not establish end-to-end SYN discovery accuracy or native netlink address rollback. Those remain separate validation tasks in a disposable, disconnected lab.
 
+Fragment handling has a separate Linux kernel test, guarded by the same
+loopback-only namespace restrictions:
+
+```bash
+test_dir=$(mktemp -d)
+go test -c -o "$test_dir/scanner.test" ./pkg/scanner
+unshare -Urn env GOMAP_RUN_ISOLATED_TESTS=1 "$test_dir/scanner.test" -test.run '^TestIsolatedUDPIPFragments$' -test.v -test.count=3
+rm -r "$test_dir"
+```
+
+This sends synthetic IPv4/IPv6 fragments only to loopback inside the disposable
+namespace. It validates in-order/out-of-order delivery, missing fragments,
+mixed IDs and invalid UDP checksums through the production UDP socket reader.
+Raw sockets are used by the test injector only, never by normal UDP scans.
+No host NIC, route, firewall or VM configuration is changed. NetBIOS UDP/138
+query/reassembly regressions run without privileges:
+
+```bash
+go test -race ./pkg/scanner -run '^TestNetBIOSDatagram' -count=3
+go test ./pkg/scanner -run '^$' -fuzz '^FuzzNetBIOSDatagramAssembly$' -fuzztime=10s -parallel=2
+```
+
 Deterministic transport and cleanup tests run without VM targets, root, or changes to interface addresses:
 
 ```bash
@@ -77,6 +99,34 @@ go test ./pkg/app -run LabIntegration -v
 ```
 
 Do not run integration tests against systems you are not authorized to scan.
+
+Optional SNMPv3 interoperability tests use a real Net-SNMP agent in a disposable
+Docker container with no network other than its own loopback. They are skipped
+by normal CI, generate private temporary credentials and remove their container:
+
+```bash
+docker build -t gomap-snmp-agent:local scripts/lab/snmp
+GOMAP_RUN_SNMP_AGENT_TESTS=1 GOMAP_SNMP_AGENT_IMAGE=gomap-snmp-agent:local \
+  go test ./pkg/app -run '^TestSNMPAgentInterop$' -count=3 -v
+```
+
+Building the fixture image requires package downloads; runtime has no external
+route or published ports. See [SNMP sessions](docs/SNMP_SESSIONS.md) for the
+supported algorithm matrix and limitations. Never publish generated keys or
+agent state. Docker is a test-fixture dependency, not a GoMap runtime dependency.
+
+Optional Memcached interoperability runs the agent and CLI in one disconnected
+container, without host ports, cache-item requests or host-network changes:
+
+```bash
+docker pull memcached:1.6-alpine
+GOMAP_RUN_MEMCACHED_AGENT_TESTS=1 GOMAP_MEMCACHED_AGENT_IMAGE=memcached:1.6-alpine \
+  go test ./pkg/app -run '^TestMemcachedAgentInterop$' -count=3 -v
+```
+
+Image downloading needs network access; runtime uses `--network none` and a
+read-only filesystem. The test removes its container. Docker is only a lab
+fixture dependency; GoMap uses native Go for the query and reassembly.
 
 ## Pull Request Expectations
 
