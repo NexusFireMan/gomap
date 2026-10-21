@@ -13,7 +13,7 @@ func TestCLIParserDefaults(t *testing.T) {
 	got, err := ParseCLIOptions([]string{"127.0.0.1"})
 	want := CLIOptions{
 		Host: "127.0.0.1", ScanType: "connect", FormatFlag: "text",
-		BackoffMS: 25, AdaptiveTimeout: true,
+		BackoffMS: 25, AdaptiveTimeout: true, EvidenceBytes: 256,
 	}
 	if err != nil || got != want {
 		t.Fatalf("defaults: got %+v, %v; want %+v", got, err, want)
