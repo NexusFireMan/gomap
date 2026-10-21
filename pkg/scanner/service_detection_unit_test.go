@@ -220,13 +220,13 @@ func TestRDPAndWinRMDetectionHelpers(t *testing.T) {
 		0x03, 0x00, 0x00, 0x13,
 		0x0e, 0xd0, 0x00, 0x00, 0x00, 0x00, 0x00,
 		0x02, 0x00, 0x08, 0x00,
-		0x03, 0x00, 0x00, 0x00,
+		0x02, 0x00, 0x00, 0x00,
 	}
 	selected, ok := parseRDPNegotiationProtocol(data)
 	if !ok {
 		t.Fatal("expected RDP negotiation response")
 	}
-	if got := rdpProtocolName(selected); got != "TLS/CredSSP" {
+	if got := rdpProtocolName(selected); got != "CredSSP" {
 		t.Fatalf("unexpected RDP protocol evidence: %q", got)
 	}
 

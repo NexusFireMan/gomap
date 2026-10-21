@@ -1,7 +1,10 @@
 package scanner
 
 import (
+	"bufio"
 	"fmt"
+	"io"
+	"net/http"
 	"regexp"
 	"strings"
 	"unicode"
@@ -566,35 +569,23 @@ func cleanFTPBannerText(text string) string {
 // parseHTTP extracts HTTP server information with version
 func parseHTTP(banner string) (string, string) {
 	// Check if it starts with HTTP response
-	banner = strings.TrimSpace(banner)
+	if len(banner) > 64*1024 {
+		banner = banner[:64*1024]
+	}
+	banner = strings.TrimLeft(banner, " \t\r\n")
 	if !validHTTPResponseLine(banner) {
 		return "", ""
 	}
-
-	lines := strings.Split(banner, "\n")
-	var statusLine, serverHeader string
-
-	// First pass: Get status line and Server header
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			break
-		}
-		lowerLine := strings.ToLower(line)
-
-		// Extract HTTP status line
-		if strings.HasPrefix(line, "HTTP/") && statusLine == "" {
-			statusLine = line
-		}
-
-		// Match "Server:" header
-		if strings.HasPrefix(lowerLine, "server:") {
-			serverHeader = line[len("server:"):]
-			serverHeader = strings.TrimSpace(serverHeader)
-			serverHeader = strings.ReplaceAll(serverHeader, "\r", "")
-			break
-		}
+	response, err := http.ReadResponse(bufio.NewReader(strings.NewReader(banner)), nil)
+	if err != nil {
+		return "http", "" // A valid status line is not a complete product disclosure.
 	}
+	defer func() { _ = response.Body.Close() }()
+	servers := response.Header.Values("Server")
+	if len(servers) > 1 {
+		return "http", ""
+	}
+	serverHeader := strings.TrimSpace(response.Header.Get("Server"))
 
 	// If we found a server header, parse it for detailed version info
 	if serverHeader != "" {
@@ -627,19 +618,16 @@ func parseHTTP(banner string) (string, string) {
 	}
 
 	// Fallback: infer product/version from HTML title when Server header is absent.
-	if title := extractHTTPTitle(banner); title != "" {
-		if v := parseTomcatFromTitle(title); v != "" {
-			return "http", v
+	body, err := io.ReadAll(io.LimitReader(response.Body, 64*1024+1))
+	if err == nil && len(body) <= 64*1024 {
+		if title := extractHTTPTitle(string(body)); title != "" {
+			if v := parseTomcatFromTitle(title); v != "" {
+				return "http", v
+			}
+			return "http", title
 		}
-		return "http", title
 	}
-
-	// If no Server header found but HTTP response exists, it's still HTTP
-	if statusLine != "" {
-		return "http", ""
-	}
-
-	return "", ""
+	return "http", ""
 }
 
 func extractHTTPTitle(banner string) string {

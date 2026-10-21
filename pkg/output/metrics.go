@@ -153,7 +153,7 @@ type ScanMetrics struct {
 	Hosts                        []HostMetrics `json:"hosts"`
 }
 
-// SetTimings excludes rendering/cleanup; scan time includes inline service detection.
+// SetTimings excludes final rendering/cleanup; scan time includes inline detection and stream writes.
 func (m *ScanMetrics) SetTimings(total, discovery, scan time.Duration) {
 	total, discovery, scan = max(0, total), max(0, discovery), max(0, scan)
 	m.Timings = PhaseTimings{

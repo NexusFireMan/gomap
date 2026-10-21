@@ -968,16 +968,13 @@ func (s *Scanner) tryConnectedTextProbe(conn net.Conn, port int) (string, bool) 
 
 func (s *Scanner) probeTextServiceOnConn(conn net.Conn, payload string) string {
 	timeout := s.boundedServiceTimeout(900*time.Millisecond, 1800*time.Millisecond)
-	_ = conn.SetDeadline(time.Now().Add(timeout))
+	if err := conn.SetDeadline(time.Now().Add(timeout)); err != nil {
+		return ""
+	}
 	if _, err := conn.Write([]byte(payload)); err != nil {
 		return ""
 	}
-	buf := make([]byte, 4096)
-	n, _ := conn.Read(buf)
-	if n == 0 {
-		return ""
-	}
-	return string(buf[:n])
+	return readTextGreeting(conn)
 }
 
 func noGreetingVersionForPort(port int) string {
@@ -1038,17 +1035,14 @@ func isWeakFTPVersion(version string) bool {
 
 // tryPassiveBanner reads banner without sending any data
 func (s *Scanner) tryPassiveBanner(conn net.Conn) string {
-	buffer := make([]byte, 4096)
 	passiveTimeout := s.currentTimeout()
 	if passiveTimeout < 900*time.Millisecond {
 		passiveTimeout = 900 * time.Millisecond
 	}
-	_ = conn.SetReadDeadline(time.Now().Add(passiveTimeout))
-	n, _ := conn.Read(buffer)
-	if n > 0 {
-		return string(buffer[:n])
+	if err := conn.SetReadDeadline(time.Now().Add(passiveTimeout)); err != nil {
+		return ""
 	}
-	return ""
+	return readTextGreeting(conn)
 }
 
 // grabHTTPBanner attempts to grab HTTP banner and all headers
@@ -1166,11 +1160,13 @@ func (s *Scanner) probeFTP(port int) string {
 	defer func() { _ = conn.Close() }()
 
 	_ = conn.SetDeadline(time.Now().Add(timeout))
-	buf := make([]byte, 2048)
 	var response strings.Builder
 
-	if n, _ := conn.Read(buf); n > 0 {
-		response.Write(buf[:n])
+	if greeting := readTextGreeting(conn); greeting != "" {
+		response.WriteString(greeting)
+		if !textGreetingComplete([]byte(greeting)) {
+			return response.String()
+		}
 		response.WriteByte('\n')
 	}
 
@@ -1179,8 +1175,11 @@ func (s *Scanner) probeFTP(port int) string {
 		if _, err := conn.Write([]byte(payload)); err != nil {
 			break
 		}
-		if n, _ := conn.Read(buf); n > 0 {
-			response.Write(buf[:n])
+		if reply := readTextGreeting(conn); reply != "" {
+			response.WriteString(reply)
+			if !textGreetingComplete([]byte(reply)) {
+				break
+			}
 			response.WriteByte('\n')
 		}
 	}
@@ -1210,17 +1209,21 @@ func (s *Scanner) probeMailService(port int, payload string, useTLS bool) string
 
 	_ = conn.SetDeadline(time.Now().Add(timeout))
 	var response strings.Builder
-	buf := make([]byte, 4096)
 
-	if n, _ := conn.Read(buf); n > 0 {
-		response.Write(buf[:n])
+	if greeting := readTextGreeting(conn); greeting != "" {
+		response.WriteString(greeting)
+		if !textGreetingComplete([]byte(greeting)) {
+			return response.String()
+		}
 		response.WriteByte('\n')
 	}
 
 	if payload != "" {
-		_, _ = conn.Write([]byte(payload))
-		if n, _ := conn.Read(buf); n > 0 {
-			response.Write(buf[:n])
+		if _, err := conn.Write([]byte(payload)); err != nil {
+			return response.String()
+		}
+		if reply := readTextGreeting(conn); reply != "" {
+			response.WriteString(reply)
 			response.WriteByte('\n')
 		}
 	}
@@ -1266,21 +1269,8 @@ func (s *Scanner) probeFTPGenericLines(port int) string {
 		return ""
 	}
 
-	var response strings.Builder
-	buf := make([]byte, 2048)
-	for {
-		n, err := conn.Read(buf)
-		if n > 0 {
-			response.Write(buf[:n])
-			if response.Len() >= 4096 {
-				break
-			}
-		}
-		if err != nil {
-			break
-		}
-	}
-	return response.String()
+	response, _ := io.ReadAll(io.LimitReader(conn, 4096))
+	return string(response)
 }
 
 func (s *Scanner) tryServiceProbeForService(port int, serviceName string) string {
@@ -1754,9 +1744,7 @@ func (s *Scanner) detectAJP(port int) bool {
 	if _, err := conn.Write(cping); err != nil {
 		return false
 	}
-	buf := make([]byte, 5)
-	_, err = io.ReadFull(conn, buf)
-	return err == nil && string(buf) == "AB\x00\x01\x09"
+	return readAJPReply(conn)
 }
 
 func (s *Scanner) probeAJP(port int) string {
@@ -1976,17 +1964,16 @@ func (s *Scanner) detectRDPInfo(port int) (version, evidence string, ok bool) {
 		return "", "", false
 	}
 
-	buf := make([]byte, 128)
-	n, err := conn.Read(buf)
-	if err != nil || n < 7 {
-		return "", "", false
-	}
-	if buf[0] != 0x03 || buf[1] != 0x00 || (buf[5] != 0xd0 && buf[5] != 0xe0 && buf[5] != 0xf0) {
+	buf, err := readRDPConfirm(conn)
+	if err != nil {
 		return "", "", false
 	}
 
-	selected, selectedOK := parseRDPNegotiationProtocol(buf[:n])
+	selected, selectedOK := parseRDPNegotiationProtocol(buf)
 	evidence = "X.224 connection confirm"
+	if len(buf) == 19 && buf[11] == 3 {
+		evidence = fmt.Sprintf("RDP negotiation failure: code=%d", binary.LittleEndian.Uint32(buf[15:19]))
+	}
 	if selectedOK {
 		evidence = "RDP negotiation: " + rdpProtocolName(selected)
 		if selected != 0 {
@@ -1999,12 +1986,10 @@ func (s *Scanner) detectRDPInfo(port int) (version, evidence string, ok bool) {
 }
 
 func parseRDPNegotiationProtocol(data []byte) (uint32, bool) {
-	for i := 0; i+8 <= len(data); i++ {
-		if data[i] == 0x02 && data[i+2] == 0x08 && data[i+3] == 0x00 {
-			return binary.LittleEndian.Uint32(data[i+4 : i+8]), true
-		}
+	if !validRDPConfirm(data) || len(data) != 19 || data[11] != 2 {
+		return 0, false
 	}
-	return 0, false
+	return binary.LittleEndian.Uint32(data[15:19]), true
 }
 
 func rdpProtocolName(protocol uint32) string {
@@ -2199,11 +2184,7 @@ func (s *Scanner) attemptRawSMBDetection(address string) string {
 	if _, err := conn.Write(buildSMBNegotiate()); err != nil {
 		return ""
 	}
-	header := make([]byte, 4)
-	if _, err := io.ReadFull(conn, header); err != nil || header[0] != 0 {
-		return ""
-	}
-	frame, err := readFrameBody(conn, header, int(binary.BigEndian.Uint32(header)), 64*1024)
+	frame, err := readSMBMessage(conn)
 	if err != nil {
 		return ""
 	}

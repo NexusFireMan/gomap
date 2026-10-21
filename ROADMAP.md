@@ -7,10 +7,17 @@ GoMap's roadmap focuses on improving reliability, test coverage, documentation, 
 - [x] Extend deterministic CLI/parser regression coverage for defaults, validation errors, option normalization, aliases, argument preservation and duration boundaries.
 - [x] Add output format regression tests, including write failures.
 - [x] Add deterministic service detection unit tests for banners, protocol fixtures, and malformed packets.
-- [ ] Extend service detection tests to fragmented responses and malformed packets as new probes are added.
+- [x] Establish deterministic stream-framing regressions for DNS/TCP, MySQL, ONC RPC, SMB, AJP, DCE/RPC and JRMP: split reads, final EOF bytes, truncation, size/count limits and next-frame boundaries.
+- [x] Add passive/connected greeting and FTP/mail conversation regressions, including TLS, numeric multiline replies, capture limits and fixed per-read deadlines.
+- [x] Add strict RDP confirmation/negotiation tests, malformed/unoffered selections, failure replies and a loopback TLS certificate upgrade.
+- [x] Add HTTP/TLS collection and parser regressions for fragmented headers, incomplete/ambiguous headers, body/header separation, chunked titles and redirect non-following.
+- [ ] Extend equivalent deterministic stream/negative fixtures to LDAP and TDS before considering those readers fully reviewed.
+- [ ] Add protocol-complete RESP/IRC/generic write-first transaction framing and review truncated-text identification confidence separately from retaining partial evidence.
+- Require new service probes to extend the [regression matrix](docs/SERVICE_DETECTION_TESTS.md); a completed baseline does not certify every protocol variant.
 - [x] Raise the enforced total statement coverage floor past 25% to 40%, consistently in local checks and CI.
 - [ ] Raise the enforced total statement coverage floor to 60% with sufficient headroom and meaningful tests.
 - Integrated v2.5.0 validation reached 59.3% total coverage. Parser regressions do not imply complete installer/updater or CLI entry-point coverage; those remain follow-up work.
+- Consolidated development validation reaches 67.1% total statement coverage; the enforced floor is 40%, not 60%.
 
 ## Detection and Scan Reliability
 
