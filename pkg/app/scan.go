@@ -529,7 +529,7 @@ func hostSummaries(targets []string, allResults map[string][]scanner.ScanResult,
 		)
 		if len(diagnostics) > 0 {
 			if diag, ok := diagnostics[0][host]; ok {
-				fmt.Fprintf(&report, " | TCP closed: %d | filtered: %d | unknown: %d", diag.RefusedPorts, diag.FilteredPorts, diag.UnresolvedPorts-diag.FilteredPorts)
+				fmt.Fprintf(&report, " | TCP closed (refused): %d | filtered (timeout-inferred): %d | unknown: %d", diag.RefusedPorts, diag.FilteredPorts, diag.UnresolvedPorts-diag.FilteredPorts)
 			}
 		}
 		report.WriteByte('\n')

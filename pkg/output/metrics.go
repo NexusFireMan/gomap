@@ -179,15 +179,36 @@ func WriteScanMetrics(w io.Writer, metrics ScanMetrics) error {
 		metrics.ExpandedHosts, len(metrics.Hosts)); err != nil {
 		return err
 	}
-	writeCoverage := func(label string, c Coverage) error {
-		_, err := fmt.Fprintf(w, "- %s | requested: %d | open: %d | closed: %d | filtered: %d | open|filtered: %d | unresolved: %d | unreported: %d | open/closed evidence: %.1f%%\n",
-			terminalText(label), c.Requested, c.Open, c.Closed, c.Filtered, c.OpenFiltered, c.Unresolved, c.Unreported, c.OpenClosedPercent)
+	writeCoverage := func(label string, c Coverage, connect bool) error {
+		closedLabel, filteredLabel, unresolvedLabel := "closed", "filtered", "unresolved"
+		if connect {
+			closedLabel, filteredLabel, unresolvedLabel = "closed (refused)", "filtered (timeout-inferred)", "unresolved (other failures)"
+		}
+		percent := fmt.Sprintf("%.1f%%", c.OpenClosedPercent)
+		if c.OpenClosedPercent > 0 && c.OpenClosedPercent < 0.1 {
+			percent = "<0.1%"
+		} else if c.OpenClosedPercent < 100 && c.OpenClosedPercent > 99.9 {
+			percent = ">99.9%"
+		}
+		_, err := fmt.Fprintf(w, "- %s | requested: %d | open: %d | %s: %d | %s: %d | open|filtered: %d | %s: %d | unreported: %d | inconclusive subtotal: %d | open/closed evidence: %s (%d/%d)\n",
+			terminalText(label), c.Requested, c.Open, closedLabel, c.Closed, filteredLabel, c.Filtered, c.OpenFiltered, unresolvedLabel, c.Unresolved, c.Unreported, c.Inconclusive(), percent, c.Open+c.Closed, c.Requested)
 		return err
 	}
+	explainConnect, allConnect := false, len(metrics.Hosts) > 0
 	for _, host := range metrics.Hosts {
-		if err := writeCoverage(fmt.Sprintf("%s (%s, scan+services %d ms)", host.Host, host.Engine, host.ScanAndServicesMS), host.Coverage); err != nil {
+		connect := host.Engine == "connect" || host.Engine == "connect (syn fallback)"
+		explainConnect = explainConnect || connect && host.Coverage.Inconclusive() > 0
+		allConnect = allConnect && connect
+		if err := writeCoverage(fmt.Sprintf("%s (%s, scan+services %d ms)", host.Host, host.Engine, host.ScanAndServicesMS), host.Coverage, connect); err != nil {
 			return err
 		}
 	}
-	return writeCoverage("total", metrics.Coverage)
+	if err := writeCoverage("total", metrics.Coverage, allConnect); err != nil {
+		return err
+	}
+	if explainConnect {
+		_, err := fmt.Fprintln(w, "CONNECT observations: closed counts connection refusals only; closed=0 means no refusal was observed. Timeout-inferred filtered ports remain inconclusive: silence may reflect filtering, loss or insufficient wait, not a confirmed firewall drop. The inconclusive subtotal includes all uncertain states; do not add it to the state counts.")
+		return err
+	}
+	return nil
 }
