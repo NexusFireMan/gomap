@@ -114,6 +114,9 @@ func (s *Scanner) scanUDPPort(port int, detectServices bool) ScanResult {
 	}
 
 	service, version, confidence, evidence := s.classifyUDPResponseForProbe(port, response, probe, detectServices)
+	if detectServices && version == "" {
+		evidence = s.captureUnknownResponse(evidence, response)
+	}
 	return ScanResult{
 		Port:          port,
 		IsOpen:        true,

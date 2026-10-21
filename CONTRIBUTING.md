@@ -50,12 +50,15 @@ An opt-in kernel socket lifecycle test requires a separate user/network namespac
 test_dir=$(mktemp -d)
 go test -c -o "$test_dir/scanner.test" ./pkg/scanner
 unshare -Urn env GOMAP_RUN_ISOLATED_TESTS=1 "$test_dir/scanner.test" -test.run '^TestIsolatedRawSocketLifecycle$' -test.v
+unshare -Urn env GOMAP_RUN_ISOLATED_TESTS=1 "$test_dir/scanner.test" -test.run '^TestIsolatedUDPStates$' -test.v -test.count=3
 rm -r "$test_dir"
 ```
 
 This test refuses the initial network namespace or a namespace with other interfaces. It opens an idle raw TCP socket, verifies its read deadline and closure, and checks the native netlink missing-interface error. It sends no packets and adds or removes no addresses. Systems that disable unprivileged user namespaces cannot run it; do not substitute the host network namespace.
 
 Successful lifecycle tests do not establish end-to-end SYN discovery accuracy or native netlink address rollback. Those remain separate validation tasks in a disposable, disconnected lab.
+
+`TestIsolatedUDPStates` separately requires the same guards, brings up loopback only inside that disposable namespace, and creates local positive/silent UDP fixtures. It validates `open`, `open|filtered`, and `closed`, and observes a correlated kernel ICMP destination-unreachable/port-unreachable quotation ([RFC 792](https://www.rfc-editor.org/rfc/rfc792.html)). It changes no host NIC addresses and contacts no external targets. These Linux IPv4 results do not establish behavior under packet loss, firewall filtering, IPv6, other operating systems, or remote lab conditions.
 
 Fragment handling has a separate Linux kernel test, guarded by the same
 loopback-only namespace restrictions:

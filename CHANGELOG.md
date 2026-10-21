@@ -7,6 +7,11 @@ Note: this changelog is maintained from this point forward in the project histor
 ## Unreleased
 
 ### Added
+- Add strict `--host-config` JSON overrides for exact-IP CONNECT/UDP timeout, adaptive timing and retry settings, with per-host initial settings in JSON run metrics.
+- Add opt-in `--capture-unknown` bounded hex samples in existing evidence fields and `--evidence-bytes` (1-1024); suppress common sensitive markers/ASN.1 samples and restrict capture output files to Unix mode 0600. Arbitrary payloads may still contain sensitive data.
+- Add guarded Linux namespace UDP validation for positive responses, silent listeners and closed ports, verifying the kernel ICMP type 3/code 3 quotation against the fixture's UDP destination.
+- Add per-host/global coverage and performance summaries, separating scope throughput from confirmed open/closed throughput without inferring closed states from silence or missing SYN diagnostics.
+- Add JSON run metrics with build/version, whitelisted requested options, actual per-host engine (including SYN fallback), and preparation/discovery/combined scan-service timings; retain legacy duration and per-result formats. JSONL/CSV summaries use stderr.
 
 - Add deterministic CLI parser regressions for defaults, invalid arguments, normalization, aliases, unchanged caller arguments, duration boundaries and maintenance-option validation; no scan or maintenance actions run in these tests.
 - Add opt-in `--stream` for completed CONNECT open-port results in text or JSONL, with serialized writes, completion-order delivery, unchanged JSONL records and no duplicate final table/records.
@@ -24,6 +29,7 @@ Note: this changelog is maintained from this point forward in the project histor
 - Require Go 1.26.9 and update `golang.org/x/net` to v0.60.0 after vulnerability scanning identified advisories in the preceding baseline; align the Docker builder and include GoSNMP license notices in distributions.
 
 ### Fixed
+- Warn on inconclusive UDP and unreported SYN outcomes in the final text status, not only unresolved CONNECT results.
 
 - Rename ambiguous CONNECT warning counters such as `timeout=N` to `timeout_ports=N`; show timeout budgets separately and retain unresolved completeness warnings without treating silence as a confirmed closure.
 - Retain an overflow byte in generic UDP reads so oversized datagrams cannot be classified from a silently truncated prefix; preserve final received bytes when a read also returns an error.
