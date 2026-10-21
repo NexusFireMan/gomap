@@ -9,6 +9,8 @@ Note: this changelog is maintained from this point forward in the project histor
 ### Added
 
 - Add deterministic stream-framing, greeting/conversation and HTTP/TLS regressions across DNS/TCP, MySQL, ONC RPC, SMB, AJP, DCE/RPC, JRMP, RDP and mail/FTP paths, with bounded-reader and handshake/header fuzz invariants.
+- Add opt-in `--stream` for completed CONNECT open-port results in text or JSONL, with serialized writes, completion-order delivery, unchanged JSONL records and no duplicate final table/records.
+- Add CONNECT inferred-filtered counts and per-issue states plus configured/last-attempt timeout budgets in milliseconds; keep local and routing failures distinct from silent ports.
 - Add optional UDP/138 datagram queries, correlated control/error replies and bounded two-part NetBIOS application reassembly under `-u -Dv`/`-De`; preserve uncertainty, suppress names/payloads and keep default/controlled scans unchanged.
 - Add opt-in disconnected Linux IPv4/IPv6 fragment tests through the production UDP socket reader; validate ordering, missing/mixed fragments and UDP checksum rejection without introducing a raw-IP receiver in normal scans.
 - Add an optional single unicast NBSTAT query on UDP/137 under `-u -Dv`/`-De`, with random transaction IDs, strict response correlation, bounded attempts and no node-name/MAC disclosure; preserve default and controlled-profile behavior.
@@ -25,6 +27,7 @@ Note: this changelog is maintained from this point forward in the project histor
 - Collect fragmented text greetings and numeric multiline FTP/SMTP replies under existing deadlines; stop FTP/mail command progression on incomplete greetings/replies and enforce the generic FTP capture limit before appending excess data.
 - Read and validate complete RDP confirmations instead of interpreting partial frames, request/data packets or negotiation-shaped bytes at arbitrary offsets; retain valid negotiation failures as protocol evidence.
 - Require complete unambiguous HTTP headers before reporting a Server product, and parse titles only from the correctly framed/decoded body, without following redirects.
+- Rename ambiguous CONNECT warning counters such as `timeout=N` to `timeout_ports=N`; show timeout budgets separately and retain unresolved completeness warnings without treating silence as a confirmed closure.
 - Retain an overflow byte in generic UDP reads so oversized datagrams cannot be classified from a silently truncated prefix; preserve final received bytes when a read also returns an error.
 - Reconcile UDP documentation with optional authenticated sessions and discovery queries instead of retaining obsolete claims that these paths are unimplemented.
 

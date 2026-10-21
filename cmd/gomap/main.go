@@ -76,6 +76,7 @@ func Run() {
 		MaxTimeoutMS:    opts.MaxTimeoutMS,
 		AdaptiveTimeout: opts.AdaptiveTimeout,
 		Details:         opts.DetailsFlag,
+		Stream:          opts.Stream,
 		RandomAgent:     opts.RandomAgent,
 		RandomIP:        opts.RandomIP,
 		SourceInterface: opts.SourceInterface,

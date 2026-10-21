@@ -357,6 +357,7 @@ Output:
   --csv             shortcut for --format csv
   --out             output file path
   --details         add latency/confidence/evidence columns (text only)
+  --stream          emit completed open-port results immediately (CONNECT, text/JSONL)
 
 Source and HTTP identity controls:
   --random-agent    randomize HTTP User-Agent on each request
@@ -411,8 +412,10 @@ Operational limits:
 - CONNECT completes one requested connection attempt before releasing the remaining workers; this avoids the initial parallel burst without adding probes. Banner reads do not block that release. A silent first port can add one attempt's wait before parallel scanning starts.
 - `--retries` applies to timeouts and transient connection errors, not explicit connection refusals or permission errors. Its default remains zero; bounded scans can still miss temporarily unavailable services.
 - Configured CONNECT retries use at most eight concurrent connections (never more than the worker count) and share `--rate` with initial attempts. A successful retry retains its connection for banner detection. Many filtered ports can still make retries expensive; inspect diagnostics before retrying a full range.
-- JSON host entries include `connect_diagnostics` when CONNECT was used: attempted/refused/unresolved/recovered counts and per-port issues with attempts, last error and recovery status. Refused ports are aggregated; timeouts and other unresolved errors are not treated as confirmed closed. These diagnostics do not establish SYN/UDP completeness.
+- JSON host entries include `connect_diagnostics` when CONNECT was used: attempted/refused/unresolved/recovered/filtered counts and per-port issues with attempts, last error, state, recovery status and the last attempt's actual timeout budget (`timeout_ms`). `configured_timeout_ms` is the scanner's base timeout; adaptive tuning can change an individual attempt's budget. These values are milliseconds, not port counts.
+- CONNECT refusals count as `closed`; exhausted timeouts are labeled `filtered` (inferred from silence, not proof of a firewall). Local resource, permission, unreachable and other inconclusive errors remain `unknown`. Packet loss or an unavailable host can also cause timeouts. `filtered_ports` is a subset of `unresolved_ports`, retained for compatibility and completeness checks; it never inflates confirmed-open counts. Text warnings use unambiguous counters such as `timeout_ports=14`, separately from `configured_timeout_ms` and `last_attempt_timeout_ms`. These diagnostics do not establish SYN/UDP completeness.
 - Inconclusive CONNECT scans show a warning and `indeterminate (observed: ...)` text exposure. JSONL/CSV keep one record per open port and report the warning on stderr; use JSON for per-port failure details. A finished scan with unresolved ports still exits successfully; callers requiring completeness must inspect `unresolved_ports`.
+- `--stream` emits each completed CONNECT open-port result in completion order, before other ports or hosts finish. Text uses one self-contained `host:port open ...` line plus final diagnostics/summary; JSONL keeps its existing record schema and writes no duplicate final records. Without this flag, the sorted table/report is unchanged. With service detection, a result is emitted after its bounded detection finishes, not immediately after the TCP connection succeeds. Discovery still precedes port scanning; a slow output consumer can slow reporting. UDP, SYN, JSON documents and CSV do not support this flag. `--out` directs streamed records to the selected file instead of stdout.
 - Service names inferred only from ports do not prove a product or operating system. A missing banner may reflect filtering, a silent service, or a timeout.
 - Repeated unauthenticated connections can trigger server-side connection-error limits. MySQL errors such as 1129 (blocked host) and 1130 (host denied) are reported; GoMap does not authenticate or reset server limits automatically.
 - `--rate` limits initial CONNECT attempts and configured CONNECT retries per host; it is not a global limit for host discovery or additional service probes.
@@ -423,6 +426,14 @@ Operational limits:
 - Duplicate targets and ports are scanned once. CIDR discovery uses a bounded worker pool and preserves target order, including when applying `--max-hosts` afterward.
 - When duplicate observations are combined, service, version, confidence, evidence, and detection path stay together. Higher-confidence identifications take precedence; equal-confidence results prefer a known service and fuller metadata, retaining the first observation on a complete tie. This selects an observation, not independent confirmation or consensus. Complete TLS handshake metadata is not replaced by partial TLS fields.
 - IPv4 CIDRs omit network/broadcast addresses except for /31 and /32; IPv6 ranges preserve endpoints. Expansion is limited to 65,536 addresses per CIDR.
+
+```bash
+# Completion-order text results, followed by the final coverage summary
+gomap -s --stream -p - 10.0.11.6
+
+# One existing-schema JSONL record per completed open port; diagnostics use stderr
+gomap -s --stream --format jsonl -p 22,80,443 10.0.11.9
+```
 
 Non-standard port note:
 - For unknown open TCP ports, `-s` sends a bounded set of lightweight probes (`GET`, `CRLF`, and `HELP`) to identify moved services.
