@@ -8,6 +8,7 @@ Note: this changelog is maintained from this point forward in the project histor
 
 ### Added
 
+- Add bounded RESP2 INFO, IRC registration and generic write-first transaction readers with deterministic split/truncation/error fixtures, loopback exchanges, early-completion/message-boundary tests and fuzz targets. Cover numeric replies, POP3 CAPA, tagged IMAP CAPABILITY and HTTP/RTSP/SIP response framing used by existing probes.
 - Add deterministic LDAP/LDAPS and TDS PRELOGIN regression fixtures covering split reads, truncation/errors, final EOF bytes, message boundaries, malformed fields, bounded packet assembly, unchanged requests and fixed deadlines; add loopback exchanges and fuzz targets without external hosts.
 - Add strict `--host-config` JSON overrides for exact-IP CONNECT/UDP timeout, adaptive timing and retry settings, with per-host initial settings in JSON run metrics.
 - Add opt-in `--capture-unknown` bounded hex samples in existing evidence fields and `--evidence-bytes` (1-1024); suppress common sensitive markers/ASN.1 samples and restrict capture output files to Unix mode 0600. Arbitrary payloads may still contain sensitive data.
@@ -33,6 +34,8 @@ Note: this changelog is maintained from this point forward in the project histor
 
 ### Fixed
 
+- Send existing Redis INFO and IRC registration payloads before waiting for responses; collect complete RESP bulk bodies and later IRC disclosure lines instead of reducing replies to a length line or initial NOTICE. Keep evidence and product/version tied to the same complete observation.
+- Withhold versions from incomplete runtime text disclosures, incomplete/malformed RESP and partial HTTP-like headers; report low confidence and an explicit evidence note. Preserve independently complete earlier disclosures, keep legacy pure parser fixtures separate from runtime framing proof and reject arbitrary bulk contents as standalone banners.
 - Replace LDAP text/offset hints and TDS packet-type-only matching with bounded complete-response validation. Correlate LDAP BindResponse IDs with the anonymous request and validate LDAP result/optional fields; validate TDS PRELOGIN option ranges and bounded packet sequences. Reject request echoes and incomplete/malformed responses without elevating protocol evidence into an authenticated identity or product version.
 - Warn on inconclusive UDP and unreported SYN outcomes in the final text status, not only unresolved CONNECT results.
 
