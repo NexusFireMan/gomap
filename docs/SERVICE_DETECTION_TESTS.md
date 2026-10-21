@@ -20,6 +20,8 @@ scanners are required. IP/application UDP fragments are covered separately in
 | FTP and mail conversations | Existing command sequences over chunked loopback connections, SMTP/POP3/IMAP TLS paths, complete numeric multiline replies and stopping on incomplete greetings |
 | RDP | Complete 11/19-byte TPKT/X.224 confirmations, offered selections, failure responses, strict lengths/types and an actual loopback TLS upgrade/certificate CN |
 | HTTP/TLS | Small stream writes, metadata retention, malformed status lines, complete/unambiguous headers, body/header separation, framed/chunked titles and redirect non-following |
+| LDAP/LDAPS | Complete definite-BER frames, non-minimal length forms up to four length octets, matching request IDs, BindResponse results/optional fields, malformed primitives, request echoes, size/count limits and a loopback TLS exchange |
+| TDS 7.x PRELOGIN | Complete server reply packets, bounded multi-packet assembly, EOM/sequence/SPID checks, option-table framing/ranges, reflected request rejection, invalid values, fixed deadlines and loopback exchanges |
 
 The stream fixtures deliberately split writes/reads without sleeps. TCP is free
 to coalesce writes; deterministic one-byte/every-split readers separately prove
@@ -53,6 +55,21 @@ server implementation evidence. Parsing uses Go's HTTP reader, not a new
 hand-written HTTP grammar. Existing probe definitions and configured deadlines
 are unchanged; rejecting weak versions may invoke existing fallback paths.
 
+LDAP no longer identifies a reply from text or a tag at a fixed offset. The
+reader collects at most 4096 bytes under one existing probe deadline. It checks
+the sent message ID (currently 1), result fields, UTF-8 string encodings and
+bounded optional referral/SASL/control structure. Referrals are not followed;
+diagnostics, names, credentials and control values are not exposed. An error
+result can confirm the protocol without implying a successful bind. Length
+normalization is local to each element; Go's ASN.1 parser validates primitives.
+
+TDS accepts the initial PRELOGIN server-response shape, not a reflected request
+or an arbitrary packet of the same type. Limits are 4096 assembled payload
+bytes and 32 packets with one fixed probe deadline. Checked ranges cannot
+overlap each other or the option table. The existing request is unchanged; no
+login, TLS negotiation or SQL statement follows. Option payloads are not
+promoted to product-version or server-identity claims.
+
 ## Run Locally
 
 ```bash
@@ -61,6 +78,9 @@ go test -race ./pkg/scanner -run 'Test(FramedReaders|RPCRecord|AJPReply|TextGree
 go test ./pkg/scanner -run '^$' -fuzz '^FuzzBoundedStreamFraming$' -fuzztime=15s -parallel=2
 go test ./pkg/scanner -run '^$' -fuzz '^FuzzHandshakeFragmentation$' -fuzztime=15s -parallel=2
 go test ./pkg/scanner -run '^$' -fuzz '^FuzzHTTPHeaderBoundaries$' -fuzztime=15s -parallel=2
+go test -race ./pkg/scanner -run 'Test(LDAP|TDS)' -count=10
+go test ./pkg/scanner -run '^$' -fuzz '^FuzzLDAPBindFraming$' -fuzztime=15s -parallel=2
+go test ./pkg/scanner -run '^$' -fuzz '^FuzzTDSPreloginFraming$' -fuzztime=15s -parallel=2
 ```
 
 The fuzz targets compare complete/fragmented reader outcomes, input ownership,
@@ -69,7 +89,16 @@ protocol parsing; update this matrix with new negative cases and limits.
 
 ## Remaining Review
 
-- LDAP and TDS still need equivalent bounded framing/correlation review.
+- LDAP review covers the existing anonymous bind, not StartTLS, searches,
+  authenticated/SASL sessions or all extension schemas. Counts of controls and
+  referral entries are capped at 32. Unknown extra fields, indefinite lengths,
+  high-tag-number forms and lengths using more than four octets are rejected.
+  Static message-ID matching is not replay protection or server authentication.
+- TDS review covers initial option-table PRELOGIN replies with known options
+  0-7, VERSION first and VERSION/ENCRYPTION present. It does not cover login/error
+  token streams, TDS 8 TLS-first sessions, legacy 4.2 or unknown future options.
+  Packet numbering and fixed-connection context are structural checks, not a
+  cryptographic response identifier or authentication.
 - RESP/IRC/generic write-first probes need protocol-specific transaction
   termination, not a generic greeting reader substituted for binary/bulk data.
 - Retaining partial text bytes does not establish a complete product/version;
@@ -82,3 +111,6 @@ protocol parsing; update this matrix with new negative cases and limits.
 - [RDP server confirmation](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpbcgr/13757f8f-66db-4273-9d2c-385c33b1e483)
 - [RDP negotiation failures](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpbcgr/1b3920e7-0116-4345-bc45-f2c4ad012761)
 - [Go HTTP response reader](https://pkg.go.dev/net/http#ReadResponse)
+- [LDAP protocol and encoding](https://www.rfc-editor.org/rfc/rfc4511.html)
+- [TDS PRELOGIN](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-tds/60f56408-0188-4cd5-8b90-25c6f2423868)
+- [TDS packet sequencing](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-tds/3420734b-287b-4cde-a0dd-538c770a89a1)

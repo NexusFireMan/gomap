@@ -7,6 +7,8 @@ Note: this changelog is maintained from this point forward in the project histor
 ## Unreleased
 
 ### Added
+
+- Add deterministic LDAP/LDAPS and TDS PRELOGIN regression fixtures covering split reads, truncation/errors, final EOF bytes, message boundaries, malformed fields, bounded packet assembly, unchanged requests and fixed deadlines; add loopback exchanges and fuzz targets without external hosts.
 - Add strict `--host-config` JSON overrides for exact-IP CONNECT/UDP timeout, adaptive timing and retry settings, with per-host initial settings in JSON run metrics.
 - Add opt-in `--capture-unknown` bounded hex samples in existing evidence fields and `--evidence-bytes` (1-1024); suppress common sensitive markers/ASN.1 samples and restrict capture output files to Unix mode 0600. Arbitrary payloads may still contain sensitive data.
 - Add guarded Linux namespace UDP validation for positive responses, silent listeners and closed ports, verifying the kernel ICMP type 3/code 3 quotation against the fixture's UDP destination.
@@ -30,6 +32,8 @@ Note: this changelog is maintained from this point forward in the project histor
 - Require Go 1.26.9 and update `golang.org/x/net` to v0.60.0 after vulnerability scanning identified advisories in the preceding baseline; align the Docker builder and include GoSNMP license notices in distributions.
 
 ### Fixed
+
+- Replace LDAP text/offset hints and TDS packet-type-only matching with bounded complete-response validation. Correlate LDAP BindResponse IDs with the anonymous request and validate LDAP result/optional fields; validate TDS PRELOGIN option ranges and bounded packet sequences. Reject request echoes and incomplete/malformed responses without elevating protocol evidence into an authenticated identity or product version.
 - Warn on inconclusive UDP and unreported SYN outcomes in the final text status, not only unresolved CONNECT results.
 
 - Collect fragmented text greetings and numeric multiline FTP/SMTP replies under existing deadlines; stop FTP/mail command progression on incomplete greetings/replies and enforce the generic FTP capture limit before appending excess data.
