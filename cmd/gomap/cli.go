@@ -47,6 +47,9 @@ type CLIOptions struct {
 	RandomIP        bool
 	SourceInterface string
 	SourceIPs       string
+	HostConfig      string
+	CaptureUnknown  bool
+	EvidenceBytes   int
 	Host            string
 	SNMPConfig      string
 }
@@ -98,6 +101,9 @@ func ParseCLIOptions(args []string) (CLIOptions, error) {
 	fs.BoolVar(&opts.RandomIP, "random-ip", false, "enable randomized source-IP or HTTP identity controls")
 	fs.StringVar(&opts.SourceInterface, "source-interface", "", "interface used for real source-IP socket binding")
 	fs.StringVar(&opts.SourceIPs, "source-ips", "", "temporarily add and rotate comma-separated IP/CIDR addresses (Linux, root required)")
+	fs.StringVar(&opts.HostConfig, "host-config", "", "JSON file with per-IP CONNECT/UDP timeout and retry overrides")
+	fs.BoolVar(&opts.CaptureUnknown, "capture-unknown", false, "capture bounded hex samples of unrecognized service responses (sensitive, opt-in)")
+	fs.IntVar(&opts.EvidenceBytes, "evidence-bytes", 256, "maximum unrecognized response sample size in bytes (1-1024)")
 
 	fs.Usage = func() {
 		printHelp(os.Stderr)
@@ -153,6 +159,12 @@ func interspersedFlags(fs *flag.FlagSet, args []string) []string {
 }
 
 func normalizeOptions(opts CLIOptions) (CLIOptions, error) {
+	if opts.EvidenceBytes < 1 || opts.EvidenceBytes > 1024 {
+		return opts, errors.New("--evidence-bytes must be between 1 and 1024")
+	}
+	if opts.CaptureUnknown {
+		opts.ServiceFlag = true
+	}
 	if opts.SNMPConfig != "" {
 		if strings.TrimSpace(opts.SNMPConfig) == "" || !opts.UDPFlag || opts.GhostFlag || opts.RandomIP || opts.SourceInterface != "" {
 			return opts, errors.New("--snmp-config requires UDP and cannot combine with controlled-profile or source-identity options")
@@ -209,6 +221,9 @@ func normalizeOptions(opts CLIOptions) (CLIOptions, error) {
 		return opts, errors.New("use either -p or --top/--top-ports, not both")
 	}
 	opts.ScanType = strings.ToLower(strings.TrimSpace(opts.ScanType))
+	if opts.HostConfig != "" && opts.ScanType == "syn" {
+		return opts, errors.New("--host-config supports CONNECT/UDP, not native SYN")
+	}
 	if opts.ScanType != "connect" && opts.ScanType != "syn" {
 		return opts, errors.New("invalid --scan-type. Allowed: connect, syn")
 	}
@@ -328,6 +343,7 @@ func printHelp(w *os.File) {
   --rate <N>                 max ports/second per host (0 = unlimited)
   --global-rate <N>          max connection/probe starts/second for the entire scan
   --timeout <ms>             dial timeout per attempt
+  --host-config <path>       per-IP CONNECT/UDP settings in JSON
   --retries <N>              retries per port on transient connection errors
   --backoff-ms <ms>          exponential backoff base between retries
   --adaptive-timeout         dynamic timeout tuning (default: true)
@@ -340,6 +356,8 @@ func printHelp(w *os.File) {
   --csv                      shortcut for --format csv
   --out <path>               write output to file
   --details                  add latency/confidence/evidence columns (text only)
+  --capture-unknown          opt-in bounded hex evidence; enables -s (sensitive)
+  --evidence-bytes <N>       sample limit, 1-1024 bytes (default: 256)
   --stream                   emit completed open-port results immediately (CONNECT, text/JSONL)
 
 %sSource & HTTP Identity Controls:%s

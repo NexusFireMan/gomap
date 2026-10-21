@@ -28,6 +28,7 @@ type scanReport struct {
 	TotalOpenPorts int          `json:"total_open_ports"`
 	DurationMs     int64        `json:"duration_ms"`
 	Hosts          []hostReport `json:"hosts"`
+	Metrics        *ScanMetrics `json:"metrics,omitempty"`
 }
 
 type jsonlRecord struct {
@@ -56,6 +57,19 @@ const reportSchemaVersion = "1.0.0"
 
 // PrintJSONReport prints the scan results in a machine-friendly JSON document.
 func PrintJSONReport(w io.Writer, target string, ports []int, targets []string, allResults map[string][]scanner.ScanResult, serviceScan bool, duration time.Duration, diagnostics ...map[string]scanner.ConnectDiagnostics) error {
+	var diag map[string]scanner.ConnectDiagnostics
+	if len(diagnostics) > 0 {
+		diag = diagnostics[0]
+	}
+	return printJSONReport(w, target, ports, targets, allResults, serviceScan, duration, diag, nil)
+}
+
+// PrintJSONReportWithMetrics adds run metadata without changing per-result formats.
+func PrintJSONReportWithMetrics(w io.Writer, target string, ports []int, targets []string, allResults map[string][]scanner.ScanResult, serviceScan bool, duration time.Duration, diagnostics map[string]scanner.ConnectDiagnostics, metrics ScanMetrics) error {
+	return printJSONReport(w, target, ports, targets, allResults, serviceScan, duration, diagnostics, &metrics)
+}
+
+func printJSONReport(w io.Writer, target string, ports []int, targets []string, allResults map[string][]scanner.ScanResult, serviceScan bool, duration time.Duration, diagnostics map[string]scanner.ConnectDiagnostics, metrics *ScanMetrics) error {
 	report := scanReport{
 		SchemaVersion:  reportSchemaVersion,
 		GeneratedAt:    time.Now().UTC().Format(time.RFC3339),
@@ -65,6 +79,7 @@ func PrintJSONReport(w io.Writer, target string, ports []int, targets []string, 
 		PortsRequested: len(ports),
 		DurationMs:     duration.Milliseconds(),
 		Hosts:          make([]hostReport, 0, len(targets)),
+		Metrics:        metrics,
 	}
 
 	for _, host := range targets {
@@ -75,8 +90,8 @@ func PrintJSONReport(w io.Writer, target string, ports []int, targets []string, 
 			OpenPorts: scanner.CountOpen(results),
 			Results:   results,
 		}
-		if len(diagnostics) > 0 {
-			if diag, ok := diagnostics[0][host]; ok {
+		if diagnostics != nil {
+			if diag, ok := diagnostics[host]; ok {
 				hostEntry.ConnectDiagnostics = &diag
 			}
 		}

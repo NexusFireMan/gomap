@@ -20,6 +20,10 @@ GoMap's roadmap focuses on improving reliability, test coverage, documentation, 
 
 ## Detection and Scan Reliability
 
+- [x] Report per-host/global coverage and scope versus confirmed-state throughput, with JSON run context and combined phase timings.
+- [x] Validate Linux IPv4 UDP positive responses, silence and correlated kernel ICMP port-unreachable using an opt-in, loopback-only network namespace; broader platform/network conditions remain separate validation.
+- [x] Add opt-in bounded hex evidence for unparsed TCP/UDP responses, conservative sensitive-content suppression and private Unix output files; redaction is not guaranteed for arbitrary protocols.
+- [x] Add strict per-IP CONNECT/UDP timeout/retry/adaptive overrides and initial per-host settings in JSON metrics; native SYN overrides remain unsupported.
 - [x] Keep unvalidated UDP port hints low confidence and prevent arbitrary payload bytes from becoming product versions.
 - [x] Add bounded NTP/SSDP response-shape checks and deterministic negative/fuzz fixtures without new probes.
 - [x] Validate a bounded SNMPv1 response subset with standard ASN.1 decoding, negative fixtures, and metadata disclosure tests.

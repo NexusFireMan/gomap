@@ -7,6 +7,11 @@ Note: this changelog is maintained from this point forward in the project histor
 ## Unreleased
 
 ### Added
+- Add strict `--host-config` JSON overrides for exact-IP CONNECT/UDP timeout, adaptive timing and retry settings, with per-host initial settings in JSON run metrics.
+- Add opt-in `--capture-unknown` bounded hex samples in existing evidence fields and `--evidence-bytes` (1-1024); suppress common sensitive markers/ASN.1 samples and restrict capture output files to Unix mode 0600. Arbitrary payloads may still contain sensitive data.
+- Add guarded Linux namespace UDP validation for positive responses, silent listeners and closed ports, verifying the kernel ICMP type 3/code 3 quotation against the fixture's UDP destination.
+- Add per-host/global coverage and performance summaries, separating scope throughput from confirmed open/closed throughput without inferring closed states from silence or missing SYN diagnostics.
+- Add JSON run metrics with build/version, whitelisted requested options, actual per-host engine (including SYN fallback), and preparation/discovery/combined scan-service timings; retain legacy duration and per-result formats. JSONL/CSV summaries use stderr.
 
 - Add deterministic stream-framing, greeting/conversation and HTTP/TLS regressions across DNS/TCP, MySQL, ONC RPC, SMB, AJP, DCE/RPC, JRMP, RDP and mail/FTP paths, with bounded-reader and handshake/header fuzz invariants.
 - Add deterministic CLI parser regressions for defaults, invalid arguments, normalization, aliases, unchanged caller arguments, duration boundaries and maintenance-option validation; no scan or maintenance actions run in these tests.
@@ -25,6 +30,7 @@ Note: this changelog is maintained from this point forward in the project histor
 - Require Go 1.26.9 and update `golang.org/x/net` to v0.60.0 after vulnerability scanning identified advisories in the preceding baseline; align the Docker builder and include GoSNMP license notices in distributions.
 
 ### Fixed
+- Warn on inconclusive UDP and unreported SYN outcomes in the final text status, not only unresolved CONNECT results.
 
 - Collect fragmented text greetings and numeric multiline FTP/SMTP replies under existing deadlines; stop FTP/mail command progression on incomplete greetings/replies and enforce the generic FTP capture limit before appending excess data.
 - Read and validate complete RDP confirmations instead of interpreting partial frames, request/data packets or negotiation-shaped bytes at arbitrary offsets; retain valid negotiation failures as protocol evidence.
