@@ -15,9 +15,9 @@ GoMap's roadmap focuses on improving reliability, test coverage, documentation, 
 - [x] Frame the current RESP2 INFO, IRC registration and generic write-first probe transactions with byte/line/depth/count limits, deterministic negative fixtures and fixed deadlines; withhold incomplete version disclosures while retaining complete earlier evidence. RESP3 negotiation and general-purpose client sessions remain outside this scope.
 - Require new service probes to extend the [regression matrix](docs/SERVICE_DETECTION_TESTS.md); a completed baseline does not certify every protocol variant.
 - [x] Raise the enforced total statement coverage floor past 25% to 40%, consistently in local checks and CI.
-- [ ] Raise the enforced total statement coverage floor to 60% with sufficient headroom and meaningful tests.
+- [x] Raise the enforced total statement coverage floor to 60% with sufficient headroom and meaningful tests.
 - Integrated v2.5.0 validation reached 59.3% total coverage. Parser regressions do not imply complete installer/updater or CLI entry-point coverage; those remain follow-up work.
-- Development validation including the coverage-observation regressions reaches 71.9% total statement coverage; the enforced floor is 40%, not 60%.
+- Development validation including the coverage-observation regressions reaches 71.9% total statement coverage; the enforced floor is now 60%.
 
 ## Detection and Scan Reliability
 
@@ -66,6 +66,7 @@ GoMap's roadmap focuses on improving reliability, test coverage, documentation, 
 - [x] Add opt-in completion-order text/JSONL streaming for CONNECT results with deterministic delivery, deduplication and writer-error regressions.
 
 - [ ] Stabilize full-range CONNECT results across constrained VirtualBox and VPN lab networks.
+- [x] Add deterministic full-range CONNECT mixed-failure/worker/retry regressions and an opt-in repeated lab matrix that compares open-port sets and reports timing variance; fixture success does not establish full-range live-network stability.
 - [ ] Expand native fingerprints for SMB server identity, NetBIOS workgroup data, and IRC product/version banners.
 - [x] Keep unidentified open TCP ports explicit when service detection is enabled, without inventing service or version data.
 - [ ] Track benchmark variance across repeated runs, worker counts, and filtered-port conditions.

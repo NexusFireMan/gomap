@@ -8,6 +8,7 @@ Note: this changelog is maintained from this point forward in the project histor
 
 ### Added
 
+- Add deterministic CONNECT repeatability tests across worker counts, retries and the full TCP range, plus an opt-in lab matrix reporting open-set changes, confirmed-state throughput and timing spread without service probes.
 - Add an opt-in two-VM release regression: repeated quick CONNECT scans, deep probes, full TCP range, explicit coverage accounting and JSON/JSONL/CSV preservation checks on the same captured observations. Fail rather than skip unavailable lab hosts or missing baseline services.
 - Add bounded RESP2 INFO, IRC registration and generic write-first transaction readers with deterministic split/truncation/error fixtures, loopback exchanges, early-completion/message-boundary tests and fuzz targets. Cover numeric replies, POP3 CAPA, tagged IMAP CAPABILITY and HTTP/RTSP/SIP response framing used by existing probes.
 - Add deterministic LDAP/LDAPS and TDS PRELOGIN regression fixtures covering split reads, truncation/errors, final EOF bytes, message boundaries, malformed fields, bounded packet assembly, unchanged requests and fixed deadlines; add loopback exchanges and fuzz targets without external hosts.
@@ -30,7 +31,7 @@ Note: this changelog is maintained from this point forward in the project histor
 
 ### Changed
 
-- Raise the minimum total statement coverage from 10% to 40% in local coverage checks and CI; retain 60% as a future roadmap milestone.
+- Raise the minimum total statement coverage from 10% to 60% in local coverage checks and CI, following the intermediate 40% milestone.
 - Require Go 1.26.9 and update `golang.org/x/net` to v0.60.0 after vulnerability scanning identified advisories in the preceding baseline; align the Docker builder and include GoSNMP license notices in distributions.
 
 ### Fixed
