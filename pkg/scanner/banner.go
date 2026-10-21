@@ -115,7 +115,7 @@ var memcachedVersionRE = regexp.MustCompile(`^VERSION [0-9]+\.[0-9]+(?:\.[0-9]+)
 
 // Generic descriptions confirm less than a disclosed implementation banner.
 func bannerConfidence(version string) string {
-	if version == "Redis (authentication required)" {
+	if version == "Redis (authentication required)" || version == "MySQL (connection rejected)" {
 		return "medium"
 	}
 	switch strings.ToLower(strings.TrimSpace(version)) {
@@ -133,6 +133,11 @@ func bannerIdentificationConfidence(banner, version string) string {
 	if validHTTPResponseLine(banner) && responseServerVersion(banner, "") == "" && extractHTTPTitle(banner) != "" {
 		// A page title is content, not a server implementation disclosure.
 		return "medium"
+	}
+	if !validHTTPResponseLine(banner) {
+		if service, _ := parseSMB(banner); service != "" {
+			return "medium" // Text mentions are not a native SMB negotiation.
+		}
 	}
 	return bannerConfidence(version)
 }
@@ -712,17 +717,6 @@ func parseIISVersion(serverHeader string) string {
 	iisRegex := regexp.MustCompile(`Microsoft-IIS[/-]?([\d\.]+)`)
 	if match := iisRegex.FindStringSubmatch(serverHeader); match != nil {
 		version := match[1]
-		// Map IIS versions
-		iisVersionMap := map[string]string{
-			"10.0": "Windows Server 2016 or later",
-			"8.5":  "Windows Server 2012 R2",
-			"8.0":  "Windows Server 2012",
-			"7.5":  "Windows Server 2008 R2 or Windows 7",
-			"7.0":  "Windows Server 2008 or Windows Vista",
-		}
-		if desc, ok := iisVersionMap[version]; ok {
-			return fmt.Sprintf("IIS %s (%s)", version, desc)
-		}
 		return fmt.Sprintf("IIS %s", version)
 	}
 	return ""

@@ -17,7 +17,7 @@ GoMap's roadmap focuses on improving reliability, test coverage, documentation, 
 - [x] Raise the enforced total statement coverage floor past 25% to 40%, consistently in local checks and CI.
 - [ ] Raise the enforced total statement coverage floor to 60% with sufficient headroom and meaningful tests.
 - Integrated v2.5.0 validation reached 59.3% total coverage. Parser regressions do not imply complete installer/updater or CLI entry-point coverage; those remain follow-up work.
-- Development validation including the RDP/TDS confidence review reaches 71.7% total statement coverage; the enforced floor is 40%, not 60%.
+- Development validation including the current specialized-path confidence review reaches 71.8% total statement coverage; the enforced floor is 40%, not 60%.
 
 ## Detection and Scan Reliability
 
@@ -56,9 +56,9 @@ GoMap's roadmap focuses on improving reliability, test coverage, documentation, 
 - [x] Add a global attempt budget covering discovery, retries, and additional service connections without replacing per-host pacing.
 - [x] Extend isolated SYN response fixtures and cleanup failure tests without privileged sockets or NIC changes.
 - [x] Add negative fixtures for malformed SIP/RTSP, RFB, and Memcached signatures and forged body headers.
-- [ ] Extend confidence review across all protocol-specific detection paths; distinguish protocol evidence from product/version disclosure.
-- [x] Review TCP CHAOS `version.bind` and the HTTP response to `OPTIONS /wsman`: validate complete/correlated DNS fields, retain server-declared text without assuming BIND, and distinguish HTTP disclosures from confirmed WinRM. Other specialized paths remain under the confidence-review item above.
-- [x] Review RDP and TDS PRELOGIN confidence: distinguish X.224-only hints, RDP selections/rejections and actual TLS completion; label certificate CNs unverified and TDS sender-version/encryption fields server-declared, without inferring Microsoft products or Windows. Broader protocol-specific confidence review remains open.
+- [x] Review the currently implemented specialized TCP/UDP identification paths and document protocol, declaration, port-hint and authenticated-session confidence separately; add remaining MySQL/SMB/RPC/IIS negative regressions. This is a bounded review of current paths, not certification of all protocol variants or future probes.
+- [x] Review TCP CHAOS `version.bind` and the HTTP response to `OPTIONS /wsman`: validate complete/correlated DNS fields, retain server-declared text without assuming BIND, and distinguish HTTP disclosures from confirmed WinRM. See the current-route confidence inventory for the other specialized paths.
+- [x] Review RDP and TDS PRELOGIN confidence: distinguish X.224-only hints, RDP selections/rejections and actual TLS completion; label certificate CNs unverified and TDS sender-version/encryption fields server-declared, without inferring Microsoft products or Windows. These regressions cover current bounded probes, not all RDP/TDS sessions.
 - [x] Preserve explicit UDP states in text, JSON, JSONL, and CSV; count only confirmed open ports.
 - [x] Support `--version` and options before or after the CLI target.
 - [x] Separate CONNECT timeout port counters from actual timeout budgets; distinguish inferred-filtered timeouts, confirmed refusals and unknown failures without concealing incomplete coverage.
@@ -71,9 +71,10 @@ GoMap's roadmap focuses on improving reliability, test coverage, documentation, 
 
 ## Documentation and Release Workflow
 
+- [x] Complete the current pre-release confidence inventory, final two-Metasploitable CONNECT/structured-output regression and changelog/known-limit review; retain preliminary failures and incomplete network coverage in [release readiness](docs/RELEASE_READINESS.md). This does not promote `main` or publish a release.
 - [ ] Add more lab-based examples for authorized environments.
 - [x] Keep README language focused on controlled-rate scanning, structured output, and automation-friendly workflows.
-- [ ] Document a repeatable local-lab benchmark procedure and reporting template.
+- [x] Document a repeatable local-lab release regression/benchmark procedure, reporting template and explicit known limitations in [release readiness](docs/RELEASE_READINESS.md); executing the procedure is distinct from achieving complete network coverage.
 
 Completed:
 

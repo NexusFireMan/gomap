@@ -8,7 +8,7 @@ func TestParseBannerHTTPIIS(t *testing.T) {
 	if service != "http" {
 		t.Fatalf("expected http service, got %q", service)
 	}
-	if version != "IIS 7.5 (Windows Server 2008 R2 or Windows 7)" {
+	if version != "IIS 7.5" {
 		t.Fatalf("unexpected IIS version: %q", version)
 	}
 }

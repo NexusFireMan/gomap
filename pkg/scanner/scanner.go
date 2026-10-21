@@ -615,7 +615,7 @@ func (s *Scanner) grabBanner(conn net.Conn, port int, result *ScanResult) {
 		if version, evidence := detectMySQLGreetingFromConn(conn, s.boundedServiceTimeout(1200*time.Millisecond, 2500*time.Millisecond)); version != "" {
 			result.ServiceName = "mysql"
 			result.Version = version
-			result.Confidence = "high"
+			result.Confidence = bannerConfidence(version)
 			result.Evidence = evidence
 			result.DetectionPath = "protocol-fingerprint"
 			return
@@ -735,6 +735,8 @@ func (s *Scanner) grabBanner(conn net.Conn, port int, result *ScanResult) {
 			result.Evidence = method
 			if method != "raw smb negotiate" {
 				result.Confidence = "low"
+			} else {
+				result.Evidence = "SMB NEGOTIATE response; selected " + smbInfo + "; product/OS not established"
 			}
 			result.DetectionPath = "smb-specialized"
 			return
@@ -1708,7 +1710,11 @@ func parseONCRPCReply(data []byte, xid uint32) (accepted, valid bool) {
 	if acceptOffset+4 > len(payload) {
 		return false, false
 	}
-	return binary.BigEndian.Uint32(payload[acceptOffset:acceptOffset+4]) == 0, true
+	status := binary.BigEndian.Uint32(payload[acceptOffset : acceptOffset+4])
+	if status == 0 && acceptOffset+4 != len(payload) {
+		return false, false // NULL success has no procedure result body.
+	}
+	return status == 0, true
 }
 
 func roundUp4(n int) int {
@@ -1794,7 +1800,9 @@ func buildDNSVersionBindQuery() []byte {
 }
 
 func detectMySQLGreetingFromConn(conn net.Conn, timeout time.Duration) (string, string) {
-	_ = conn.SetReadDeadline(time.Now().Add(timeout))
+	if err := conn.SetReadDeadline(time.Now().Add(timeout)); err != nil {
+		return "", ""
+	}
 	buf, err := readMySQLPacket(conn)
 	if err != nil {
 		return "", ""
@@ -1835,6 +1843,9 @@ func parseMySQLHandshakePacket(packet []byte) string {
 		return ""
 	}
 	v := payload[:end]
+	if binaryTextObservation(v) || strings.ContainsAny(v, "\r\n\t") {
+		return ""
+	}
 	if strings.Contains(strings.ToLower(v), "mariadb") {
 		return "MariaDB " + sanitizeVersionString(v)
 	}
@@ -2044,13 +2055,19 @@ func (s *Scanner) attemptRawSMBDetection(address string) string {
 	}
 	defer func() { _ = conn.Close() }()
 
-	_ = conn.SetDeadline(time.Now().Add(s.Timeout))
-	if _, err := conn.Write(buildSMBNegotiate()); err != nil {
+	if err := conn.SetDeadline(time.Now().Add(s.Timeout)); err != nil {
+		return ""
+	}
+	request := buildSMBNegotiate()
+	if n, err := conn.Write(request); err != nil || n != len(request) {
 		return ""
 	}
 	frame, err := readSMBMessage(conn)
 	if err != nil {
 		return ""
+	}
+	if len(frame) < 8 || string(frame[4:8]) != "\xfeSMB" {
+		return "" // This request offers SMB2/3 only, not legacy SMB1.
 	}
 	return s.analyzeSMBResponse(frame[4:])
 }
@@ -2101,9 +2118,16 @@ func (s *Scanner) analyzeSMBResponse(data []byte) string {
 
 // extractSMB2Dialect detects specific SMB2/3 dialect
 func (s *Scanner) extractSMB2Dialect(data []byte) string {
-	if len(data) < 128 || binary.LittleEndian.Uint16(data[4:6]) != 64 ||
+	if len(data) < 128 || string(data[:4]) != "\xfeSMB" || binary.LittleEndian.Uint16(data[4:6]) != 64 ||
 		binary.LittleEndian.Uint32(data[8:12]) != 0 || binary.LittleEndian.Uint16(data[12:14]) != 0 ||
-		binary.LittleEndian.Uint32(data[16:20])&1 == 0 || binary.LittleEndian.Uint16(data[64:66]) != 65 {
+		binary.LittleEndian.Uint32(data[16:20])&1 == 0 || binary.LittleEndian.Uint32(data[20:24]) != 0 ||
+		binary.LittleEndian.Uint64(data[24:32]) != 0 || binary.LittleEndian.Uint64(data[40:48]) != 0 ||
+		binary.LittleEndian.Uint16(data[64:66]) != 65 {
+		return ""
+	}
+	securityOffset := int(binary.LittleEndian.Uint16(data[120:122]))
+	securityLength := int(binary.LittleEndian.Uint16(data[122:124]))
+	if securityLength > 0 && (securityOffset < 128 || securityOffset > len(data) || securityLength > len(data)-securityOffset) {
 		return ""
 	}
 

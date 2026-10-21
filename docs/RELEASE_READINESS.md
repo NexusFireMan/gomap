@@ -1,0 +1,134 @@
+# Release Readiness
+
+This checklist separates implementation review, reproducible regression testing
+and publishing. It does not certify every protocol variant or promise complete
+network coverage. No release version/tag is assigned by running these tests.
+
+## Gates
+
+- Review current specialized confidence paths against the [confidence inventory](SERVICE_DETECTION_TESTS.md#identification-confidence-review).
+- Run `make ci` with the Go version pinned in `go.mod`; retain lint, test, race and coverage results.
+- Start the authorized Windows/Linux Metasploitable3 fixtures, wait for services to settle, and run the two-VM regression below. Investigate missing baseline services; do not skip a failed host or relabel silence as closed.
+- Review JSON coverage and stderr warnings alongside elapsed time. Explain unresolved outcomes and differences between runs before promotion.
+- Review `CHANGELOG.md` Unreleased entries, compatibility notes and remaining limitations. Leave historical released sections unchanged.
+- Promote only through a reviewed `dev` to `main` merge-commit PR, then explicitly select a semantic version and publish its tag as described in [release workflow](RELEASE_WORKFLOW.md). Do not publish from the validation branch.
+
+## Two-VM Regression
+
+The opt-in test defaults to the authorized lab fixtures `10.0.11.6` (Windows)
+and `10.0.11.9` (Linux). Override them only with explicitly authorized targets.
+It does not log in, install anything, change NICs/firewalls or invoke another
+scanner. Unlike older smoke tests, unreachable VMs fail rather than skip.
+
+```bash
+git rev-parse HEAD
+git status --short
+go version
+GOMAP_RUN_RELEASE_LAB_TESTS=1 GOMAP_LAB_REVISION=$(git rev-parse HEAD) \
+  GOMAP_LAB_WINDOWS_IP=10.0.11.6 GOMAP_LAB_LINUX_IP=10.0.11.9 \
+  go test ./pkg/app -run '^TestReleaseLabRegression$' -count=1 -timeout=15m -v
+```
+
+Use `GOTOOLCHAIN=go1.26.9` when the host's default toolchain differs from the
+repository pin. The timeout bounds the test process; it is not the per-port
+timeout. Allow the previous scan to finish before starting another.
+
+| Profile | Scope Per Host | Workers | Dial Timeout | Rate Per Host / Global |
+| --- | --- | ---: | ---: | ---: |
+| quick-1 / quick-2 | Current curated default TCP set | 32 | 750 ms | 500 / 1000 |
+| deep | Explicit 20-port service set in the test, with deep detection | 32 | 750 ms | 500 / 1000 |
+| full | TCP 1-65535 | 128 | 150 ms | 500 / 1000 |
+
+All profiles use CONNECT, service detection, explicit targets without host
+discovery, zero retries and fixed dial timeouts (adaptive tuning disabled).
+Service probes retain their existing bounded protocol timeouts. The full
+profile's shorter dial timeout controls the cost of silent ports on this local
+network; it is not suitable as an unvalidated VPN/remote default. These are
+controlled regression profiles, not default-speed claims or a comparison with
+another scanner.
+
+The regression checks known fixture anchors (FTP/HTTP/SMB on both, Windows RPC
+and Linux SSH), host/port deduplication, explicit service/confidence/evidence,
+requested/open/closed/unresolved accounting, metrics and label conservatism.
+It validates JSON, then renders the same observations through JSONL and CSV
+and compares state/service/version/confidence/evidence without timestamps.
+These format comparisons deliberately do not rescan changing targets. Separate
+CLI/output regressions run in normal CI. Raw responses stay in temporary files;
+only reviewed, aggregate results belong in public documentation.
+
+## Reporting Template
+
+Record the code revision (and dirty source diff, when applicable), toolchain,
+OS/network/VM setup, date, exact profile settings and whether either VM restarted.
+For each profile and host, report:
+
+```text
+profile | requested | open | refused/closed | unresolved | inferred filtered | duration
+```
+
+Include baseline-anchor and format-check outcomes. Report quick-run minimum,
+maximum and variation only for identical settings. Do not compare the deep and
+full profiles as equal workloads. Keep incomplete/aborted/failed runs visible;
+do not select only the fastest or fullest run. A passing metadata regression
+with unresolved ports is not proof of complete discovery. Filtered is an
+inference from silence; it overlaps unresolved rather than adding extra ports.
+
+## Validation Record
+
+Final regression: **October 21, 2026**, starting at `13:33:21 UTC`, on Linux
+with Go 1.26.9 and the two authorized VirtualBox Metasploitable3 VMs. Tested
+production revision: `ef1d6c0097a4bb03cab595a9c0e8e2b623487ae4`. Subsequent
+changes in this review add documentation and a deterministic deadline-failure
+test, not production behavior. This is unreleased code, not a new v2.5.0 build.
+
+| Profile | Host Role | Requested | Open | Refused/Closed | Unresolved / Inferred Filtered | Scan Duration, Both Hosts |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| quick-1 | Windows | 996 | 22 | 974 | 0 | 28.754 s |
+| quick-1 | Linux | 996 | 7 | 2 | 987 | 28.754 s |
+| quick-2 | Windows | 996 | 22 | 974 | 0 | 27.526 s |
+| quick-2 | Linux | 996 | 7 | 2 | 987 | 27.526 s |
+| deep | Windows | 20 | 16 | 4 | 0 | 1.975 s |
+| deep | Linux | 20 | 7 | 1 | 12 | 1.975 s |
+| full | Windows | 65535 | 39 | 65488 | 8 | 332.694 s |
+| full | Linux | 65535 | 9 | 2 | 65524 | 332.694 s |
+
+All four final profiles passed their baseline anchors, deduplication, coverage
+accounting, conservative-label and JSON/JSONL/CSV preservation checks. The full
+run observed **48 open ports**. Durations are JSON `duration_ms`, shared across
+both sequential hosts, not per-host times. The identical quick profiles range
+from 27.526 to 28.754 s (mean 28.140 s, spread 1.228 s). The full test process
+took 391.73 s including all profiles and report checks. Host-side CI, fuzzing
+and cross-compilation also ran during parts of validation; timings are not a
+CPU-isolated benchmark or comparable to previous unrestricted-rate samples.
+
+Earlier preliminary runs included a missing-Linux-anchor failure followed by
+recovery; that run is **not approved**. Its subsequent full profile observed
+39/9 open ports, zero Windows unresolved and 65524 Linux unresolved, in
+304.336 s. A prior full-range attempt using the unadjusted 750 ms / 32-worker
+profile was deliberately stopped to bound silent-port cost, not counted as a
+successful validation. The final green run does not erase those observations
+or explain their cause. No VM firewall/NIC settings were changed to obtain it.
+
+Local final checks passed lint, unit tests, race tests and the 40% coverage
+floor, with **71.8%** total coverage. Specialized regression tests passed 20
+race-detector repetitions; binary-parser and bounded-stream fuzz campaigns
+passed (10722 and 13681 executions respectively). Windows amd64 and macOS
+arm64 cross-builds passed; these are build checks, not runtime platform tests.
+
+**Sign-off scope:** the current confidence review, two-VM regression and
+changelog/known-limit review are complete. Network completeness remains
+inconclusive, especially for Linux. This record supports a reviewed promotion
+decision, not automatic publication, zero-defect claims or closing the separate
+full-range stability/SYN/netlink roadmap tasks.
+
+## Known Limitations
+
+- TCP silence, packet loss, filtering, VM load/restarts and dynamic listeners can change counts. Full-range stability across constrained VirtualBox/VPN networks remains a roadmap task, not a solved consequence of these tests.
+- Generic protocol evidence is not a product/OS assertion. Version/evidence strings and confidence may change conservatively while structured per-result schemas and CSV headers remain stable.
+- TLS and RDP certificate collection does not verify trust. Hostnames are observed names, not authenticated identities. AJP/JRMP/RPC/SMB versions describe protocols; IIS does not identify a Windows release.
+- Current SNMP auth/privacy algorithms, NetBIOS/Memcached reassembly and kernel-delegated IPv4/IPv6 fragment handling are bounded documented subsets, not universal support.
+- End-to-end SYN and native netlink rollback still require their separate disconnected privileged lab validation. This CONNECT regression changes no source addresses and cannot close those tasks.
+- Private scan data, arbitrary captured payloads and credentials must not enter commits or release assets. Checksums detect mismatched artifacts but are not themselves independent publisher authentication; APT signing has its separate trust model.
+
+These limitations belong in release notes. A blocked gate should remain explicit
+instead of being converted into a release-ready claim.
