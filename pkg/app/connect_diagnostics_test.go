@@ -31,6 +31,9 @@ func TestInconclusiveConnectSummary(t *testing.T) {
 	if !strings.Contains(summary, "exposure: indeterminate") {
 		t.Fatalf("summary=%q", summary)
 	}
+	if !strings.Contains(summary, "TCP closed (refused): 0") || !strings.Contains(summary, "filtered (timeout-inferred): 1") {
+		t.Fatalf("summary hid observation semantics: %q", summary)
+	}
 	if warning := connectWarnings([]string{"fixture"}, nil); warning != "" {
 		t.Fatal(warning)
 	}

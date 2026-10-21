@@ -17,7 +17,7 @@ GoMap's roadmap focuses on improving reliability, test coverage, documentation, 
 - [x] Raise the enforced total statement coverage floor past 25% to 40%, consistently in local checks and CI.
 - [ ] Raise the enforced total statement coverage floor to 60% with sufficient headroom and meaningful tests.
 - Integrated v2.5.0 validation reached 59.3% total coverage. Parser regressions do not imply complete installer/updater or CLI entry-point coverage; those remain follow-up work.
-- Development validation including the current specialized-path confidence review reaches 71.8% total statement coverage; the enforced floor is 40%, not 60%.
+- Development validation including the coverage-observation regressions reaches 71.9% total statement coverage; the enforced floor is 40%, not 60%.
 
 ## Detection and Scan Reliability
 
@@ -62,6 +62,7 @@ GoMap's roadmap focuses on improving reliability, test coverage, documentation, 
 - [x] Preserve explicit UDP states in text, JSON, JSONL, and CSV; count only confirmed open ports.
 - [x] Support `--version` and options before or after the CLI target.
 - [x] Separate CONNECT timeout port counters from actual timeout budgets; distinguish inferred-filtered timeouts, confirmed refusals and unknown failures without concealing incomplete coverage.
+- [x] Make CONNECT coverage/exposure labels explicitly observational, retain a visible inconclusive subtotal and exact evidence fraction, and avoid misleading percentage rounding at zero/100%; preserve engine-specific meanings and structured counters.
 - [x] Add opt-in completion-order text/JSONL streaming for CONNECT results with deterministic delivery, deduplication and writer-error regressions.
 
 - [ ] Stabilize full-range CONNECT results across constrained VirtualBox and VPN lab networks.

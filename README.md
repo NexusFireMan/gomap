@@ -664,6 +664,18 @@ Metrics count **host-port pairs**, not packets or connection attempts: two hosts
 
 Coverage separates `open`, `closed`, `filtered`, `open_filtered`, `unresolved` and `unreported`. CONNECT diagnostics partition unresolved outcomes into inferred-filtered timeouts and other unknown failures without counting either twice. Filtered outcomes remain inconclusive for open/closed coverage. Missing results alone never imply closed or filtered. UDP silence remains `open|filtered`; the current SYN engine lacks complete non-open diagnostics, so missing SYN outcomes remain `unreported`. Global percentages are weighted by host-port scope, not averaged per host. Empty scanned scopes report zero, not 100% coverage. Hosts omitted by discovery or `--max-hosts` are outside this denominator; `expanded_hosts` and `hosts_scanned` make that distinction visible.
 
+CONNECT text summaries explicitly label `closed (refused)`, `filtered (timeout-inferred)` and `unresolved (other failures)`. Zero closed means no connection refusal was observed, not proof that the underlying closed-port count is zero. Silent ports can reflect filtering, packet loss or an insufficient wait; GoMap cannot turn them into confirmed closures. See [Linux connect error semantics](https://man7.org/linux/man-pages/man2/connect.2.html) and [scan-state interpretation](https://nmap.org/book/man-port-scanning-basics.html).
+
+The `inconclusive subtotal` overlaps the uncertain state columns; do not add it to them. Open/closed evidence includes the exact confirmed/requested fraction: one confirmed result out of 65535 is shown as `<0.1% (1/65535)`, not `0.0%`. Likewise incomplete near-total coverage uses `>99.9%`, not a rounded `100.0%`. Numeric JSON percentages remain unrounded. In JSON coverage, `unresolved` excludes `filtered`, whereas `connect_diagnostics.unresolved_ports` includes timeout-inferred filtered ports; these views retain their existing schemas and must not be added together.
+
+To investigate a silence-heavy result, compare a small, authorized port set with a longer timeout and lower concurrency, rather than automatically repeating the full range. For example, on an owned lab host:
+
+```bash
+gomap -s -p 22,80,443 --timeout 1500 --workers 4 --rate 10 --global-rate 10 --retries 1 --adaptive-timeout=false 10.0.11.6
+```
+
+This may recover losses but cannot distinguish a closed port hidden by a dropping firewall. `--retries` remains opt-in (default zero); no automatic extra scan or timeout/rate change is introduced by these display clarifications.
+
 Timings distinguish preparation/orchestration, TCP host discovery, and the scan interval including inline service detection. With `--stream`, the scan interval also includes inline result writes and output backpressure. `metrics.timings.total_ms` ends before final report rendering and deferred cleanup; the legacy `duration_ms` remains the scan interval. Separate service-detection time is not measured because it overlaps port work. Rates use unrounded durations; timing fields are integer milliseconds. Requested option values of zero may mean automatic defaults; adaptive timing, network state, randomization and unrecorded source/header settings prevent exact replay. Metadata intentionally excludes raw argv, output paths, source-IP pools and raw response bytes.
 
 ### JSONL (`--format jsonl`)
