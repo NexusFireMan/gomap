@@ -212,8 +212,39 @@ direct Linux SSH connection. This does not establish the cause of the outage.
 The full profile was interrupted to avoid scanning unavailable fixtures; the
 84.375 s test process is **not a successful full regression**.
 
-**Promotion gate: blocked pending restored fixtures and a complete passing
-regression on the candidate code.** Do not publish a tag from this record.
+That attempt blocked promotion until the fixtures were restored and the entire
+regression was repeated; it is retained above rather than treated as a pass.
+
+### Restored-Fixture Sign-Off
+
+The complete repeat started at 14:12:44 UTC on October 22, 2026 and passed on
+revision `2e8e2644c853028be0875560ba417ec24370343c`. Its production code is
+identical to the CI-validated `4f0d353` candidate; the intervening commit only
+records the failed attempt. Neither recovery nor altered VM/firewall settings
+were used to turn uncertain outcomes into confirmed states.
+
+| Profile | Host Role | Requested | Open | Refused/Closed | Unresolved | Duration, Both Hosts |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| quick-1 | Windows | 996 | 20 | 976 | 0 | 26.559 s |
+| quick-1 | Linux | 996 | 7 | 2 | 987 | 26.559 s |
+| quick-2 | Windows | 996 | 20 | 976 | 0 | 27.105 s |
+| quick-2 | Linux | 996 | 7 | 2 | 987 | 27.105 s |
+| deep | Windows | 20 | 16 | 4 | 0 | 1.847 s |
+| deep | Linux | 20 | 7 | 1 | 12 | 1.847 s |
+| full | Windows | 65535 | 37 | 65498 | 0 | 293.969 s |
+| full | Linux | 65535 | 9 | 2 | 65524 | 293.969 s |
+
+All profiles passed baseline-anchor, deduplication, coverage, conservative-label
+and JSON/JSONL/CSV preservation checks. Every unresolved outcome above was a
+timeout, not a confirmed closure. The full profile observed 46 open ports; the
+whole test process took 349.741 s. Identical quick profiles had the same port
+sets/counts and a 0.546 s duration spread. These controlled observations are
+not a CPU-isolated performance guarantee or an explanation of the earlier outage.
+
+**Promotion gate: passed for the documented v2.6.0 CONNECT/format scope.**
+Accept incomplete Linux coverage as a disclosed limitation, not complete
+discovery. Promotion still requires the protected PR checks and a merge commit;
+tagging and distribution verification remain separate publishing steps.
 Full-range network stability and disconnected end-to-end SYN/native netlink
 rollback remain explicit limitations, not completed work. Additional identity
 fingerprints and lab examples are deferred improvements, not release claims.
