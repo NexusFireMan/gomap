@@ -255,9 +255,37 @@ The subsequent `govulncheck` v1.7.0 run flagged
 [GO-2026-6809](https://pkg.go.dev/vuln/GO-2026-6809) in the Go 1.26.9 standard
 library. The advisory was published October 21 and is fixed in Go 1.26.10.
 The candidate minimum, README and Docker builder now select the patched release.
-Publishing remains blocked until CI, vulnerability analysis and the complete
-lab regression pass again with Go 1.26.10; the earlier sign-off does not cover
-this compiler update.
+Publishing was held for fresh validation rather than relying on the earlier
+compiler's sign-off. On Go 1.26.10, `make ci` then passed lint, unit/race tests
+and the 60% coverage floor (72.5% measured); `govulncheck` v1.7.0 reported no
+vulnerabilities. This is a point-in-time advisory check, not a security guarantee.
+
+The complete lab regression on patched candidate
+`0830a4928eb7fbac89ff4ef8e28110adf5e90c7d` started at 14:28:29 UTC and passed
+all four profiles, baseline anchors, accounting and JSON/JSONL/CSV checks:
+
+| Profile | Host Role | Requested | Open | Refused/Closed | Unresolved | Duration, Both Hosts |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| quick-1 | Windows | 996 | 22 | 974 | 0 | 27.177 s |
+| quick-1 | Linux | 996 | 7 | 2 | 987 | 27.177 s |
+| quick-2 | Windows | 996 | 22 | 974 | 0 | 27.176 s |
+| quick-2 | Linux | 996 | 7 | 2 | 987 | 27.176 s |
+| deep | Windows | 20 | 16 | 4 | 0 | 1.849 s |
+| deep | Linux | 20 | 7 | 1 | 12 | 1.849 s |
+| full | Windows | 65535 | 39 | 65496 | 0 | 296.773 s |
+| full | Linux | 65535 | 9 | 2 | 65524 | 296.773 s |
+
+The test process took 353.505 s; the full profile observed 48 open ports.
+All unresolved outcomes remained timeout-inferred, not confirmed closures.
+Windows counts differ from the earlier compiler's run (22 versus 20 curated,
+39 versus 37 full-range); these non-simultaneous samples do not establish a
+compiler effect or general stability. Both records remain visible. No recovery,
+VM login or NIC/firewall changes were performed by this regression.
+
+**Final candidate gate: passed for this bounded CONNECT/format and toolchain
+scope, subject to protected PR checks.** General live-network stability and
+privileged SYN/netlink validation remain disclosed limitations, not release
+claims. Subsequent documentation-only commits do not change this tested code.
 
 ## Known Limitations
 
