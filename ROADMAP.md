@@ -66,6 +66,8 @@ GoMap's roadmap focuses on improving reliability, test coverage, documentation, 
 - [x] Add opt-in completion-order text/JSONL streaming for CONNECT results with deterministic delivery, deduplication and writer-error regressions.
 
 - [ ] Stabilize full-range CONNECT results across constrained VirtualBox and VPN lab networks. The [October 22 matrix](docs/CONNECT_BENCHMARK.md) retains Windows open-set changes and transient timeouts; baseline retention does not close this task.
+- [x] Reproduce bounded selective timeout recovery with deterministic clocks/fake dials and evaluate current/historical Windows/Linux/VPN cohorts; retain original observations and document costs in the [recovery evaluation](docs/SELECTIVE_RECOVERY.md).
+- [ ] Integrate selective recovery into production only after cancellation-aware shared pacing, coverage/evidence reconciliation and exactly-once streaming are reviewed; the test-only experiment does not change CLI behavior or defaults.
 - [x] Add deterministic full-range CONNECT mixed-failure/worker/retry regressions and an opt-in repeated lab matrix that compares open-port sets and reports timing variance; fixture success does not establish full-range live-network stability.
 - [ ] Expand native fingerprints for SMB server identity, NetBIOS workgroup data, and IRC product/version banners.
 - [x] Keep unidentified open TCP ports explicit when service detection is enabled, without inventing service or version data.

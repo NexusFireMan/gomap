@@ -143,6 +143,11 @@ fixture dependency; GoMap uses native Go for the query and reassembly.
 
 ## Pull Request Expectations
 
+Selective CONNECT recovery is currently a test-only evaluation, not a CLI
+feature. See [the evaluation and opt-in commands](docs/SELECTIVE_RECOVERY.md)
+for offline budget tests and explicitly authorized live/historical comparisons.
+Historical reports must remain private and are not simultaneous A/B fixtures.
+
 - Add or update tests when behavior changes.
 - Update `README.md` or `CHANGELOG.md` for user-facing changes.
 - Keep public documentation focused on users.
