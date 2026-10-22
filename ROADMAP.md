@@ -17,7 +17,7 @@ GoMap's roadmap focuses on improving reliability, test coverage, documentation, 
 - [x] Raise the enforced total statement coverage floor past 25% to 40%, consistently in local checks and CI.
 - [x] Raise the enforced total statement coverage floor to 60% with sufficient headroom and meaningful tests.
 - Integrated v2.5.0 validation reached 59.3% total coverage. Parser regressions do not imply complete installer/updater or CLI entry-point coverage; those remain follow-up work.
-- Development validation including the coverage-observation regressions reaches 71.9% total statement coverage; the enforced floor is now 60%.
+- Development validation including opt-in timeout recovery reaches 72.5% total statement coverage; the enforced floor is 60%.
 
 ## Detection and Scan Reliability
 
@@ -67,7 +67,7 @@ GoMap's roadmap focuses on improving reliability, test coverage, documentation, 
 
 - [ ] Stabilize full-range CONNECT results across constrained VirtualBox and VPN lab networks. The [October 22 matrix](docs/CONNECT_BENCHMARK.md) retains Windows open-set changes and transient timeouts; baseline retention does not close this task.
 - [x] Reproduce bounded selective timeout recovery with deterministic clocks/fake dials and evaluate current/historical Windows/Linux/VPN cohorts; retain original observations and document costs in the [recovery evaluation](docs/SELECTIVE_RECOVERY.md).
-- [ ] Integrate selective recovery into production only after cancellation-aware shared pacing, coverage/evidence reconciliation and exactly-once streaming are reviewed; the test-only experiment does not change CLI behavior or defaults.
+- [x] Add opt-in `--recover-timeouts` with cancellation-aware global/per-host pacing, a shared run-wide attempt/time budget, original/later JSON evidence, reconciled counters and exactly-once recovered-open callbacks; retain conservative labels and unchanged defaults. Broader natural-transient/live-platform validation remains separate.
 - [x] Add deterministic full-range CONNECT mixed-failure/worker/retry regressions and an opt-in repeated lab matrix that compares open-port sets and reports timing variance; fixture success does not establish full-range live-network stability.
 - [ ] Expand native fingerprints for SMB server identity, NetBIOS workgroup data, and IRC product/version banners.
 - [x] Keep unidentified open TCP ports explicit when service detection is enabled, without inventing service or version data.

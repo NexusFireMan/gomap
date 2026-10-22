@@ -10,7 +10,8 @@ func newScanMetrics(req ScanRequest, expandedHosts int) output.ScanMetrics {
 	return output.ScanMetrics{
 		Build: build, ExpandedHosts: expandedHosts, Hosts: []output.HostMetrics{},
 		Options: output.ScanOptions{
-			ScanType: req.ScanType, UDP: req.UDP, Ports: req.PortsFlag,
+			RecoverTimeouts: req.RecoverTimeouts,
+			ScanType:        req.ScanType, UDP: req.UDP, Ports: req.PortsFlag,
 			TopPorts: req.TopPorts, ExcludePorts: req.ExcludePorts, NoDiscovery: req.NoDiscovery,
 			MaxHosts: req.MaxHosts, ServiceDetect: req.ServiceDetect, DeepVersion: req.DeepVersion,
 			Exhaustive: req.Exhaustive, GhostMode: req.GhostMode, Workers: req.Workers,

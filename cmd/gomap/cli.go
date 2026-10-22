@@ -38,6 +38,7 @@ type CLIOptions struct {
 	TimeoutMS       int
 	Workers         int
 	Retries         int
+	RecoverTimeouts bool
 	BackoffMS       int
 	MaxTimeoutMS    int
 	AdaptiveTimeout bool
@@ -91,6 +92,7 @@ func ParseCLIOptions(args []string) (CLIOptions, error) {
 	fs.IntVar(&opts.TimeoutMS, "timeout", 0, "connection timeout per attempt in milliseconds (default: auto by mode)")
 	fs.IntVar(&opts.Workers, "workers", 0, "number of concurrent workers (default: auto by mode)")
 	fs.IntVar(&opts.Retries, "retries", 0, "retry attempts per port on timeout/transient connection error")
+	fs.BoolVar(&opts.RecoverTimeouts, "recover-timeouts", false, "bounded selective CONNECT timeout verification (shared run budget)")
 	fs.IntVar(&opts.BackoffMS, "backoff-ms", 25, "base backoff in milliseconds between retries")
 	fs.IntVar(&opts.MaxTimeoutMS, "max-timeout", 0, "maximum adaptive timeout in milliseconds (0 = automatic)")
 	fs.BoolVar(&opts.AdaptiveTimeout, "adaptive-timeout", true, "enable adaptive timeout tuning during scan")
@@ -230,6 +232,9 @@ func normalizeOptions(opts CLIOptions) (CLIOptions, error) {
 	if opts.UDPFlag && opts.ScanType == "syn" {
 		return opts, errors.New("-u cannot be combined with --scan-type syn")
 	}
+	if opts.RecoverTimeouts && (opts.UDPFlag || opts.ScanType != "connect" || opts.GhostFlag) {
+		return opts, errors.New("--recover-timeouts requires CONNECT and cannot combine with UDP, SYN or -g")
+	}
 	if opts.Rate < 0 {
 		return opts, errors.New("--rate cannot be negative")
 	}
@@ -345,6 +350,7 @@ func printHelp(w *os.File) {
   --timeout <ms>             dial timeout per attempt
   --host-config <path>       per-IP CONNECT/UDP settings in JSON
   --retries <N>              retries per port on transient connection errors
+  --recover-timeouts         opt-in bounded CONNECT verification; shared 8-attempt/3s run budget
   --backoff-ms <ms>          exponential backoff base between retries
   --adaptive-timeout         dynamic timeout tuning (default: true)
   --max-timeout <ms>         adaptive timeout upper bound
