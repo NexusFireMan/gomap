@@ -178,6 +178,7 @@ limits of ten starts/s. Recovery kept its own documented caps.
 
 | Scope | Primary Open / Refused / Inconclusive | Extra Attempts | Recovery (ms) | Stop |
 | --- | --- | ---: | ---: | --- |
+| Windows, restored VM, 15-port run | 8 / 7 / 0 | 0 | 0 | no_timeouts |
 | Linux, first host of a two-host 15-port run | 7 / 2 / 6 | 2 | 3000 | time_budget |
 | VPN, second host of that same run | 2 / 12 / 1 | 0 | 0 | time_budget |
 | VPN alone, 22/80/443/3000, one primary worker | 2 / 1 / 1 | 1 | 1505 | completed |
@@ -192,9 +193,15 @@ the VPN's single timeout once, still inconclusive (1500 ms).
 A preliminary three-host CLI attempt found Windows unavailable (ARP resolution
 failed, zero open ports and 15 inconclusive outcomes). It is not a successful
 Windows fixture validation. Its recovery exhausted the shared window rather
-than granting fresh budgets to later hosts. Native positive-connect behavior
-is covered by loopback tests and open/refused merges by injected transports;
-the new runtime Windows historical replay remains pending VM availability.
+than granting fresh budgets to later hosts. After the VM was restored, the
+15-port CLI run above confirmed eight opens and seven refusals, with complete
+scope accounting and no additional recovery traffic. Native-engine replay of
+the original Windows report then confirmed eight later refusals in eight
+attempts (709 ms), stopped at `attempt_budget`, and retained 14 unresolved
+historical candidates. JSON provenance and final counter accounting passed.
+This later replay is not a simultaneous comparison or a refreshed full scan.
+Native positive-connect recovery remains covered by loopback tests and
+open/refused merges by injected transports, not natural open recovery here.
 
 Natural transient/open recovery, additional VPN/platform conditions and broad
 full-range stability remain separate validation work. No automatic default
