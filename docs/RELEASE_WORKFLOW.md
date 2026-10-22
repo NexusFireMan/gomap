@@ -6,6 +6,10 @@ GoMap has two permanent protected branches: `dev` for integration and `main` for
 
 ## Integration And Release Preparation
 
+Complete the [release readiness checklist and two-VM regression](RELEASE_READINESS.md)
+before promotion. Review actual coverage warnings, not only successful test exit
+codes; silent ports and unavailable lab services cannot be signed off as closed.
+
 1. Prepare the version and changelog on a temporary branch targeting `dev`.
 2. Merge reviewed work into `dev` after `Branch Policy`, `Lint`, and `Test` pass.
 3. Open `dev` into `main`, summarize the release, and reference completed issues with `Closes #N`.

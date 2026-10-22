@@ -1,7 +1,10 @@
 package scanner
 
 import (
+	"bufio"
 	"fmt"
+	"io"
+	"net/http"
 	"regexp"
 	"strings"
 	"unicode"
@@ -9,6 +12,9 @@ import (
 
 // ParseBanner extracts service name and version from a banner
 func parseBanner(banner string) (service, version string) {
+	if respBannerPrefix(banner) {
+		return parseRedis(banner)
+	}
 	if service, version := parseAdditionalTextServices(banner); service != "" {
 		return service, version
 	}
@@ -28,6 +34,12 @@ func parseBanner(banner string) (service, version string) {
 	}
 
 	if service, version := parseFTP(banner); service != "" {
+		return service, version
+	}
+	if service, version := parseIRC(banner); service != "" {
+		return service, version
+	}
+	if service, version := parseRedis(banner); service != "" {
 		return service, version
 	}
 
@@ -103,6 +115,9 @@ var memcachedVersionRE = regexp.MustCompile(`^VERSION [0-9]+\.[0-9]+(?:\.[0-9]+)
 
 // Generic descriptions confirm less than a disclosed implementation banner.
 func bannerConfidence(version string) string {
+	if version == "Redis (authentication required)" || version == "MySQL (connection rejected)" {
+		return "medium"
+	}
 	switch strings.ToLower(strings.TrimSpace(version)) {
 	case "", "service", "service ready", "ready", "unknown", "ftp service", "ftp server ready", "smtp service", "pop3 service", "imap4rev1", "http", "rtsp service", "sip service", "irc service", "smb", "redis", "postgresql", "glassfish server", "samba", "windows smb", "mysql", "elasticsearch", "java message service", "microsoft httpapi", "apache", "nginx", "microsoft ftp", "postfix smtp", "proftpd":
 		return "medium"
@@ -112,9 +127,17 @@ func bannerConfidence(version string) string {
 }
 
 func bannerIdentificationConfidence(banner, version string) string {
+	if _, incomplete := observedBannerText(banner); incomplete {
+		return "low"
+	}
 	if validHTTPResponseLine(banner) && responseServerVersion(banner, "") == "" && extractHTTPTitle(banner) != "" {
 		// A page title is content, not a server implementation disclosure.
 		return "medium"
+	}
+	if !validHTTPResponseLine(banner) {
+		if service, _ := parseSMB(banner); service != "" {
+			return "medium" // Text mentions are not a native SMB negotiation.
+		}
 	}
 	return bannerConfidence(version)
 }
@@ -566,35 +589,23 @@ func cleanFTPBannerText(text string) string {
 // parseHTTP extracts HTTP server information with version
 func parseHTTP(banner string) (string, string) {
 	// Check if it starts with HTTP response
-	banner = strings.TrimSpace(banner)
+	if len(banner) > 64*1024 {
+		banner = banner[:64*1024]
+	}
+	banner = strings.TrimLeft(banner, " \t\r\n")
 	if !validHTTPResponseLine(banner) {
 		return "", ""
 	}
-
-	lines := strings.Split(banner, "\n")
-	var statusLine, serverHeader string
-
-	// First pass: Get status line and Server header
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			break
-		}
-		lowerLine := strings.ToLower(line)
-
-		// Extract HTTP status line
-		if strings.HasPrefix(line, "HTTP/") && statusLine == "" {
-			statusLine = line
-		}
-
-		// Match "Server:" header
-		if strings.HasPrefix(lowerLine, "server:") {
-			serverHeader = line[len("server:"):]
-			serverHeader = strings.TrimSpace(serverHeader)
-			serverHeader = strings.ReplaceAll(serverHeader, "\r", "")
-			break
-		}
+	response, err := http.ReadResponse(bufio.NewReader(strings.NewReader(banner)), nil)
+	if err != nil {
+		return "http", "" // A valid status line is not a complete product disclosure.
 	}
+	defer func() { _ = response.Body.Close() }()
+	servers := response.Header.Values("Server")
+	if len(servers) > 1 {
+		return "http", ""
+	}
+	serverHeader := strings.TrimSpace(response.Header.Get("Server"))
 
 	// If we found a server header, parse it for detailed version info
 	if serverHeader != "" {
@@ -627,19 +638,16 @@ func parseHTTP(banner string) (string, string) {
 	}
 
 	// Fallback: infer product/version from HTML title when Server header is absent.
-	if title := extractHTTPTitle(banner); title != "" {
-		if v := parseTomcatFromTitle(title); v != "" {
-			return "http", v
+	body, err := io.ReadAll(io.LimitReader(response.Body, 64*1024+1))
+	if err == nil && len(body) <= 64*1024 {
+		if title := extractHTTPTitle(string(body)); title != "" {
+			if v := parseTomcatFromTitle(title); v != "" {
+				return "http", v
+			}
+			return "http", title
 		}
-		return "http", title
 	}
-
-	// If no Server header found but HTTP response exists, it's still HTTP
-	if statusLine != "" {
-		return "http", ""
-	}
-
-	return "", ""
+	return "http", ""
 }
 
 func extractHTTPTitle(banner string) string {
@@ -709,17 +717,6 @@ func parseIISVersion(serverHeader string) string {
 	iisRegex := regexp.MustCompile(`Microsoft-IIS[/-]?([\d\.]+)`)
 	if match := iisRegex.FindStringSubmatch(serverHeader); match != nil {
 		version := match[1]
-		// Map IIS versions
-		iisVersionMap := map[string]string{
-			"10.0": "Windows Server 2016 or later",
-			"8.5":  "Windows Server 2012 R2",
-			"8.0":  "Windows Server 2012",
-			"7.5":  "Windows Server 2008 R2 or Windows 7",
-			"7.0":  "Windows Server 2008 or Windows Vista",
-		}
-		if desc, ok := iisVersionMap[version]; ok {
-			return fmt.Sprintf("IIS %s (%s)", version, desc)
-		}
 		return fmt.Sprintf("IIS %s", version)
 	}
 	return ""
@@ -880,13 +877,10 @@ func parseGlassFish(banner string) (string, string) {
 }
 
 func parseIRC(banner string) (string, string) {
-	if !regexp.MustCompile(`(?im)^:\S+\s+(?:NOTICE\s+AUTH\b|00[1-5]\s)`).MatchString(banner) {
-		return "", ""
+	if version, _ := ircDisclosure(banner); version != "" {
+		return "irc", version
 	}
-	if match := regexp.MustCompile(`(?i)unreal(?:ircd)?[\s/-]*([\d.]+(?:[-\w.]*)?)`).FindStringSubmatch(banner); match != nil {
-		return "irc", "UnrealIRCd " + match[1]
-	}
-	return "irc", "IRC service"
+	return "", ""
 }
 
 // parseSMB extracts SMB/Windows version information
@@ -982,7 +976,23 @@ func parsePostgreSQL(banner string) (string, string) {
 }
 
 // parseRedis extracts Redis version information
+var redisInfoVersionRE = regexp.MustCompile(`(?m)^redis_version:([0-9]+(?:\.[0-9]+)+(?:[-+][A-Za-z0-9._-]+)?)\r?$`)
+
 func parseRedis(banner string) (string, string) {
+	if strings.HasPrefix(banner, "$") {
+		payload, ok := respBulkPayload(banner)
+		if !ok {
+			return "", ""
+		}
+		matches := redisInfoVersionRE.FindAllSubmatch(payload, -1)
+		if len(matches) != 1 {
+			return "", ""
+		}
+		return "redis", "Redis " + string(matches[0][1])
+	}
+	if strings.HasPrefix(banner, "-NOAUTH ") && strings.HasSuffix(banner, "\r\n") && strings.Count(banner, "\n") == 1 {
+		return "redis", "Redis (authentication required)"
+	}
 	if !strings.Contains(banner, "redis") && !strings.Contains(banner, "Redis") {
 		return "", ""
 	}

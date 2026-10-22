@@ -33,6 +33,11 @@ func TestTextReportWrittenToOutputFile(t *testing.T) {
 	if err != nil || !strings.Contains(string(data), "Host Exposure Summary") || !strings.Contains(string(data), strconv.Itoa(port)) {
 		t.Fatalf("missing text report: %q, %v", data, err)
 	}
+	for _, want := range []string{"Performance", "Coverage", "open/closed evidence: 100.0%", "unreported: 0"} {
+		if !strings.Contains(string(data), want) {
+			t.Fatalf("missing metrics %q: %s", want, data)
+		}
+	}
 }
 
 func TestInvalidPortsPreserveOutputFile(t *testing.T) {

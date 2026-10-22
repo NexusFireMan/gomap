@@ -1,5 +1,5 @@
 GO ?= go
-MIN_COVERAGE ?= 10.0
+MIN_COVERAGE ?= 60.0
 GOLANGCI_LINT ?= $(firstword $(wildcard ./bin/golangci-lint) $(wildcard $(HOME)/go/bin/golangci-lint) $(shell command -v golangci-lint 2>/dev/null))
 
 .PHONY: test test-race coverage lint ci

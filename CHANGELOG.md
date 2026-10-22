@@ -12,6 +12,64 @@ Note: this changelog is maintained from this point forward in the project histor
 
 ### Fixed
 
+## [2.6.0] - 2026-10-22
+
+### Added
+
+- Add opt-in CONNECT `--recover-timeouts`: eight extra connections and three seconds of accumulated recovery time shared across hosts, cancelable global/per-host pacing, broad-silence guards, original/later JSON observations and reconciled final coverage. Stream newly recovered opens once with conservative un-fingerprinted labels; preserve defaults and reject UDP/SYN/controlled-profile combinations.
+- Retain the initial test-only selective CONNECT recovery experiment with deterministic attempt/time/pacing guards and opt-in current/historical comparisons. Its limited benefits and persistent-silence costs are recorded separately from the later opt-in runtime feature.
+- Record a twelve-run full-range native CONNECT benchmark across authorized Windows/Linux and VPN fixtures, including worker-count timing spread, open-set changes, incomplete coverage and separate targeted follow-up checks; preserve production defaults and leave general stability validation open.
+- Add deterministic CONNECT repeatability tests across worker counts, retries and the full TCP range, plus an opt-in lab matrix reporting open-set changes, confirmed-state throughput and timing spread without service probes.
+- Add an opt-in two-VM release regression: repeated quick CONNECT scans, deep probes, full TCP range, explicit coverage accounting and JSON/JSONL/CSV preservation checks on the same captured observations. Fail rather than skip unavailable lab hosts or missing baseline services.
+- Add bounded RESP2 INFO, IRC registration and generic write-first transaction readers with deterministic split/truncation/error fixtures, loopback exchanges, early-completion/message-boundary tests and fuzz targets. Cover numeric replies, POP3 CAPA, tagged IMAP CAPABILITY and HTTP/RTSP/SIP response framing used by existing probes.
+- Add deterministic LDAP/LDAPS and TDS PRELOGIN regression fixtures covering split reads, truncation/errors, final EOF bytes, message boundaries, malformed fields, bounded packet assembly, unchanged requests and fixed deadlines; add loopback exchanges and fuzz targets without external hosts.
+- Add strict `--host-config` JSON overrides for exact-IP CONNECT/UDP timeout, adaptive timing and retry settings, with per-host initial settings in JSON run metrics.
+- Add opt-in `--capture-unknown` bounded hex samples in existing evidence fields and `--evidence-bytes` (1-1024); suppress common sensitive markers/ASN.1 samples and restrict capture output files to Unix mode 0600. Arbitrary payloads may still contain sensitive data.
+- Add guarded Linux namespace UDP validation for positive responses, silent listeners and closed ports, verifying the kernel ICMP type 3/code 3 quotation against the fixture's UDP destination.
+- Add per-host/global coverage and performance summaries, separating scope throughput from confirmed open/closed throughput without inferring closed states from silence or missing SYN diagnostics.
+- Add JSON run metrics with build/version, whitelisted requested options, actual per-host engine (including SYN fallback), and preparation/discovery/combined scan-service timings; retain legacy duration and per-result formats. JSONL/CSV summaries use stderr.
+
+- Add deterministic stream-framing, greeting/conversation and HTTP/TLS regressions across DNS/TCP, MySQL, ONC RPC, SMB, AJP, DCE/RPC, JRMP, RDP and mail/FTP paths, with bounded-reader and handshake/header fuzz invariants.
+- Add deterministic CLI parser regressions for defaults, invalid arguments, normalization, aliases, unchanged caller arguments, duration boundaries and maintenance-option validation; no scan or maintenance actions run in these tests.
+- Add opt-in `--stream` for completed CONNECT open-port results in text or JSONL, with serialized writes, completion-order delivery, unchanged JSONL records and no duplicate final table/records.
+- Add CONNECT inferred-filtered counts and per-issue states plus configured/last-attempt timeout budgets in milliseconds; keep local and routing failures distinct from silent ports.
+- Add optional UDP/138 datagram queries, correlated control/error replies and bounded two-part NetBIOS application reassembly under `-u -Dv`/`-De`; preserve uncertainty, suppress names/payloads and keep default/controlled scans unchanged.
+- Add opt-in disconnected Linux IPv4/IPv6 fragment tests through the production UDP socket reader; validate ordering, missing/mixed fragments and UDP checksum rejection without introducing a raw-IP receiver in normal scans.
+- Add an optional single unicast NBSTAT query on UDP/137 under `-u -Dv`/`-De`, with random transaction IDs, strict response correlation, bounded attempts and no node-name/MAC disclosure; preserve default and controlled-profile behavior.
+- Add private per-IP `--snmp-config` for optional SNMPv3 authNoPriv/authPriv queries using SHA-256/SHA-512 and optional AES-128; reuse GoSNMP v1.45.0 in-process for cryptography, with bounded transport, engine/time checks and synthetic loopback regressions.
+- Add optional `-u -Dv`/`-De` Memcached UDP/11211 stats queries with request correlation and bounded application-fragment reassembly; preserve responsive unconfirmed results, validate disclosed versions and suppress raw statistics. Add deterministic and opt-in isolated-agent tests; default/controlled-profile scans remain unchanged.
+- Add opt-in UDP/161 SNMPv2c GET and SNMPv3 noAuthNoPriv engine-discovery fallbacks under `-u -Dv`/`-De`, with randomized identifiers, strict response matching, bounded attempts and deterministic fake exchanges; no credential lists.
+
+### Changed
+
+- Raise the minimum total statement coverage from 10% to 60% in local coverage checks and CI, following the intermediate 40% milestone.
+- Require Go 1.26.10 and update `golang.org/x/net` to v0.60.0 after vulnerability scanning identified advisories in the preceding baseline; align the Docker builder and include GoSNMP license notices in distributions. The final toolchain update addresses [GO-2026-6809](https://pkg.go.dev/vuln/GO-2026-6809) in `crypto/x509`.
+
+### Fixed
+
+- Clarify CONNECT text coverage/exposure labels: closed counts observed refusals, filtered counts timeout-inferred uncertainty, and other failures stay distinct. Show an inconclusive subtotal and exact confirmed/requested fraction; avoid rounding tiny positive coverage to zero or incomplete coverage to 100%. Preserve numeric JSON schemas, scan policy, probe rates and timeouts; add deterministic refusal/timeout and full-range rendering regressions.
+- Keep generic MySQL rejection packets and text-only SMB mentions at medium confidence, reject control-containing MySQL version fields and honor greeting deadline failures. Correlate native SMB2/3 negotiation with the request's message/session IDs, offered protocol family and bounded security buffer; report the selected dialect without OS attribution. Reject trailing procedure results in successful ONC RPC NULL replies. Remove Windows-release inference from IIS version numbers.
+- Separate RDP negotiation selections, rejections and X.224-only hints from Microsoft/Windows product claims. Report TLS completion separately from selection and label certificate names unverified; share the original RDP deadline across negotiation and TLS, and stop on deadline/write failures. Report validated TDS PRELOGIN sender-version/encryption fields without asserting Microsoft SQL Server, an OS, a negotiated TDS version or an established TLS/login session. Add deterministic negative, stream, loopback TLS and fuzz regressions.
+- Validate TCP `version.bind` framing, response flags, query/answer fields and a single complete TXT value before reporting server-declared text at medium confidence; do not infer BIND from arbitrary TXT content. Assemble existing `OPTIONS /wsman` replies within the same deadline and report HTTP/HTTPS disclosures rather than asserting WinRM from HTTPAPI, Negotiate, a port number or body text. Suppress ambiguous product headers and authentication tokens from this path's evidence.
+- Send existing Redis INFO and IRC registration payloads before waiting for responses; collect complete RESP bulk bodies and later IRC disclosure lines instead of reducing replies to a length line or initial NOTICE. Keep evidence and product/version tied to the same complete observation.
+- Withhold versions from incomplete runtime text disclosures, incomplete/malformed RESP and partial HTTP-like headers; report low confidence and an explicit evidence note. Preserve independently complete earlier disclosures, keep legacy pure parser fixtures separate from runtime framing proof and reject arbitrary bulk contents as standalone banners.
+- Replace LDAP text/offset hints and TDS packet-type-only matching with bounded complete-response validation. Correlate LDAP BindResponse IDs with the anonymous request and validate LDAP result/optional fields; validate TDS PRELOGIN option ranges and bounded packet sequences. Reject request echoes and incomplete/malformed responses without elevating protocol evidence into an authenticated identity or product version.
+- Warn on inconclusive UDP and unreported SYN outcomes in the final text status, not only unresolved CONNECT results.
+
+- Collect fragmented text greetings and numeric multiline FTP/SMTP replies under existing deadlines; stop FTP/mail command progression on incomplete greetings/replies and enforce the generic FTP capture limit before appending excess data.
+- Read and validate complete RDP confirmations instead of interpreting partial frames, request/data packets or negotiation-shaped bytes at arbitrary offsets; retain valid negotiation failures as protocol evidence.
+- Require complete unambiguous HTTP headers before reporting a Server product, and parse titles only from the correctly framed/decoded body, without following redirects.
+- Rename ambiguous CONNECT warning counters such as `timeout=N` to `timeout_ports=N`; show timeout budgets separately and retain unresolved completeness warnings without treating silence as a confirmed closure.
+- Retain an overflow byte in generic UDP reads so oversized datagrams cannot be classified from a silently truncated prefix; preserve final received bytes when a read also returns an error.
+- Reconcile UDP documentation with optional authenticated sessions and discovery queries instead of retaining obsolete claims that these paths are unimplemented.
+
+### Compatibility And Known Limits
+
+- Structured per-result schemas and CSV headers remain unchanged. Identification labels/confidence are intentionally more conservative; consumers must not treat free-form version/evidence strings as stable product identifiers.
+- Fingerprints and declared versions are observations, not vulnerability or OS confirmation. Native SMB negotiates only offered SMB 2.0.2-3.0.2 dialects; text mentions/port hints do not establish SMB server identity. RDP certificate names are unverified, and HTTPAPI does not establish WinRM.
+- Silent CONNECT ports remain inconclusive/inferred filtered, never confirmed closed. A passing lab metadata regression does not certify full coverage or guarantee stable counts across VM restarts, filtering or dynamic services. See [release readiness](docs/RELEASE_READINESS.md).
+- End-to-end SYN and native netlink rollback validation remain pending in a disposable disconnected lab. Authenticated SNMP, application reassembly and IP fragment handling retain the documented bounded scopes; these changes do not add universal protocol support.
+
 ## [2.5.0] - 2026-10-07
 
 ### Added

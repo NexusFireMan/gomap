@@ -1,4 +1,4 @@
-FROM --platform=$BUILDPLATFORM golang:1.26.8-alpine AS builder
+FROM --platform=$BUILDPLATFORM golang:1.26.10-alpine AS builder
 
 WORKDIR /src
 
@@ -28,6 +28,7 @@ FROM alpine:3.22
 RUN apk add --no-cache ca-certificates bash
 
 COPY --from=builder /out/gomap /usr/local/bin/gomap
+COPY --from=builder /src/THIRD_PARTY_NOTICES.md /usr/share/doc/gomap/THIRD_PARTY_NOTICES.md
 
 ENTRYPOINT ["/usr/local/bin/gomap"]
 CMD ["-h"]

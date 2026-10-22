@@ -1,6 +1,7 @@
 package scanner
 
 import (
+	"context"
 	cryptorand "crypto/rand"
 	"crypto/tls"
 	"encoding/binary"
@@ -37,13 +38,21 @@ type Scanner struct {
 	SourceIPs          []net.IP
 	DeepVersion        bool
 	Exhaustive         bool
-	targetPrefix       netip.Prefix
+	CaptureUnknown     bool
+	EvidenceBytes      int
+	SNMPCredentials    *SNMPCredentials
+	// OnResult is called serially as CONNECT results finish, before the full scan returns.
+	// Set it before starting a scan; callbacks should return promptly.
+	OnResult       func(ScanResult)
+	RecoveryBudget *TimeoutRecoveryBudget
+	targetPrefix   netip.Prefix
 
-	adaptiveMu    sync.Mutex
-	ewmaLatency   time.Duration
-	failureStreak int
-	successCount  int
-	failureCount  int
+	adaptiveMu       sync.Mutex
+	ewmaLatency      time.Duration
+	failureStreak    int
+	successCount     int
+	failureCount     int
+	lastConnectStart time.Time
 }
 
 // ScanConfig contains runtime tuning controls for robust scans.
@@ -62,6 +71,8 @@ type ScanConfig struct {
 	TargetCIDR      string
 	DeepVersion     bool
 	Exhaustive      bool
+	CaptureUnknown  bool
+	EvidenceBytes   int
 }
 
 // NewScanner creates a new Scanner instance
@@ -120,6 +131,8 @@ func (s *Scanner) Configure(cfg ScanConfig) {
 	s.SourceIPs = append([]net.IP(nil), cfg.SourceIPs...)
 	s.DeepVersion = cfg.DeepVersion
 	s.Exhaustive = cfg.Exhaustive
+	s.CaptureUnknown = cfg.CaptureUnknown
+	s.EvidenceBytes = evidenceByteLimit(cfg.EvidenceBytes)
 	if s.RandomIP {
 		s.targetPrefix = parseTargetPrefix(cfg.TargetCIDR, s.Host)
 	}
@@ -146,6 +159,10 @@ func (s *Scanner) Configure(cfg ScanConfig) {
 
 // Scan performs the port scanning operation
 func (s *Scanner) Scan(ports []int, detectServices bool) []ScanResult {
+	if s.RecoveryBudget != nil {
+		results, _ := s.ScanWithDiagnostics(ports, detectServices)
+		return results
+	}
 	return s.scanPortsWithDial(ports, detectServices, s.dialTCPUnpaced)
 }
 
@@ -158,12 +175,16 @@ func (s *Scanner) scanPortsWithDial(ports []int, detectServices bool, dial tcpDi
 
 // ScanWithDiagnostics retains inconclusive CONNECT outcomes without reporting them as closed.
 func (s *Scanner) ScanWithDiagnostics(ports []int, detectServices bool) ([]ScanResult, ConnectDiagnostics) {
-	return s.scanPortsReportWithDial(ports, detectServices, s.dialTCPUnpaced)
+	results, diag := s.scanPortsReportWithDial(ports, detectServices, s.dialTCPUnpaced)
+	if s.RecoveryBudget != nil {
+		return s.recoverTimeouts(context.Background(), results, diag, detectServices, s.recoveryDial)
+	}
+	return results, diag
 }
 
 func (s *Scanner) scanPortsReportWithDial(ports []int, detectServices bool, dial tcpDialFunc) ([]ScanResult, ConnectDiagnostics) {
 	ports = uniquePortsOrdered(ports)
-	diagnostics := ConnectDiagnostics{AttemptedPorts: len(ports)}
+	diagnostics := ConnectDiagnostics{AttemptedPorts: len(ports), TimeoutMS: s.Timeout.Milliseconds()}
 	if len(ports) == 0 {
 		return nil, diagnostics
 	}
@@ -179,8 +200,9 @@ func (s *Scanner) scanPortsReportWithDial(ports []int, detectServices bool, dial
 		result    ScanResult
 		lastError error
 		attempts  int
+		timeoutMS int64
 	}
-	resultsChan := make(chan portOutcome, len(ports))
+	resultsChan := make(chan portOutcome, workers)
 	retrySlots := make(chan struct{}, min(8, workers))
 	var rateLimiter <-chan time.Time
 	if s.Rate > 0 {
@@ -196,6 +218,11 @@ func (s *Scanner) scanPortsReportWithDial(ports []int, detectServices bool, dial
 	firstDialDone := make(chan struct{})
 	var firstDial sync.Once
 	primingDial := func(address string, timeout time.Duration) (net.Conn, error) {
+		if s.RecoveryBudget != nil {
+			s.adaptiveMu.Lock()
+			s.lastConnectStart = time.Now()
+			s.adaptiveMu.Unlock()
+		}
 		conn, err := dial(address, timeout)
 		firstDial.Do(func() { close(firstDialDone) })
 		return conn, err
@@ -219,6 +246,7 @@ func (s *Scanner) scanPortsReportWithDial(ports []int, detectServices bool, dial
 				}
 				var lastError error
 				attempts := 0
+				var timeoutMS int64
 				result := s.scanPortWithDial(port, detectServices, func(address string, timeout time.Duration) (net.Conn, error) {
 					if attempts > 0 {
 						retrySlots <- struct{}{}
@@ -228,30 +256,35 @@ func (s *Scanner) scanPortsReportWithDial(ports []int, detectServices bool, dial
 						}
 					}
 					attempts++
+					timeoutMS = timeout.Milliseconds()
 					conn, err := primingDial(address, timeout)
 					if err != nil {
 						lastError = err
 					}
 					return conn, err
 				})
-				resultsChan <- portOutcome{result, lastError, attempts}
+				resultsChan <- portOutcome{result, lastError, attempts, timeoutMS}
 			}
 		}(i)
 	}
 
-	for _, port := range ports {
-		portsChan <- port
-	}
-	close(portsChan)
-
-	wg.Wait()
-	close(resultsChan)
+	go func() {
+		for _, port := range ports {
+			portsChan <- port
+		}
+		close(portsChan)
+		wg.Wait()
+		close(resultsChan)
+	}()
 
 	var openPorts []ScanResult
 	for outcome := range resultsChan {
 		result := outcome.result
 		if result.IsOpen {
 			openPorts = append(openPorts, result)
+			if s.OnResult != nil {
+				s.OnResult(result)
+			}
 		}
 		if outcome.lastError == nil {
 			continue
@@ -265,10 +298,14 @@ func (s *Scanner) scanPortsReportWithDial(ports []int, detectServices bool, dial
 			diagnostics.RecoveredPorts++
 		} else {
 			diagnostics.UnresolvedPorts++
+			if kind == "timeout" {
+				diagnostics.FilteredPorts++
+			}
 		}
 		diagnostics.Issues = append(diagnostics.Issues, ConnectionIssue{
 			Port: result.Port, Attempts: outcome.attempts, Kind: kind,
 			Error: outcome.lastError.Error(), Recovered: result.IsOpen,
+			State: connectionIssueState(kind, result.IsOpen), TimeoutMS: outcome.timeoutMS,
 		})
 	}
 
@@ -568,6 +605,23 @@ func (s *Scanner) addJitter() {
 // grabBanner attempts to grab the service banner
 func (s *Scanner) grabBanner(conn net.Conn, port int, result *ScanResult) {
 	var banner string
+	defer func() {
+		path := result.DetectionPath
+		if banner != "" && (strings.HasPrefix(path, "banner-parser") || strings.HasPrefix(path, "deep-version") || path == "active-probe" || path == "portmap-fallback" || path == "open-port-fallback") {
+			if _, incomplete := observedBannerText(banner); incomplete {
+				result.Confidence = "low"
+				result.Version = ""
+				result.Evidence += "; incomplete or malformed response; product/version withheld"
+			}
+		}
+	}()
+	if s.CaptureUnknown {
+		defer func() {
+			if result.Confidence == "low" && (result.DetectionPath == "portmap-fallback" || result.DetectionPath == "open-port-fallback") {
+				result.Evidence = s.captureUnknownResponse(result.Evidence, []byte(banner))
+			}
+		}()
+	}
 	deepProbeUsed := false
 	deepProbeAttempted := false
 	mappedService := s.PortManager.GetServiceName(port, "")
@@ -577,7 +631,7 @@ func (s *Scanner) grabBanner(conn net.Conn, port int, result *ScanResult) {
 		if version, evidence := detectMySQLGreetingFromConn(conn, s.boundedServiceTimeout(1200*time.Millisecond, 2500*time.Millisecond)); version != "" {
 			result.ServiceName = "mysql"
 			result.Version = version
-			result.Confidence = "high"
+			result.Confidence = bannerConfidence(version)
 			result.Evidence = evidence
 			result.DetectionPath = "protocol-fingerprint"
 			return
@@ -697,6 +751,8 @@ func (s *Scanner) grabBanner(conn net.Conn, port int, result *ScanResult) {
 			result.Evidence = method
 			if method != "raw smb negotiate" {
 				result.Confidence = "low"
+			} else {
+				result.Evidence = "SMB NEGOTIATE response; selected " + smbInfo + "; product/OS not established"
 			}
 			result.DetectionPath = "smb-specialized"
 			return
@@ -760,10 +816,10 @@ func (s *Scanner) grabBanner(conn net.Conn, port int, result *ScanResult) {
 	}
 
 	// Parse the banner to extract service and version
-	serviceName, version := parseBanner(banner)
+	serviceName, version := parseObservedBanner(banner)
 	if !s.GhostMode && (port == 21 || serviceName == "ftp") && (serviceName == "" || (serviceName == "ftp" && isWeakFTPVersion(version))) {
 		if ftpBanner := s.probeFTP(port); ftpBanner != "" {
-			if ftpService, ftpVersion := parseBanner(ftpBanner); ftpService == "ftp" {
+			if ftpService, ftpVersion := parseObservedBanner(ftpBanner); ftpService == "ftp" {
 				serviceName = ftpService
 				if ftpVersion != "" && (version == "" || !isWeakFTPVersion(ftpVersion)) {
 					version = ftpVersion
@@ -774,7 +830,7 @@ func (s *Scanner) grabBanner(conn net.Conn, port int, result *ScanResult) {
 	}
 	if !s.GhostMode && s.DeepVersion && serviceName != "" && shouldDeepenVersion(serviceName, version) {
 		if deepBanner := s.tryDeepVersionProbe(port, serviceName); deepBanner != "" {
-			if deepService, deepVersion := parseBanner(deepBanner); deepService != "" {
+			if deepService, deepVersion := parseObservedBanner(deepBanner); deepService != "" && deepVersion != "" {
 				deepProbeUsed = true
 				serviceName = deepService
 				if deepVersion != "" && (version == "" || isWeakVersion(version)) {
@@ -805,7 +861,7 @@ func (s *Scanner) grabBanner(conn net.Conn, port int, result *ScanResult) {
 			result.Confidence = bannerIdentificationConfidence(banner, version)
 			result.Evidence = "protocol banner"
 		} else {
-			result.Confidence = "medium"
+			result.Confidence = bannerIdentificationConfidence(banner, "")
 			if fallback := unparsedVersionForPort(port); fallback != "" {
 				result.Version = fallback
 				result.Evidence = "protocol response received but not recognized"
@@ -858,13 +914,11 @@ func (s *Scanner) grabBanner(conn net.Conn, port int, result *ScanResult) {
 	} else {
 		if !s.GhostMode && shouldRetryMappedTextProbe(port, result.ServiceName) {
 			if retryBanner := s.tryServiceProbe(port); retryBanner != "" {
-				if retryService, retryVersion := parseBanner(retryBanner); retryService != "" {
+				if retryService, retryVersion := parseObservedBanner(retryBanner); retryService != "" {
+					banner = retryBanner
 					result.ServiceName = retryService
 					result.Version = retryVersion
 					result.Confidence = bannerIdentificationConfidence(retryBanner, retryVersion)
-					if retryVersion == "" {
-						result.Confidence = "medium"
-					}
 					result.Evidence = "protocol probe"
 					result.DetectionPath = "active-probe"
 					return
@@ -940,16 +994,7 @@ func (s *Scanner) tryConnectedTextProbe(conn net.Conn, port int) (string, bool) 
 
 func (s *Scanner) probeTextServiceOnConn(conn net.Conn, payload string) string {
 	timeout := s.boundedServiceTimeout(900*time.Millisecond, 1800*time.Millisecond)
-	_ = conn.SetDeadline(time.Now().Add(timeout))
-	if _, err := conn.Write([]byte(payload)); err != nil {
-		return ""
-	}
-	buf := make([]byte, 4096)
-	n, _ := conn.Read(buf)
-	if n == 0 {
-		return ""
-	}
-	return string(buf[:n])
+	return exchangeTextTransaction(conn, payload, timeout)
 }
 
 func noGreetingVersionForPort(port int) string {
@@ -963,7 +1008,7 @@ func noGreetingVersionForPort(port int) string {
 	case 143, 993:
 		return "IMAP service (no greeting)"
 	case 3389:
-		return "Microsoft Terminal Services"
+		return "RDP service (unconfirmed)"
 	case 4848:
 		return "HTTP service (no response)"
 	case 7676:
@@ -1010,17 +1055,14 @@ func isWeakFTPVersion(version string) bool {
 
 // tryPassiveBanner reads banner without sending any data
 func (s *Scanner) tryPassiveBanner(conn net.Conn) string {
-	buffer := make([]byte, 4096)
 	passiveTimeout := s.currentTimeout()
 	if passiveTimeout < 900*time.Millisecond {
 		passiveTimeout = 900 * time.Millisecond
 	}
-	_ = conn.SetReadDeadline(time.Now().Add(passiveTimeout))
-	n, _ := conn.Read(buffer)
-	if n > 0 {
-		return string(buffer[:n])
+	if err := conn.SetReadDeadline(time.Now().Add(passiveTimeout)); err != nil {
+		return ""
 	}
-	return ""
+	return readTextGreeting(conn)
 }
 
 // grabHTTPBanner attempts to grab HTTP banner and all headers
@@ -1138,11 +1180,13 @@ func (s *Scanner) probeFTP(port int) string {
 	defer func() { _ = conn.Close() }()
 
 	_ = conn.SetDeadline(time.Now().Add(timeout))
-	buf := make([]byte, 2048)
 	var response strings.Builder
 
-	if n, _ := conn.Read(buf); n > 0 {
-		response.Write(buf[:n])
+	if greeting := readTextGreeting(conn); greeting != "" {
+		response.WriteString(greeting)
+		if !textGreetingComplete([]byte(greeting)) {
+			return response.String()
+		}
 		response.WriteByte('\n')
 	}
 
@@ -1151,8 +1195,11 @@ func (s *Scanner) probeFTP(port int) string {
 		if _, err := conn.Write([]byte(payload)); err != nil {
 			break
 		}
-		if n, _ := conn.Read(buf); n > 0 {
-			response.Write(buf[:n])
+		if reply := readTextGreeting(conn); reply != "" {
+			response.WriteString(reply)
+			if !textGreetingComplete([]byte(reply)) {
+				break
+			}
 			response.WriteByte('\n')
 		}
 	}
@@ -1182,17 +1229,21 @@ func (s *Scanner) probeMailService(port int, payload string, useTLS bool) string
 
 	_ = conn.SetDeadline(time.Now().Add(timeout))
 	var response strings.Builder
-	buf := make([]byte, 4096)
 
-	if n, _ := conn.Read(buf); n > 0 {
-		response.Write(buf[:n])
+	if greeting := readTextGreeting(conn); greeting != "" {
+		response.WriteString(greeting)
+		if !textGreetingComplete([]byte(greeting)) {
+			return response.String()
+		}
 		response.WriteByte('\n')
 	}
 
 	if payload != "" {
-		_, _ = conn.Write([]byte(payload))
-		if n, _ := conn.Read(buf); n > 0 {
-			response.Write(buf[:n])
+		if _, err := conn.Write([]byte(payload)); err != nil {
+			return response.String()
+		}
+		if reply := readTextGreeting(conn); reply != "" {
+			response.WriteString(reply)
 			response.WriteByte('\n')
 		}
 	}
@@ -1215,7 +1266,7 @@ func (s *Scanner) tryDeepVersionProbe(port int, serviceName string) string {
 	}
 	for _, payload := range deepVersionPayloads(port, serviceName) {
 		if response := s.probeTextServiceWriteFirstWithTimeout(port, payload, 700*time.Millisecond, 1500*time.Millisecond); response != "" {
-			if service, _ := parseBanner(response); service != "" {
+			if service, _ := parseObservedBanner(response); service != "" {
 				return response
 			}
 		}
@@ -1238,21 +1289,8 @@ func (s *Scanner) probeFTPGenericLines(port int) string {
 		return ""
 	}
 
-	var response strings.Builder
-	buf := make([]byte, 2048)
-	for {
-		n, err := conn.Read(buf)
-		if n > 0 {
-			response.Write(buf[:n])
-			if response.Len() >= 4096 {
-				break
-			}
-		}
-		if err != nil {
-			break
-		}
-	}
-	return response.String()
+	response, _ := io.ReadAll(io.LimitReader(conn, 4096))
+	return string(response)
 }
 
 func (s *Scanner) tryServiceProbeForService(port int, serviceName string) string {
@@ -1312,6 +1350,19 @@ func evidenceFromBanner(banner string) string {
 	if evidence := httpBannerEvidence(banner); evidence != "" {
 		return evidence
 	}
+	if payload, ok := respBulkPayload(banner); ok {
+		if matches := redisInfoVersionRE.FindAllSubmatch(payload, -1); len(matches) == 1 {
+			return "RESP bulk reply; redis_version:" + string(matches[0][1])
+		}
+	}
+	if end := strings.LastIndexByte(banner, '\n'); end >= 0 {
+		if service, _ := parseObservedBanner(banner); service == "irc" {
+			_, evidence := ircDisclosure(banner[:end+1])
+			if evidence != "" {
+				return evidence
+			}
+		}
+	}
 	for _, line := range strings.Split(banner, "\n") {
 		line = sanitizeVersionString(line)
 		if line == "" {
@@ -1361,25 +1412,7 @@ func (s *Scanner) probeTextService(port int, payload string) string {
 	}
 	defer func() { _ = conn.Close() }()
 
-	_ = conn.SetDeadline(time.Now().Add(timeout))
-
-	var response strings.Builder
-	buf := make([]byte, 2048)
-
-	// Read initial greeting if present
-	if n, _ := conn.Read(buf); n > 0 {
-		response.Write(buf[:n])
-	}
-
-	_, _ = conn.Write([]byte(payload))
-
-	// Read probe response
-	if n, _ := conn.Read(buf); n > 0 {
-		response.WriteByte('\n')
-		response.Write(buf[:n])
-	}
-
-	return response.String()
+	return exchangeTextTransaction(conn, payload, timeout)
 }
 
 // tryGenericServiceProbes improves detection for services exposed on non-standard ports.
@@ -1392,7 +1425,7 @@ func (s *Scanner) tryGenericServiceProbes(port int) string {
 
 	for _, payload := range probes {
 		if response := s.probeTextServiceWriteFirst(port, payload); response != "" {
-			if service, _ := parseBanner(response); service != "" {
+			if service, _ := parseObservedBanner(response); service != "" {
 				return response
 			}
 		}
@@ -1406,7 +1439,7 @@ func (s *Scanner) tryGenericServiceProbes(port int) string {
 func (s *Scanner) tryExhaustiveServiceProbes(port int) string {
 	for _, payload := range exhaustiveServiceProbePayloads() {
 		if response := s.probeTextServiceWriteFirstWithTimeout(port, payload, 350*time.Millisecond, 700*time.Millisecond); response != "" {
-			if service, _ := parseBanner(response); service != "" {
+			if service, _ := parseObservedBanner(response); service != "" {
 				return response
 			}
 		}
@@ -1442,15 +1475,7 @@ func (s *Scanner) probeTextServiceWriteFirstWithTimeout(port int, payload string
 	}
 	defer func() { _ = conn.Close() }()
 
-	_ = conn.SetDeadline(time.Now().Add(timeout))
-	_, _ = conn.Write([]byte(payload))
-
-	buf := make([]byte, 2048)
-	n, _ := conn.Read(buf)
-	if n == 0 {
-		return ""
-	}
-	return string(buf[:n])
+	return exchangeTextTransaction(conn, payload, timeout)
 }
 
 // tryProtocolFingerprint performs protocol-aware detection for services that often need active handshakes.
@@ -1468,16 +1493,20 @@ func (s *Scanner) tryProtocolFingerprint(port int) (service, version, confidence
 		}
 	case 6667, 6697:
 		if response := s.probeTextService(port, "NICK gomap\r\nUSER gomap 0 * :GoMap\r\n"); response != "" {
-			if service, version := parseBanner(response); service == "irc" {
+			if service, version := parseObservedBanner(response); service == "irc" {
 				if version == "" {
 					version = "IRC service"
 				}
-				return service, version, bannerConfidence(version), "IRC protocol response", "protocol-fingerprint", true
+				evidence := evidenceFromBanner(response)
+				if _, incomplete := observedBannerText(response); incomplete {
+					evidence += "; incomplete disclosure; product/version withheld"
+				}
+				return service, version, bannerIdentificationConfidence(response, version), evidence, "protocol-fingerprint", true
 			}
 		}
 	case 53:
 		if version = s.detectDNSVersionTCP(port); version != "" {
-			return "domain", version, "high", "dns chaos version.bind", "protocol-fingerprint", true
+			return "domain", version, "medium", "CHAOS TXT version.bind reply; fixed query ID matched; server-declared text, not authenticated product identity", "protocol-fingerprint", true
 		}
 	case 111:
 		if ver, detected := s.detectONCRPCProgram(port, 100000, []uint32{4, 3, 2}); detected {
@@ -1488,12 +1517,12 @@ func (s *Scanner) tryProtocolFingerprint(port int) (service, version, confidence
 			return "nfs", fmt.Sprintf("NFS v%d", ver), "high", rpcAcceptedEvidence(100003, ver, port), "protocol-fingerprint", true
 		}
 	case 1433:
-		if s.detectMSSQLTDS(port) {
-			return "mssql", "Microsoft SQL Server (TDS)", "medium", "tds prelogin response", "protocol-fingerprint", true
+		if version, evidence := s.detectTDSPrelogin(port); version != "" {
+			return "mssql", version, "medium", evidence, "protocol-fingerprint", true
 		}
 	case 3389:
-		if version, evidence, detected := s.detectRDPInfo(port); detected {
-			return "ms-wbt-server", version, "high", evidence, "protocol-fingerprint", true
+		if version, confidence, evidence, detected := s.detectRDPInfo(port); detected {
+			return "ms-wbt-server", version, confidence, evidence, "protocol-fingerprint", true
 		}
 	case 389:
 		if s.detectLDAPBind(port, false) {
@@ -1503,13 +1532,13 @@ func (s *Scanner) tryProtocolFingerprint(port int) (service, version, confidence
 		if s.detectLDAPBind(port, true) {
 			return "ldaps", "LDAP over TLS", "medium", "ldap bind response (tls)", "protocol-fingerprint", true
 		}
-	case 5985, 5986:
-		if version, evidence := s.detectWinRM(port); version != "" {
-			return "winrm", version, "high", evidence, "protocol-fingerprint", true
-		}
-	case 47001:
-		if version, evidence := s.detectWinRM(port); version != "" {
-			return "winrm", version, "high", evidence, "protocol-fingerprint", true
+	case 5985, 5986, 47001:
+		if version, evidence := s.detectWSManHTTP(port); evidence != "" {
+			service := "http"
+			if port == 5986 {
+				service = "https"
+			}
+			return service, version, bannerConfidence(version), evidence, "protocol-fingerprint", true
 		}
 	case 8009:
 		if s.detectAJP(port) {
@@ -1697,7 +1726,11 @@ func parseONCRPCReply(data []byte, xid uint32) (accepted, valid bool) {
 	if acceptOffset+4 > len(payload) {
 		return false, false
 	}
-	return binary.BigEndian.Uint32(payload[acceptOffset:acceptOffset+4]) == 0, true
+	status := binary.BigEndian.Uint32(payload[acceptOffset : acceptOffset+4])
+	if status == 0 && acceptOffset+4 != len(payload) {
+		return false, false // NULL success has no procedure result body.
+	}
+	return status == 0, true
 }
 
 func roundUp4(n int) int {
@@ -1726,9 +1759,7 @@ func (s *Scanner) detectAJP(port int) bool {
 	if _, err := conn.Write(cping); err != nil {
 		return false
 	}
-	buf := make([]byte, 5)
-	_, err = io.ReadFull(conn, buf)
-	return err == nil && string(buf) == "AB\x00\x01\x09"
+	return readAJPReply(conn)
 }
 
 func (s *Scanner) probeAJP(port int) string {
@@ -1784,57 +1815,10 @@ func buildDNSVersionBindQuery() []byte {
 	return msg
 }
 
-func parseDNSVersionBindResponse(data []byte) string {
-	if len(data) < 2 {
-		return ""
-	}
-	msgLen := int(binary.BigEndian.Uint16(data[0:2]))
-	if msgLen <= 0 || 2+msgLen > len(data) {
-		return ""
-	}
-	msg := data[2 : 2+msgLen]
-	if len(msg) < 12 || binary.BigEndian.Uint16(msg[0:2]) != 0x1337 {
-		return ""
-	}
-	answerCount := int(binary.BigEndian.Uint16(msg[6:8]))
-	offset := 12
-	for offset < len(msg) && msg[offset] != 0 {
-		offset += int(msg[offset]) + 1
-	}
-	offset += 1 + 4
-	for i := 0; i < answerCount && offset+12 <= len(msg); i++ {
-		if msg[offset]&0xc0 == 0xc0 {
-			offset += 2
-		} else {
-			for offset < len(msg) && msg[offset] != 0 {
-				offset += int(msg[offset]) + 1
-			}
-			offset++
-		}
-		if offset+10 > len(msg) {
-			return ""
-		}
-		typ := binary.BigEndian.Uint16(msg[offset : offset+2])
-		class := binary.BigEndian.Uint16(msg[offset+2 : offset+4])
-		rdLen := int(binary.BigEndian.Uint16(msg[offset+8 : offset+10]))
-		offset += 10
-		if offset+rdLen > len(msg) {
-			return ""
-		}
-		rdata := msg[offset : offset+rdLen]
-		offset += rdLen
-		if typ == 16 && class == 3 && len(rdata) > 1 {
-			txtLen := int(rdata[0])
-			if txtLen > 0 && 1+txtLen <= len(rdata) {
-				return "BIND " + sanitizeVersionString(string(rdata[1:1+txtLen]))
-			}
-		}
-	}
-	return ""
-}
-
 func detectMySQLGreetingFromConn(conn net.Conn, timeout time.Duration) (string, string) {
-	_ = conn.SetReadDeadline(time.Now().Add(timeout))
+	if err := conn.SetReadDeadline(time.Now().Add(timeout)); err != nil {
+		return "", ""
+	}
 	buf, err := readMySQLPacket(conn)
 	if err != nil {
 		return "", ""
@@ -1875,6 +1859,9 @@ func parseMySQLHandshakePacket(packet []byte) string {
 		return ""
 	}
 	v := payload[:end]
+	if binaryTextObservation(v) || strings.ContainsAny(v, "\r\n\t") {
+		return ""
+	}
 	if strings.Contains(strings.ToLower(v), "mariadb") {
 		return "MariaDB " + sanitizeVersionString(v)
 	}
@@ -1889,7 +1876,7 @@ func sanitizeVersionString(version string) string {
 	return version
 }
 
-func (s *Scanner) detectMSSQLTDS(port int) bool {
+func (s *Scanner) detectTDSPrelogin(port int) (string, string) {
 	address := net.JoinHostPort(s.Host, fmt.Sprintf("%d", port))
 	timeout := s.ioTimeout(1200 * time.Millisecond)
 	if timeout < 1200*time.Millisecond {
@@ -1898,43 +1885,26 @@ func (s *Scanner) detectMSSQLTDS(port int) bool {
 
 	conn, err := s.dialTCP(address, timeout)
 	if err != nil {
-		return false
+		return "", ""
 	}
 	defer func() { _ = conn.Close() }()
 
-	prelogin := []byte{
-		0x12, 0x01, 0x00, 0x34, 0x00, 0x00, 0x00, 0x00,
-		0x00, 0x00, 0x1a, 0x00, 0x06, 0x01, 0x00, 0x20,
-		0x00, 0x01, 0x02, 0x00, 0x21, 0x00, 0x01, 0x03,
-		0x00, 0x22, 0x00, 0x04, 0x04, 0x00, 0x26, 0x00,
-		0x01, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-		0x00, 0x00, 0x00, 0x00,
-	}
-
-	_ = conn.SetDeadline(time.Now().Add(timeout))
-	_, _ = conn.Write(prelogin)
-
-	buf := make([]byte, 256)
-	n, err := conn.Read(buf)
-	if err != nil || n < 8 {
-		return false
-	}
-
-	// Typical TDS response packet type is 0x04 (tabular result) or 0x12 (prelogin response).
-	return buf[0] == 0x04 || buf[0] == 0x12
+	return probeTDSPrelogin(conn, timeout)
 }
 
-func (s *Scanner) detectRDPInfo(port int) (version, evidence string, ok bool) {
+func (s *Scanner) detectRDPInfo(port int) (version, confidence, evidence string, ok bool) {
 	address := net.JoinHostPort(s.Host, fmt.Sprintf("%d", port))
 	timeout := s.boundedServiceTimeout(900*time.Millisecond, 1800*time.Millisecond)
 
 	conn, err := s.dialTCP(address, timeout)
 	if err != nil {
-		return "", "", false
+		return "", "", "", false
 	}
 	defer func() { _ = conn.Close() }()
+	return s.probeRDPInfo(conn, timeout)
+}
 
+func (s *Scanner) probeRDPInfo(conn net.Conn, timeout time.Duration) (version, confidence, evidence string, ok bool) {
 	// TPKT + X.224 connection request with RDP Negotiation Request:
 	// request SSL or CredSSP, then inspect the selected protocol.
 	req := []byte{
@@ -1943,40 +1913,37 @@ func (s *Scanner) detectRDPInfo(port int) (version, evidence string, ok bool) {
 		0x01, 0x00, 0x08, 0x00,
 		0x03, 0x00, 0x00, 0x00,
 	}
-	_ = conn.SetDeadline(time.Now().Add(timeout))
-	if _, err := conn.Write(req); err != nil {
-		return "", "", false
+	if err := conn.SetDeadline(time.Now().Add(timeout)); err != nil {
+		return "", "", "", false
+	}
+	if n, err := conn.Write(req); err != nil || n != len(req) {
+		return "", "", "", false
 	}
 
-	buf := make([]byte, 128)
-	n, err := conn.Read(buf)
-	if err != nil || n < 7 {
-		return "", "", false
+	buf, err := readRDPConfirm(conn)
+	if err != nil {
+		return "", "", "", false
 	}
-	if buf[0] != 0x03 || buf[1] != 0x00 || (buf[5] != 0xd0 && buf[5] != 0xe0 && buf[5] != 0xf0) {
-		return "", "", false
-	}
-
-	selected, selectedOK := parseRDPNegotiationProtocol(buf[:n])
-	evidence = "X.224 connection confirm"
-	if selectedOK {
-		evidence = "RDP negotiation: " + rdpProtocolName(selected)
-		if selected != 0 {
-			if cn := s.readRDPTLSCertificateCN(conn, timeout); cn != "" {
+	version, confidence, evidence, ok = rdpDisclosure(buf)
+	selected, selectedOK := parseRDPNegotiationProtocol(buf)
+	if selectedOK && selected != 0 {
+		if cn, tlsOK := s.readRDPTLSCertificateCN(conn); tlsOK {
+			evidence += "; TLS handshake completed; certificate not verified"
+			if cn != "" {
 				evidence += "; cert CN=" + cn
 			}
+		} else {
+			evidence += "; TLS handshake not completed"
 		}
 	}
-	return "Microsoft Terminal Services", evidence, true
+	return
 }
 
 func parseRDPNegotiationProtocol(data []byte) (uint32, bool) {
-	for i := 0; i+8 <= len(data); i++ {
-		if data[i] == 0x02 && data[i+2] == 0x08 && data[i+3] == 0x00 {
-			return binary.LittleEndian.Uint32(data[i+4 : i+8]), true
-		}
+	if !validRDPConfirm(data) || len(data) != 19 || data[11] != 2 {
+		return 0, false
 	}
-	return 0, false
+	return binary.LittleEndian.Uint32(data[15:19]), true
 }
 
 func rdpProtocolName(protocol uint32) string {
@@ -1999,20 +1966,23 @@ func rdpProtocolName(protocol uint32) string {
 	return strings.Join(names, "/")
 }
 
-func (s *Scanner) readRDPTLSCertificateCN(conn net.Conn, timeout time.Duration) string {
+func (s *Scanner) readRDPTLSCertificateCN(conn net.Conn) (string, bool) {
 	tlsConn := tls.Client(conn, &tls.Config{
 		InsecureSkipVerify: true,
 		ServerName:         s.Host,
 	})
-	_ = tlsConn.SetDeadline(time.Now().Add(timeout))
 	if err := tlsConn.Handshake(); err != nil {
-		return ""
+		return "", false
 	}
 	state := tlsConn.ConnectionState()
 	if len(state.PeerCertificates) == 0 {
-		return ""
+		return "", true
 	}
-	return sanitizeVersionString(state.PeerCertificates[0].Subject.CommonName)
+	cn := state.PeerCertificates[0].Subject.CommonName
+	if binaryTextObservation(cn) || strings.ContainsAny(cn, ";,=\r\n\t") {
+		return "", true
+	}
+	return sanitizeVersionString(cn), true
 }
 
 func (s *Scanner) detectLDAPBind(port int, useTLS bool) bool {
@@ -2040,25 +2010,10 @@ func (s *Scanner) detectLDAPBind(port int, useTLS bool) bool {
 	}
 	defer func() { _ = conn.Close() }()
 
-	// Anonymous LDAPv3 bind request.
-	bindReq := []byte{0x30, 0x0c, 0x02, 0x01, 0x01, 0x60, 0x07, 0x02, 0x01, 0x03, 0x04, 0x00, 0x80, 0x00}
-	_ = conn.SetDeadline(time.Now().Add(timeout))
-	_, _ = conn.Write(bindReq)
-
-	buf := make([]byte, 256)
-	n, err := conn.Read(buf)
-	if err != nil || n < 8 {
-		return false
-	}
-
-	// LDAPMessage sequence + bindResponse application tag.
-	if buf[0] != 0x30 {
-		return false
-	}
-	return strings.Contains(string(buf[:n]), "LDAP") || (n > 5 && buf[5] == 0x61)
+	return probeLDAPBind(conn, timeout)
 }
 
-func (s *Scanner) detectWinRM(port int) (string, string) {
+func (s *Scanner) detectWSManHTTP(port int) (string, string) {
 	address := net.JoinHostPort(s.Host, fmt.Sprintf("%d", port))
 	timeout := s.ioTimeout(1500 * time.Millisecond)
 	if timeout < 1500*time.Millisecond {
@@ -2082,58 +2037,7 @@ func (s *Scanner) detectWinRM(port int) (string, string) {
 	}
 	defer func() { _ = conn.Close() }()
 
-	_ = conn.SetDeadline(time.Now().Add(timeout))
-	_, _ = conn.Write([]byte(s.buildHTTPRequest("OPTIONS", "/wsman")))
-
-	buf := make([]byte, 4096)
-	n, err := conn.Read(buf)
-	if err != nil || n == 0 {
-		return "", ""
-	}
-
-	raw := string(buf[:n])
-	resp := strings.ToLower(raw)
-	if strings.Contains(resp, "wsman") || strings.Contains(resp, "microsoft-httpapi") || strings.Contains(resp, "www-authenticate: negotiate") {
-		if server := httpHeaderValue(raw, "Server"); server != "" {
-			return winRMVersionFromServerHeader(server), "Server: " + server
-		}
-		if auth := httpHeaderValue(raw, "WWW-Authenticate"); auth != "" {
-			return "Microsoft WinRM", "WWW-Authenticate: " + auth
-		}
-		if status := firstHTTPStatusLine(raw); status != "" {
-			return "Microsoft WinRM", status
-		}
-		return "Microsoft WinRM", "WSMan/HTTPAPI response"
-	}
-	return "", ""
-}
-
-func httpHeaderValue(response, header string) string {
-	prefix := strings.ToLower(header) + ":"
-	for _, line := range strings.Split(response, "\n") {
-		line = strings.TrimSpace(strings.TrimRight(line, "\r"))
-		if strings.HasPrefix(strings.ToLower(line), prefix) {
-			return strings.TrimSpace(line[len(prefix):])
-		}
-	}
-	return ""
-}
-
-func firstHTTPStatusLine(response string) string {
-	for _, line := range strings.Split(response, "\n") {
-		line = strings.TrimSpace(strings.TrimRight(line, "\r"))
-		if strings.HasPrefix(strings.ToUpper(line), "HTTP/") {
-			return line
-		}
-	}
-	return ""
-}
-
-func winRMVersionFromServerHeader(server string) string {
-	if strings.Contains(strings.ToLower(server), "microsoft-httpapi") {
-		return "Microsoft HTTPAPI httpd " + strings.TrimPrefix(server, "Microsoft-HTTPAPI/")
-	}
-	return "Microsoft WinRM"
+	return probeWSManHTTP(conn, s.buildHTTPRequest("OPTIONS", "/wsman"), timeout)
 }
 
 // detectSMBVersion attempts to detect SMB version through multiple methods
@@ -2167,17 +2071,19 @@ func (s *Scanner) attemptRawSMBDetection(address string) string {
 	}
 	defer func() { _ = conn.Close() }()
 
-	_ = conn.SetDeadline(time.Now().Add(s.Timeout))
-	if _, err := conn.Write(buildSMBNegotiate()); err != nil {
+	if err := conn.SetDeadline(time.Now().Add(s.Timeout)); err != nil {
 		return ""
 	}
-	header := make([]byte, 4)
-	if _, err := io.ReadFull(conn, header); err != nil || header[0] != 0 {
+	request := buildSMBNegotiate()
+	if n, err := conn.Write(request); err != nil || n != len(request) {
 		return ""
 	}
-	frame, err := readFrameBody(conn, header, int(binary.BigEndian.Uint32(header)), 64*1024)
+	frame, err := readSMBMessage(conn)
 	if err != nil {
 		return ""
+	}
+	if len(frame) < 8 || string(frame[4:8]) != "\xfeSMB" {
+		return "" // This request offers SMB2/3 only, not legacy SMB1.
 	}
 	return s.analyzeSMBResponse(frame[4:])
 }
@@ -2228,9 +2134,16 @@ func (s *Scanner) analyzeSMBResponse(data []byte) string {
 
 // extractSMB2Dialect detects specific SMB2/3 dialect
 func (s *Scanner) extractSMB2Dialect(data []byte) string {
-	if len(data) < 128 || binary.LittleEndian.Uint16(data[4:6]) != 64 ||
+	if len(data) < 128 || string(data[:4]) != "\xfeSMB" || binary.LittleEndian.Uint16(data[4:6]) != 64 ||
 		binary.LittleEndian.Uint32(data[8:12]) != 0 || binary.LittleEndian.Uint16(data[12:14]) != 0 ||
-		binary.LittleEndian.Uint32(data[16:20])&1 == 0 || binary.LittleEndian.Uint16(data[64:66]) != 65 {
+		binary.LittleEndian.Uint32(data[16:20])&1 == 0 || binary.LittleEndian.Uint32(data[20:24]) != 0 ||
+		binary.LittleEndian.Uint64(data[24:32]) != 0 || binary.LittleEndian.Uint64(data[40:48]) != 0 ||
+		binary.LittleEndian.Uint16(data[64:66]) != 65 {
+		return ""
+	}
+	securityOffset := int(binary.LittleEndian.Uint16(data[120:122]))
+	securityLength := int(binary.LittleEndian.Uint16(data[122:124]))
+	if securityLength > 0 && (securityOffset < 128 || securityOffset > len(data) || securityLength > len(data)-securityOffset) {
 		return ""
 	}
 

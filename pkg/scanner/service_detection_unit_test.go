@@ -2,6 +2,7 @@ package scanner
 
 import (
 	"net"
+	"strings"
 	"testing"
 	"time"
 )
@@ -141,7 +142,7 @@ func TestNoGreetingDetectionMetadata(t *testing.T) {
 		{110, "POP3 service (no greeting)", "port open; no pop3 greeting"},
 		{143, "IMAP service (no greeting)", "port open; no imap greeting"},
 		{2525, "SMTP service (no greeting)", "port open; no smtp greeting"},
-		{3389, "Microsoft Terminal Services", "RDP TCP/3389 open; no negotiation response"},
+		{3389, "RDP service (unconfirmed)", "RDP TCP/3389 open; no negotiation response"},
 		{3920, "TLS service (no handshake)", "port open; no TLS handshake"},
 	}
 
@@ -220,22 +221,19 @@ func TestRDPAndWinRMDetectionHelpers(t *testing.T) {
 		0x03, 0x00, 0x00, 0x13,
 		0x0e, 0xd0, 0x00, 0x00, 0x00, 0x00, 0x00,
 		0x02, 0x00, 0x08, 0x00,
-		0x03, 0x00, 0x00, 0x00,
+		0x02, 0x00, 0x00, 0x00,
 	}
 	selected, ok := parseRDPNegotiationProtocol(data)
 	if !ok {
 		t.Fatal("expected RDP negotiation response")
 	}
-	if got := rdpProtocolName(selected); got != "TLS/CredSSP" {
+	if got := rdpProtocolName(selected); got != "CredSSP" {
 		t.Fatalf("unexpected RDP protocol evidence: %q", got)
 	}
 
 	response := "HTTP/1.1 404 Not Found\r\nServer: Microsoft-HTTPAPI/2.0\r\nWWW-Authenticate: Negotiate\r\n\r\n"
-	if got := httpHeaderValue(response, "Server"); got != "Microsoft-HTTPAPI/2.0" {
-		t.Fatalf("unexpected server header: %q", got)
-	}
-	if got := winRMVersionFromServerHeader("Microsoft-HTTPAPI/2.0"); got != "Microsoft HTTPAPI httpd 2.0" {
-		t.Fatalf("unexpected WinRM version: %q", got)
+	if version, evidence := wsmanHTTPDisclosure(response); version != "Microsoft-HTTPAPI/2.0" || !strings.Contains(evidence, "WinRM not confirmed") {
+		t.Fatalf("unexpected HTTP disclosure: %q %q", version, evidence)
 	}
 }
 
