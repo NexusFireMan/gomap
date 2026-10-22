@@ -8,6 +8,14 @@ Note: this changelog is maintained from this point forward in the project histor
 
 ### Added
 
+### Changed
+
+### Fixed
+
+## [2.6.0] - 2026-10-22
+
+### Added
+
 - Add opt-in CONNECT `--recover-timeouts`: eight extra connections and three seconds of accumulated recovery time shared across hosts, cancelable global/per-host pacing, broad-silence guards, original/later JSON observations and reconciled final coverage. Stream newly recovered opens once with conservative un-fingerprinted labels; preserve defaults and reject UDP/SYN/controlled-profile combinations.
 - Retain the initial test-only selective CONNECT recovery experiment with deterministic attempt/time/pacing guards and opt-in current/historical comparisons. Its limited benefits and persistent-silence costs are recorded separately from the later opt-in runtime feature.
 - Record a twelve-run full-range native CONNECT benchmark across authorized Windows/Linux and VPN fixtures, including worker-count timing spread, open-set changes, incomplete coverage and separate targeted follow-up checks; preserve production defaults and leave general stability validation open.
@@ -35,7 +43,7 @@ Note: this changelog is maintained from this point forward in the project histor
 ### Changed
 
 - Raise the minimum total statement coverage from 10% to 60% in local coverage checks and CI, following the intermediate 40% milestone.
-- Require Go 1.26.9 and update `golang.org/x/net` to v0.60.0 after vulnerability scanning identified advisories in the preceding baseline; align the Docker builder and include GoSNMP license notices in distributions.
+- Require Go 1.26.10 and update `golang.org/x/net` to v0.60.0 after vulnerability scanning identified advisories in the preceding baseline; align the Docker builder and include GoSNMP license notices in distributions. The final toolchain update addresses [GO-2026-6809](https://pkg.go.dev/vuln/GO-2026-6809) in `crypto/x509`.
 
 ### Fixed
 

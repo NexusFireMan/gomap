@@ -88,9 +88,9 @@ probes. It must not be wired directly into the CLI as-is.
 Deterministic checks need no network or VM:
 
 ```bash
-GOTOOLCHAIN=go1.26.9 go test -race ./pkg/scanner \
+GOTOOLCHAIN=go1.26.10 go test -race ./pkg/scanner \
   -run '^TestSelectiveRecovery(Budgets|Exclusions|DoesNotDial)' -count=20
-GOTOOLCHAIN=go1.26.9 go test -race ./pkg/scanner ./pkg/app ./cmd/gomap \
+GOTOOLCHAIN=go1.26.10 go test -race ./pkg/scanner ./pkg/app ./cmd/gomap \
   -run 'Test(TimeoutRecovery|AttemptLimiterContext|CLIRecover|Recovery)' -count=3
 ```
 
@@ -98,7 +98,7 @@ Both live tests are explicitly opt-in and require an authorized literal IP:
 
 ```bash
 GOMAP_RUN_RECOVERY_LAB_TESTS=1 GOMAP_RECOVERY_HOST=10.0.11.6 \
-  GOTOOLCHAIN=go1.26.9 go test ./pkg/scanner \
+  GOTOOLCHAIN=go1.26.10 go test ./pkg/scanner \
   -run '^TestSelectiveRecoveryCurrentLab$' -count=1 -timeout=30s -v
 ```
 

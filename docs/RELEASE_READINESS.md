@@ -29,7 +29,7 @@ GOMAP_RUN_RELEASE_LAB_TESTS=1 GOMAP_LAB_REVISION=$(git rev-parse HEAD) \
   go test ./pkg/app -run '^TestReleaseLabRegression$' -count=1 -timeout=15m -v
 ```
 
-Use `GOTOOLCHAIN=go1.26.9` when the host's default toolchain differs from the
+Use `GOTOOLCHAIN=go1.26.10` when the host's default toolchain differs from the
 repository pin. The timeout bounds the test process; it is not the per-port
 timeout. Allow the previous scan to finish before starting another.
 
@@ -66,7 +66,7 @@ This short timeout is a local-lab profile, not a VPN recommendation.
 
 ```bash
 GOMAP_RUN_CONNECT_VARIANCE_TESTS=1 GOMAP_LAB_REVISION=$(git rev-parse HEAD) \
-  GOTOOLCHAIN=go1.26.9 go test ./pkg/scanner \
+  GOTOOLCHAIN=go1.26.10 go test ./pkg/scanner \
   -run '^TestConnectVarianceLab$' -count=1 -timeout=4m -v
 ```
 
@@ -186,6 +186,106 @@ changelog/known-limit review are complete. Network completeness remains
 inconclusive, especially for Linux. This record supports a reviewed promotion
 decision, not automatic publication, zero-defect claims or closing the separate
 full-range stability/SYN/netlink roadmap tasks.
+
+## v2.6.0 Candidate Validation
+
+The candidate adds backwards-compatible opt-in features and therefore uses a
+minor version, not a patch. Production revision
+`4f0d3530dda8db1cec9b19d8d1bc4f2b9709bff1` passed `make ci` with Go 1.26.9:
+lint, unit/race tests and 72.5% total coverage against the enforced 60% floor.
+The unrelated local ignore-file change is excluded from the candidate.
+
+The final two-VM regression started on October 22, 2026 at 13:42:14 UTC.
+Both quick profiles passed their baseline, accounting and output checks:
+
+| Profile | Host Role | Open | Refused/Closed | Unresolved | Duration, Both Hosts |
+| --- | --- | ---: | ---: | ---: | ---: |
+| quick-1 | Windows | 20 | 976 | 0 | 26.062 s |
+| quick-1 | Linux | 7 | 2 | 987 | 26.062 s |
+| quick-2 | Windows | 20 | 976 | 0 | 27.138 s |
+| quick-2 | Linux | 7 | 2 | 987 | 27.138 s |
+
+The subsequent deep profile failed: both hosts returned zero opens and 20
+timeouts, missing every required baseline anchor. Independent checks then
+found failed/incomplete ARP resolution for both VMs, no ping responses and no
+direct Linux SSH connection. This does not establish the cause of the outage.
+The full profile was interrupted to avoid scanning unavailable fixtures; the
+84.375 s test process is **not a successful full regression**.
+
+That attempt blocked promotion until the fixtures were restored and the entire
+regression was repeated; it is retained above rather than treated as a pass.
+
+### Restored-Fixture Sign-Off
+
+The complete repeat started at 14:12:44 UTC on October 22, 2026 and passed on
+revision `2e8e2644c853028be0875560ba417ec24370343c`. Its production code is
+identical to the CI-validated `4f0d353` candidate; the intervening commit only
+records the failed attempt. Neither recovery nor altered VM/firewall settings
+were used to turn uncertain outcomes into confirmed states.
+
+| Profile | Host Role | Requested | Open | Refused/Closed | Unresolved | Duration, Both Hosts |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| quick-1 | Windows | 996 | 20 | 976 | 0 | 26.559 s |
+| quick-1 | Linux | 996 | 7 | 2 | 987 | 26.559 s |
+| quick-2 | Windows | 996 | 20 | 976 | 0 | 27.105 s |
+| quick-2 | Linux | 996 | 7 | 2 | 987 | 27.105 s |
+| deep | Windows | 20 | 16 | 4 | 0 | 1.847 s |
+| deep | Linux | 20 | 7 | 1 | 12 | 1.847 s |
+| full | Windows | 65535 | 37 | 65498 | 0 | 293.969 s |
+| full | Linux | 65535 | 9 | 2 | 65524 | 293.969 s |
+
+All profiles passed baseline-anchor, deduplication, coverage, conservative-label
+and JSON/JSONL/CSV preservation checks. Every unresolved outcome above was a
+timeout, not a confirmed closure. The full profile observed 46 open ports; the
+whole test process took 349.741 s. Identical quick profiles reported the same
+counts and a 0.546 s duration spread. These controlled observations are
+not a CPU-isolated performance guarantee or an explanation of the earlier outage.
+
+**Promotion gate: passed for the documented v2.6.0 CONNECT/format scope.**
+Accept incomplete Linux coverage as a disclosed limitation, not complete
+discovery. Promotion still requires the protected PR checks and a merge commit;
+tagging and distribution verification remain separate publishing steps.
+Full-range network stability and disconnected end-to-end SYN/native netlink
+rollback remain explicit limitations, not completed work. Additional identity
+fingerprints and lab examples are deferred improvements, not release claims.
+
+### Toolchain Security Follow-Up
+
+The subsequent `govulncheck` v1.7.0 run flagged
+[GO-2026-6809](https://pkg.go.dev/vuln/GO-2026-6809) in the Go 1.26.9 standard
+library. The advisory was published October 21 and is fixed in Go 1.26.10.
+The candidate minimum, README and Docker builder now select the patched release.
+Publishing was held for fresh validation rather than relying on the earlier
+compiler's sign-off. On Go 1.26.10, `make ci` then passed lint, unit/race tests
+and the 60% coverage floor (72.5% measured); `govulncheck` v1.7.0 reported no
+vulnerabilities. This is a point-in-time advisory check, not a security guarantee.
+
+The complete lab regression on patched candidate
+`0830a4928eb7fbac89ff4ef8e28110adf5e90c7d` started at 14:28:29 UTC and passed
+all four profiles, baseline anchors, accounting and JSON/JSONL/CSV checks:
+
+| Profile | Host Role | Requested | Open | Refused/Closed | Unresolved | Duration, Both Hosts |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| quick-1 | Windows | 996 | 22 | 974 | 0 | 27.177 s |
+| quick-1 | Linux | 996 | 7 | 2 | 987 | 27.177 s |
+| quick-2 | Windows | 996 | 22 | 974 | 0 | 27.176 s |
+| quick-2 | Linux | 996 | 7 | 2 | 987 | 27.176 s |
+| deep | Windows | 20 | 16 | 4 | 0 | 1.849 s |
+| deep | Linux | 20 | 7 | 1 | 12 | 1.849 s |
+| full | Windows | 65535 | 39 | 65496 | 0 | 296.773 s |
+| full | Linux | 65535 | 9 | 2 | 65524 | 296.773 s |
+
+The test process took 353.505 s; the full profile observed 48 open ports.
+All unresolved outcomes remained timeout-inferred, not confirmed closures.
+Windows counts differ from the earlier compiler's run (22 versus 20 curated,
+39 versus 37 full-range); these non-simultaneous samples do not establish a
+compiler effect or general stability. Both records remain visible. No recovery,
+VM login or NIC/firewall changes were performed by this regression.
+
+**Final candidate gate: passed for this bounded CONNECT/format and toolchain
+scope, subject to protected PR checks.** General live-network stability and
+privileged SYN/netlink validation remain disclosed limitations, not release
+claims. Subsequent documentation-only commits do not change this tested code.
 
 ## Known Limitations
 
