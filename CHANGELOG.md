@@ -8,6 +8,7 @@ Note: this changelog is maintained from this point forward in the project histor
 
 ### Added
 
+- Record a twelve-run full-range native CONNECT benchmark across authorized Windows/Linux and VPN fixtures, including worker-count timing spread, open-set changes, incomplete coverage and separate targeted follow-up checks; preserve production defaults and leave general stability validation open.
 - Add deterministic CONNECT repeatability tests across worker counts, retries and the full TCP range, plus an opt-in lab matrix reporting open-set changes, confirmed-state throughput and timing spread without service probes.
 - Add an opt-in two-VM release regression: repeated quick CONNECT scans, deep probes, full TCP range, explicit coverage accounting and JSON/JSONL/CSV preservation checks on the same captured observations. Fail rather than skip unavailable lab hosts or missing baseline services.
 - Add bounded RESP2 INFO, IRC registration and generic write-first transaction readers with deterministic split/truncation/error fixtures, loopback exchanges, early-completion/message-boundary tests and fuzz targets. Cover numeric replies, POP3 CAPA, tagged IMAP CAPABILITY and HTTP/RTSP/SIP response framing used by existing probes.

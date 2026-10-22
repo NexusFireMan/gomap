@@ -65,11 +65,11 @@ GoMap's roadmap focuses on improving reliability, test coverage, documentation, 
 - [x] Make CONNECT coverage/exposure labels explicitly observational, retain a visible inconclusive subtotal and exact evidence fraction, and avoid misleading percentage rounding at zero/100%; preserve engine-specific meanings and structured counters.
 - [x] Add opt-in completion-order text/JSONL streaming for CONNECT results with deterministic delivery, deduplication and writer-error regressions.
 
-- [ ] Stabilize full-range CONNECT results across constrained VirtualBox and VPN lab networks.
+- [ ] Stabilize full-range CONNECT results across constrained VirtualBox and VPN lab networks. The [October 22 matrix](docs/CONNECT_BENCHMARK.md) retains Windows open-set changes and transient timeouts; baseline retention does not close this task.
 - [x] Add deterministic full-range CONNECT mixed-failure/worker/retry regressions and an opt-in repeated lab matrix that compares open-port sets and reports timing variance; fixture success does not establish full-range live-network stability.
 - [ ] Expand native fingerprints for SMB server identity, NetBIOS workgroup data, and IRC product/version banners.
 - [x] Keep unidentified open TCP ports explicit when service detection is enabled, without inventing service or version data.
-- [ ] Track benchmark variance across repeated runs, worker counts, and filtered-port conditions.
+- [x] Track benchmark variance across repeated runs, worker counts, and filtered-port conditions in a bounded twelve-run full-range Windows/Linux/VPN matrix; record settings, all runs, open-set differences and unresolved coverage in the [benchmark report](docs/CONNECT_BENCHMARK.md). This does not certify other networks or general stability.
 
 ## Documentation and Release Workflow
 
