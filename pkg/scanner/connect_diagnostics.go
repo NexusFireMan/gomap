@@ -17,8 +17,9 @@ type ConnectionIssue struct {
 }
 
 type ConnectDiagnostics struct {
-	AttemptedPorts int `json:"attempted_ports"`
-	RefusedPorts   int `json:"refused_ports"`
+	Recovery       *TimeoutRecoveryDiagnostics `json:"timeout_recovery,omitempty"`
+	AttemptedPorts int                         `json:"attempted_ports"`
+	RefusedPorts   int                         `json:"refused_ports"`
 	// UnresolvedPorts includes FilteredPorts for compatibility and completeness checks.
 	UnresolvedPorts int               `json:"unresolved_ports"`
 	RecoveredPorts  int               `json:"recovered_ports"`

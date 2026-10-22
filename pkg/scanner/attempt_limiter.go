@@ -1,6 +1,7 @@
 package scanner
 
 import (
+	"context"
 	"sync"
 	"time"
 )
@@ -13,6 +14,49 @@ type AttemptLimiter struct {
 	next     time.Time
 	now      func() time.Time
 	sleep    func(time.Duration)
+}
+
+// WaitContext shares the same grants as Wait but never blocks on its mutex or
+// timer past cancellation. Existing uncancelable callers retain their behavior.
+func (l *AttemptLimiter) WaitContext(ctx context.Context) error {
+	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if l == nil {
+			return nil
+		}
+		if !l.mu.TryLock() {
+			if err := waitAttemptContext(ctx, time.Millisecond); err != nil {
+				return err
+			}
+			continue
+		}
+		delay := l.next.Sub(l.now())
+		if delay <= 0 {
+			err := ctx.Err()
+			if err == nil {
+				l.next = l.now().Add(l.interval)
+			}
+			l.mu.Unlock()
+			return err
+		}
+		l.mu.Unlock()
+		if err := waitAttemptContext(ctx, delay); err != nil {
+			return err
+		}
+	}
+}
+
+func waitAttemptContext(ctx context.Context, delay time.Duration) error {
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return ctx.Err()
+	}
 }
 
 // NewAttemptLimiter returns a shared budget, or nil when rate is disabled.

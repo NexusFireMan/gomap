@@ -37,6 +37,7 @@ type ScanRequest struct {
 	TimeoutMS       int
 	Workers         int
 	Retries         int
+	RecoverTimeouts bool
 	BackoffMS       int
 	MaxTimeoutMS    int
 	AdaptiveTimeout bool
@@ -74,6 +75,9 @@ func ExecuteScan(req ScanRequest) (resultErr error) {
 	if req.ScanType == "" {
 		req.ScanType = "connect"
 	}
+	if req.RecoverTimeouts && (req.UDP || req.ScanType != "connect" || req.GhostMode) {
+		return errors.New("--recover-timeouts requires CONNECT and cannot combine with UDP, SYN or -g")
+	}
 	if req.HostConfig != "" && req.ScanType == "syn" {
 		return errors.New("--host-config supports CONNECT/UDP, not native SYN")
 	}
@@ -102,6 +106,9 @@ func ExecuteScan(req ScanRequest) (resultErr error) {
 	}
 	if req.Exhaustive {
 		scanLabel += "+EXH"
+	}
+	if req.RecoverTimeouts {
+		scanLabel += "+REC"
 	}
 
 	destWriter := output.DefaultWriter()
@@ -318,11 +325,16 @@ func ExecuteScan(req ScanRequest) (resultErr error) {
 	connectDiagnostics := make(map[string]scanner.ConnectDiagnostics)
 	scanStart := time.Now()
 	var streamErr error
+	var recoveryBudget *scanner.TimeoutRecoveryBudget
+	if req.RecoverTimeouts {
+		recoveryBudget = scanner.NewTimeoutRecoveryBudget()
+	}
 
 	for _, targetIP := range targets {
 		hostStart := time.Now()
 		engineUsed := req.ScanType
 		s := scanner.NewScanner(targetIP, req.GhostMode)
+		s.RecoveryBudget = recoveryBudget
 		hostReq := req
 		if len(hostConfig) > 0 {
 			if addr, err := netip.ParseAddr(targetIP); err == nil {
@@ -541,6 +553,9 @@ func connectWarnings(targets []string, diagnostics map[string]scanner.ConnectDia
 	var report strings.Builder
 	for _, host := range targets {
 		diag := diagnostics[host]
+		if r := diag.Recovery; r != nil {
+			fmt.Fprintf(&report, "TCP timeout recovery on %s: attempts=%d, open=%d, refused=%d, elapsed_ms=%d, stop=%s; shared run budget: 8 attempts / 3000 ms.\n", host, r.Attempts, r.Opened, r.Refused, r.ElapsedMS, r.Stop)
+		}
 		if diag.UnresolvedPorts == 0 {
 			continue
 		}

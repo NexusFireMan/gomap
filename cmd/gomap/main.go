@@ -74,6 +74,7 @@ func Run() {
 		TimeoutMS:       opts.TimeoutMS,
 		Workers:         opts.Workers,
 		Retries:         opts.Retries,
+		RecoverTimeouts: opts.RecoverTimeouts,
 		BackoffMS:       opts.BackoffMS,
 		MaxTimeoutMS:    opts.MaxTimeoutMS,
 		AdaptiveTimeout: opts.AdaptiveTimeout,

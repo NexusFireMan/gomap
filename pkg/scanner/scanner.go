@@ -1,6 +1,7 @@
 package scanner
 
 import (
+	"context"
 	cryptorand "crypto/rand"
 	"crypto/tls"
 	"encoding/binary"
@@ -42,14 +43,16 @@ type Scanner struct {
 	SNMPCredentials    *SNMPCredentials
 	// OnResult is called serially as CONNECT results finish, before the full scan returns.
 	// Set it before starting a scan; callbacks should return promptly.
-	OnResult     func(ScanResult)
-	targetPrefix netip.Prefix
+	OnResult       func(ScanResult)
+	RecoveryBudget *TimeoutRecoveryBudget
+	targetPrefix   netip.Prefix
 
-	adaptiveMu    sync.Mutex
-	ewmaLatency   time.Duration
-	failureStreak int
-	successCount  int
-	failureCount  int
+	adaptiveMu       sync.Mutex
+	ewmaLatency      time.Duration
+	failureStreak    int
+	successCount     int
+	failureCount     int
+	lastConnectStart time.Time
 }
 
 // ScanConfig contains runtime tuning controls for robust scans.
@@ -156,6 +159,10 @@ func (s *Scanner) Configure(cfg ScanConfig) {
 
 // Scan performs the port scanning operation
 func (s *Scanner) Scan(ports []int, detectServices bool) []ScanResult {
+	if s.RecoveryBudget != nil {
+		results, _ := s.ScanWithDiagnostics(ports, detectServices)
+		return results
+	}
 	return s.scanPortsWithDial(ports, detectServices, s.dialTCPUnpaced)
 }
 
@@ -168,7 +175,11 @@ func (s *Scanner) scanPortsWithDial(ports []int, detectServices bool, dial tcpDi
 
 // ScanWithDiagnostics retains inconclusive CONNECT outcomes without reporting them as closed.
 func (s *Scanner) ScanWithDiagnostics(ports []int, detectServices bool) ([]ScanResult, ConnectDiagnostics) {
-	return s.scanPortsReportWithDial(ports, detectServices, s.dialTCPUnpaced)
+	results, diag := s.scanPortsReportWithDial(ports, detectServices, s.dialTCPUnpaced)
+	if s.RecoveryBudget != nil {
+		return s.recoverTimeouts(context.Background(), results, diag, detectServices, s.recoveryDial)
+	}
+	return results, diag
 }
 
 func (s *Scanner) scanPortsReportWithDial(ports []int, detectServices bool, dial tcpDialFunc) ([]ScanResult, ConnectDiagnostics) {
@@ -207,6 +218,11 @@ func (s *Scanner) scanPortsReportWithDial(ports []int, detectServices bool, dial
 	firstDialDone := make(chan struct{})
 	var firstDial sync.Once
 	primingDial := func(address string, timeout time.Duration) (net.Conn, error) {
+		if s.RecoveryBudget != nil {
+			s.adaptiveMu.Lock()
+			s.lastConnectStart = time.Now()
+			s.adaptiveMu.Unlock()
+		}
 		conn, err := dial(address, timeout)
 		firstDial.Do(func() { close(firstDialDone) })
 		return conn, err

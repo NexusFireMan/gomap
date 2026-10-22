@@ -95,6 +95,7 @@ type BuildInfo struct {
 
 // ScanOptions is a whitelist: never serialize arbitrary argv, source pools or banners.
 type ScanOptions struct {
+	RecoverTimeouts bool   `json:"recover_timeouts,omitempty"`
 	ScanType        string `json:"scan_type"`
 	UDP             bool   `json:"udp"`
 	Ports           string `json:"ports"`
