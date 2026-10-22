@@ -237,8 +237,8 @@ were used to turn uncertain outcomes into confirmed states.
 All profiles passed baseline-anchor, deduplication, coverage, conservative-label
 and JSON/JSONL/CSV preservation checks. Every unresolved outcome above was a
 timeout, not a confirmed closure. The full profile observed 46 open ports; the
-whole test process took 349.741 s. Identical quick profiles had the same port
-sets/counts and a 0.546 s duration spread. These controlled observations are
+whole test process took 349.741 s. Identical quick profiles reported the same
+counts and a 0.546 s duration spread. These controlled observations are
 not a CPU-isolated performance guarantee or an explanation of the earlier outage.
 
 **Promotion gate: passed for the documented v2.6.0 CONNECT/format scope.**
