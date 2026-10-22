@@ -187,6 +187,37 @@ inconclusive, especially for Linux. This record supports a reviewed promotion
 decision, not automatic publication, zero-defect claims or closing the separate
 full-range stability/SYN/netlink roadmap tasks.
 
+## v2.6.0 Candidate Validation
+
+The candidate adds backwards-compatible opt-in features and therefore uses a
+minor version, not a patch. Production revision
+`4f0d3530dda8db1cec9b19d8d1bc4f2b9709bff1` passed `make ci` with Go 1.26.9:
+lint, unit/race tests and 72.5% total coverage against the enforced 60% floor.
+The unrelated local ignore-file change is excluded from the candidate.
+
+The final two-VM regression started on October 22, 2026 at 13:42:14 UTC.
+Both quick profiles passed their baseline, accounting and output checks:
+
+| Profile | Host Role | Open | Refused/Closed | Unresolved | Duration, Both Hosts |
+| --- | --- | ---: | ---: | ---: | ---: |
+| quick-1 | Windows | 20 | 976 | 0 | 26.062 s |
+| quick-1 | Linux | 7 | 2 | 987 | 26.062 s |
+| quick-2 | Windows | 20 | 976 | 0 | 27.138 s |
+| quick-2 | Linux | 7 | 2 | 987 | 27.138 s |
+
+The subsequent deep profile failed: both hosts returned zero opens and 20
+timeouts, missing every required baseline anchor. Independent checks then
+found failed/incomplete ARP resolution for both VMs, no ping responses and no
+direct Linux SSH connection. This does not establish the cause of the outage.
+The full profile was interrupted to avoid scanning unavailable fixtures; the
+84.375 s test process is **not a successful full regression**.
+
+**Promotion gate: blocked pending restored fixtures and a complete passing
+regression on the candidate code.** Do not publish a tag from this record.
+Full-range network stability and disconnected end-to-end SYN/native netlink
+rollback remain explicit limitations, not completed work. Additional identity
+fingerprints and lab examples are deferred improvements, not release claims.
+
 ## Known Limitations
 
 - TCP silence, packet loss, filtering, VM load/restarts and dynamic listeners can change counts. Full-range stability across constrained VirtualBox/VPN networks remains a roadmap task, not a solved consequence of these tests.
