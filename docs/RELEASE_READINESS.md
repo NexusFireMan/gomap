@@ -118,6 +118,12 @@ not 65535; the full-range matrix in this change used simulated connections.
 
 ## Reporting Template
 
+The [October 22 full-range CONNECT matrix](CONNECT_BENCHMARK.md) extends these
+records with twelve discovery-only scans across local Windows/Linux and an
+authorized VPN target. It uses different rates/timeouts from the earlier
+release regression. Its retained Windows open-set change and inconclusive
+outcomes must not be summarized as a universal stability pass.
+
 Record the code revision (and dirty source diff, when applicable), toolchain,
 OS/network/VM setup, date, exact profile settings and whether either VM restarted.
 For each profile and host, report:

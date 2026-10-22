@@ -619,6 +619,18 @@ A newer authorized two-VM regression on unreleased code used explicit rate and t
 
 Baseline services, coverage accounting and JSON/JSONL/CSV preservation passed in every final profile. This does **not** establish complete network coverage: silent ports remain inconclusive, and an earlier preliminary run missed Linux baseline services. Settings, revision, failed/aborted attempts and limitations are recorded in the [release readiness report](docs/RELEASE_READINESS.md). Rates were 500 starts/s per host and 1000 globally; the full profile used 128 workers and a 150 ms dial timeout, versus 32 workers and 750 ms for the other profiles. Hosts were scanned sequentially, with zero retries and adaptive dial timeouts disabled. These controlled, non-CPU-isolated measurements are not comparable to the older 23.84 s benchmark.
 
+### Full-Range CONNECT Matrix, October 22, 2026
+
+A later native CONNECT discovery-only matrix ran TCP 1-65535 twice at each of 128 and 256 workers on Windows, Linux and an authorized HTB target over VPN. All twelve runs retained the required open-port anchors and accounted for every requested port.
+
+| Role | Observed Open Ports | Mean Seconds, 128 / 256 Workers | Inconclusive Outcomes |
+| --- | --- | --- | --- |
+| Windows lab | 37 initially, then 39 | 163.647 / 193.410 | 0, 22, 0 and 2 timeouts |
+| Linux lab | Same 9 in all four runs | 184.839 / 204.028 | 65524 timeouts each run |
+| VPN lab | Same 2 in all four runs | 200.472 / 195.005 | TCP/3000 timeout each run |
+
+This is a controlled profile, not default-speed or service-detection performance: fixed timeouts were 200 ms locally and 1000 ms over VPN, with a global ceiling of 1000 connection attempts/s, zero retries and adaptive timing disabled. More workers did not consistently improve timings. Windows gained TCP/3820 and TCP/3920 after the first run; the variation is retained, not discarded. Linux's INPUT rules were inspected read-only and ended in `DROP`; silence remains inconclusive rather than closed. See the [full matrix, per-run data and follow-up checks](docs/CONNECT_BENCHMARK.md). General full-range stability remains open.
+
 ## Per-Host Settings And Unknown Evidence
 
 Use `--host-config host-settings.json` to override CONNECT/UDP settings for exact unzoned literal IPs in the expanded target scope. For example:
