@@ -29,7 +29,7 @@ GOMAP_RUN_RELEASE_LAB_TESTS=1 GOMAP_LAB_REVISION=$(git rev-parse HEAD) \
   go test ./pkg/app -run '^TestReleaseLabRegression$' -count=1 -timeout=15m -v
 ```
 
-Use `GOTOOLCHAIN=go1.26.9` when the host's default toolchain differs from the
+Use `GOTOOLCHAIN=go1.26.10` when the host's default toolchain differs from the
 repository pin. The timeout bounds the test process; it is not the per-port
 timeout. Allow the previous scan to finish before starting another.
 
@@ -66,7 +66,7 @@ This short timeout is a local-lab profile, not a VPN recommendation.
 
 ```bash
 GOMAP_RUN_CONNECT_VARIANCE_TESTS=1 GOMAP_LAB_REVISION=$(git rev-parse HEAD) \
-  GOTOOLCHAIN=go1.26.9 go test ./pkg/scanner \
+  GOTOOLCHAIN=go1.26.10 go test ./pkg/scanner \
   -run '^TestConnectVarianceLab$' -count=1 -timeout=4m -v
 ```
 
@@ -248,6 +248,16 @@ tagging and distribution verification remain separate publishing steps.
 Full-range network stability and disconnected end-to-end SYN/native netlink
 rollback remain explicit limitations, not completed work. Additional identity
 fingerprints and lab examples are deferred improvements, not release claims.
+
+### Toolchain Security Follow-Up
+
+The subsequent `govulncheck` v1.7.0 run flagged
+[GO-2026-6809](https://pkg.go.dev/vuln/GO-2026-6809) in the Go 1.26.9 standard
+library. The advisory was published October 21 and is fixed in Go 1.26.10.
+The candidate minimum, README and Docker builder now select the patched release.
+Publishing remains blocked until CI, vulnerability analysis and the complete
+lab regression pass again with Go 1.26.10; the earlier sign-off does not cover
+this compiler update.
 
 ## Known Limitations
 

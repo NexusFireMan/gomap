@@ -43,7 +43,7 @@ Note: this changelog is maintained from this point forward in the project histor
 ### Changed
 
 - Raise the minimum total statement coverage from 10% to 60% in local coverage checks and CI, following the intermediate 40% milestone.
-- Require Go 1.26.9 and update `golang.org/x/net` to v0.60.0 after vulnerability scanning identified advisories in the preceding baseline; align the Docker builder and include GoSNMP license notices in distributions.
+- Require Go 1.26.10 and update `golang.org/x/net` to v0.60.0 after vulnerability scanning identified advisories in the preceding baseline; align the Docker builder and include GoSNMP license notices in distributions. The final toolchain update addresses [GO-2026-6809](https://pkg.go.dev/vuln/GO-2026-6809) in `crypto/x509`.
 
 ### Fixed
 

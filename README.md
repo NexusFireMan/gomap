@@ -15,7 +15,7 @@
 
 [![CI](https://github.com/NexusFireMan/gomap/actions/workflows/ci.yml/badge.svg)](https://github.com/NexusFireMan/gomap/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/NexusFireMan/gomap?display_name=tag)](https://github.com/NexusFireMan/gomap/releases)
-[![Go](https://img.shields.io/badge/Go-1.26.9%2B-00ADD8?logo=go&logoColor=white)](https://go.dev/)
+[![Go](https://img.shields.io/badge/Go-1.26.10%2B-00ADD8?logo=go&logoColor=white)](https://go.dev/)
 [![Docker](https://img.shields.io/badge/Docker-GHCR-2496ED?logo=docker&logoColor=white)](https://github.com/NexusFireMan/gomap/pkgs/container/gomap)
 [![CLI](https://img.shields.io/badge/Interface-CLI-2C2C2C)](https://github.com/NexusFireMan/gomap)
 [![License](https://img.shields.io/github/license/NexusFireMan/gomap)](https://github.com/NexusFireMan/gomap/blob/main/LICENSE)
@@ -70,7 +70,7 @@ A fast TCP/UDP port scanner written in Go, with optional service/version detecti
 
 ### Build from source
 
-Use Go 1.26.9 or newer. CI and release builds follow `go.mod`; the Docker builder uses the same baseline to avoid shipping older standard-library security defects.
+Use Go 1.26.10 or newer. CI and release builds follow `go.mod`; the Docker builder uses the same baseline to avoid shipping older standard-library security defects.
 
 ```bash
 git clone https://github.com/NexusFireMan/gomap.git

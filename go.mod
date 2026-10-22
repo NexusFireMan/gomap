@@ -1,6 +1,6 @@
 module github.com/NexusFireMan/gomap/v2
 
-go 1.26.9
+go 1.26.10
 
 require (
 	github.com/gosnmp/gosnmp v1.45.0
