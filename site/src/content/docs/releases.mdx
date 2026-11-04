@@ -1,0 +1,41 @@
+---
+title: Releases
+description: Download stable GoMap releases and inspect validation, compatibility notes and checksums.
+---
+import { LinkButton } from '@astrojs/starlight/components';
+
+<LinkButton href="https://github.com/NexusFireMan/gomap/releases/latest" icon="download">Latest stable release</LinkButton>
+
+The GitHub release is the source of truth for the latest published version and
+its artifacts. Development commits on `dev` are not stable releases.
+
+## Distribution
+
+- Linux and macOS archives: amd64 and arm64.
+- Windows archives: amd64 and arm64.
+- Debian packages: Linux amd64 and arm64.
+- GHCR container: Linux amd64 and arm64.
+- Signed APT repository: stable packages served from this same Pages site.
+
+Download the matching `checksums.txt` with your chosen artifact. Verify the
+checksum before extracting or installing; do not mix checksums from another
+release. [Installation options](/gomap/install/).
+
+## What's changed
+
+Read the [changelog](https://github.com/NexusFireMan/gomap/blob/main/CHANGELOG.md)
+and release notes for compatibility details, toolchain requirements, security
+findings and known limitations. JSON diagnostics can gain optional fields;
+free-form service/version/evidence strings are not stable product identifiers.
+
+## How publication works
+
+Changes are reviewed into `dev`, promoted into `main` through a merge-commit PR,
+then explicitly tagged. Passing required checks is distinct from publishing a
+release. Archives, packages and images are built from the reviewed tag; signed
+APT metadata is deployed after a successful release.
+
+The website and APT payload share one Pages deployment. Updating documentation
+does not require creating a GoMap release or moving existing package URLs.
+
+[Maintainer release workflow](https://github.com/NexusFireMan/gomap/blob/main/docs/RELEASE_WORKFLOW.md)
