@@ -105,7 +105,7 @@ func TestMySQLRejectionDetectionFromPipe(t *testing.T) {
 	result := ScanResult{Port: 3306, IsOpen: true}
 	s.grabBanner(client, 3306, &result)
 	<-done
-	if result.ServiceName != "mysql" || result.Confidence != "high" || !strings.Contains(result.Evidence, "ERR 1130") || result.Version != "MySQL (connection rejected)" {
+	if result.ServiceName != "mysql" || result.Confidence != "medium" || !strings.Contains(result.Evidence, "ERR 1130") || result.Version != "MySQL (connection rejected)" {
 		t.Fatalf("unexpected rejection result: %+v", result)
 	}
 }

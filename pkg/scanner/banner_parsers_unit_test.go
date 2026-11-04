@@ -8,7 +8,7 @@ func TestParseBannerHTTPIIS(t *testing.T) {
 	if service != "http" {
 		t.Fatalf("expected http service, got %q", service)
 	}
-	if version != "IIS 7.5 (Windows Server 2008 R2 or Windows 7)" {
+	if version != "IIS 7.5" {
 		t.Fatalf("unexpected IIS version: %q", version)
 	}
 }
@@ -74,7 +74,7 @@ func TestParseDNSVersionBindResponse(t *testing.T) {
 		0x0d, '9', '.', '1', '6', '.', '1', '-', 'U', 'b', 'u', 'n', 't', 'u',
 	}
 	got := parseDNSVersionBindResponse(response)
-	if got != "BIND 9.16.1-Ubuntu" {
+	if got != "DNS version.bind: 9.16.1-Ubuntu" {
 		t.Fatalf("unexpected DNS version: %q", got)
 	}
 }

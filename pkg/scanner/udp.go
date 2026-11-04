@@ -87,23 +87,20 @@ func (s *Scanner) ScanUDP(ports []int, detectServices bool) []ScanResult {
 }
 
 func (s *Scanner) scanUDPPort(port int, detectServices bool) ScanResult {
+	if port == 138 && detectServices && s.DeepVersion && !s.GhostMode {
+		return s.scanNetBIOSDatagram(port)
+	}
+	if port == 161 && detectServices && s.SNMPCredentials != nil {
+		return s.scanAuthenticatedSNMP(port)
+	}
 	address := net.JoinHostPort(s.Host, fmt.Sprintf("%d", port))
 	start := time.Now()
-	probe := udpProbePayload(port)
-
-	var (
-		response []byte
-		err      error
-	)
-	for attempt := 0; attempt <= s.Retries; attempt++ {
-		response, err = s.exchangeUDP(address, probe)
-		if err == nil {
-			break
-		}
-		if attempt < s.Retries && !s.GhostMode {
-			time.Sleep(s.retryBackoff(attempt))
-		}
+	if port == 11211 && detectServices && s.DeepVersion && !s.GhostMode {
+		return s.scanMemcachedUDP(port)
 	}
+	response, probe, err := s.exchangeUDPPort(port, detectServices, func(probe []byte) ([]byte, error) {
+		return s.exchangeUDP(address, probe)
+	})
 
 	latency := time.Since(start)
 	latencyMs := latency.Milliseconds()
@@ -117,6 +114,9 @@ func (s *Scanner) scanUDPPort(port int, detectServices bool) ScanResult {
 	}
 
 	service, version, confidence, evidence := s.classifyUDPResponseForProbe(port, response, probe, detectServices)
+	if detectServices && version == "" {
+		evidence = s.captureUnknownResponse(evidence, response)
+	}
 	return ScanResult{
 		Port:          port,
 		IsOpen:        true,
@@ -141,7 +141,14 @@ func (s *Scanner) classifyUDPResponseForProbe(port int, response, probe []byte, 
 		return service, "", "low", "UDP response received; protocol-shaped payload does not match sent probe fields"
 	}
 	if checked {
-		return service, version, "medium", version + "; sent probe fields matched; fixed identifiers; not authenticated"
+		if port == 161 && version == "SNMPv3 report (unauthenticated)" {
+			return service, version, "medium", version + "; discovery message ID matched; Report fields validated; not authenticated"
+		}
+		identifiers := "; fixed identifiers"
+		if port == 137 || port == 161 && version != "SNMPv1 response" {
+			identifiers = ""
+		}
+		return service, version, "medium", version + "; sent probe fields matched" + identifiers + "; not authenticated"
 	}
 	return
 }
@@ -172,9 +179,10 @@ func (s *Scanner) exchangeUDP(address string, payload []byte) ([]byte, error) {
 		return nil, err
 	}
 
-	buf := make([]byte, maxUDPResponseBytes)
+	// Keep one overflow byte so a truncated valid-looking prefix is never parsed.
+	buf := make([]byte, maxUDPResponseBytes+1)
 	n, err := conn.Read(buf)
-	if err != nil {
+	if err != nil && n == 0 {
 		return nil, err
 	}
 	return buf[:n], nil

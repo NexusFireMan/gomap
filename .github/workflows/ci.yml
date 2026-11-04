@@ -80,7 +80,7 @@ jobs:
 
       - name: Enforce minimum coverage
         env:
-          MIN_COVERAGE: "10.0"
+          MIN_COVERAGE: "60.0"
         run: |
           set -euo pipefail
           total="$(go tool cover -func=coverage.out | awk '/^total:/ {gsub("%","",$3); print $3}')"

@@ -23,6 +23,11 @@ make coverage
 make ci
 ```
 
+`make coverage` and CI require at least **60% total statement coverage**. The
+25%, 40% and 60% roadmap milestones are enforced by this floor.
+Total coverage does not establish protocol
+accuracy or replace deterministic negative cases and isolated lab validation.
+
 If `golangci-lint` is not available in your `PATH`, use the pinned binary installed in `./bin` when present:
 
 ```bash
@@ -45,12 +50,37 @@ An opt-in kernel socket lifecycle test requires a separate user/network namespac
 test_dir=$(mktemp -d)
 go test -c -o "$test_dir/scanner.test" ./pkg/scanner
 unshare -Urn env GOMAP_RUN_ISOLATED_TESTS=1 "$test_dir/scanner.test" -test.run '^TestIsolatedRawSocketLifecycle$' -test.v
+unshare -Urn env GOMAP_RUN_ISOLATED_TESTS=1 "$test_dir/scanner.test" -test.run '^TestIsolatedUDPStates$' -test.v -test.count=3
 rm -r "$test_dir"
 ```
 
 This test refuses the initial network namespace or a namespace with other interfaces. It opens an idle raw TCP socket, verifies its read deadline and closure, and checks the native netlink missing-interface error. It sends no packets and adds or removes no addresses. Systems that disable unprivileged user namespaces cannot run it; do not substitute the host network namespace.
 
 Successful lifecycle tests do not establish end-to-end SYN discovery accuracy or native netlink address rollback. Those remain separate validation tasks in a disposable, disconnected lab.
+
+`TestIsolatedUDPStates` separately requires the same guards, brings up loopback only inside that disposable namespace, and creates local positive/silent UDP fixtures. It validates `open`, `open|filtered`, and `closed`, and observes a correlated kernel ICMP destination-unreachable/port-unreachable quotation ([RFC 792](https://www.rfc-editor.org/rfc/rfc792.html)). It changes no host NIC addresses and contacts no external targets. These Linux IPv4 results do not establish behavior under packet loss, firewall filtering, IPv6, other operating systems, or remote lab conditions.
+
+Fragment handling has a separate Linux kernel test, guarded by the same
+loopback-only namespace restrictions:
+
+```bash
+test_dir=$(mktemp -d)
+go test -c -o "$test_dir/scanner.test" ./pkg/scanner
+unshare -Urn env GOMAP_RUN_ISOLATED_TESTS=1 "$test_dir/scanner.test" -test.run '^TestIsolatedUDPIPFragments$' -test.v -test.count=3
+rm -r "$test_dir"
+```
+
+This sends synthetic IPv4/IPv6 fragments only to loopback inside the disposable
+namespace. It validates in-order/out-of-order delivery, missing fragments,
+mixed IDs and invalid UDP checksums through the production UDP socket reader.
+Raw sockets are used by the test injector only, never by normal UDP scans.
+No host NIC, route, firewall or VM configuration is changed. NetBIOS UDP/138
+query/reassembly regressions run without privileges:
+
+```bash
+go test -race ./pkg/scanner -run '^TestNetBIOSDatagram' -count=3
+go test ./pkg/scanner -run '^$' -fuzz '^FuzzNetBIOSDatagramAssembly$' -fuzztime=10s -parallel=2
+```
 
 Deterministic transport and cleanup tests run without VM targets, root, or changes to interface addresses:
 
@@ -73,7 +103,51 @@ go test ./pkg/app -run LabIntegration -v
 
 Do not run integration tests against systems you are not authorized to scan.
 
+For the explicit two-Metasploitable release gate, including a full TCP range:
+
+```bash
+GOMAP_RUN_RELEASE_LAB_TESTS=1 go test ./pkg/app -run '^TestReleaseLabRegression$' -count=1 -timeout=15m -v
+```
+
+Unlike the older integration smoke tests, this gate fails on unavailable hosts
+or missing baseline services. See [release readiness](docs/RELEASE_READINESS.md)
+for its controlled profiles, reporting template and incomplete-coverage policy.
+
+Optional SNMPv3 interoperability tests use a real Net-SNMP agent in a disposable
+Docker container with no network other than its own loopback. They are skipped
+by normal CI, generate private temporary credentials and remove their container:
+
+```bash
+docker build -t gomap-snmp-agent:local scripts/lab/snmp
+GOMAP_RUN_SNMP_AGENT_TESTS=1 GOMAP_SNMP_AGENT_IMAGE=gomap-snmp-agent:local \
+  go test ./pkg/app -run '^TestSNMPAgentInterop$' -count=3 -v
+```
+
+Building the fixture image requires package downloads; runtime has no external
+route or published ports. See [SNMP sessions](docs/SNMP_SESSIONS.md) for the
+supported algorithm matrix and limitations. Never publish generated keys or
+agent state. Docker is a test-fixture dependency, not a GoMap runtime dependency.
+
+Optional Memcached interoperability runs the agent and CLI in one disconnected
+container, without host ports, cache-item requests or host-network changes:
+
+```bash
+docker pull memcached:1.6-alpine
+GOMAP_RUN_MEMCACHED_AGENT_TESTS=1 GOMAP_MEMCACHED_AGENT_IMAGE=memcached:1.6-alpine \
+  go test ./pkg/app -run '^TestMemcachedAgentInterop$' -count=3 -v
+```
+
+Image downloading needs network access; runtime uses `--network none` and a
+read-only filesystem. The test removes its container. Docker is only a lab
+fixture dependency; GoMap uses native Go for the query and reassembly.
+
 ## Pull Request Expectations
+
+Selective CONNECT recovery is opt-in through `--recover-timeouts`. See
+[the runtime contract, evaluation and opt-in tests](docs/SELECTIVE_RECOVERY.md)
+for budget/cancellation regressions and explicitly authorized comparisons.
+Historical reports must remain private and are not simultaneous A/B fixtures;
+the original test-only prototype is retained separately from the runtime engine.
 
 - Add or update tests when behavior changes.
 - Update `README.md` or `CHANGELOG.md` for user-facing changes.

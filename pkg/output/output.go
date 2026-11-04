@@ -3,7 +3,9 @@ package output
 import (
 	"fmt"
 	"io"
+	"net"
 	"regexp"
+	"strconv"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -19,6 +21,26 @@ type OutputFormatter struct {
 	writer          io.Writer
 	writeErr        error
 	stateWidth      int
+}
+
+// WriteStreamResult emits one self-contained line without waiting to size a table.
+func (of *OutputFormatter) WriteStreamResult(w io.Writer, host string, result scanner.ScanResult) error {
+	var line strings.Builder
+	fmt.Fprintf(&line, "%s %s", net.JoinHostPort(terminalText(host), strconv.Itoa(result.Port)), terminalText(result.EffectiveState()))
+	if of.IncludeServices {
+		fmt.Fprintf(&line, " service=%q version=%q", terminalText(result.ServiceName), terminalText(result.Version))
+		if result.Hostname != "" {
+			fmt.Fprintf(&line, " hostname=%q", terminalText(result.Hostname))
+		}
+	}
+	if of.IncludeDetails {
+		fmt.Fprintf(&line, " latency_ms=%d confidence=%q", result.LatencyMs, terminalText(result.Confidence))
+	}
+	if of.IncludeDetails || of.IncludeEvidence {
+		fmt.Fprintf(&line, " evidence=%q", terminalText(result.Evidence))
+	}
+	_, err := fmt.Fprintln(w, line.String())
+	return err
 }
 
 // WriteResults renders a report to a writer and propagates write failures.
