@@ -12,7 +12,7 @@ Note: this changelog is maintained from this point forward in the project histor
 
 ### Fixed
 
-## [2.6.0] - 2026-10-22
+## [2.6.0] - 2026-11-04
 
 ### Added
 
