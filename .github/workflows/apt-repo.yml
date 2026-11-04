@@ -7,6 +7,14 @@ on:
     types:
       - completed
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'site/**'
+      - 'README.md'
+      - 'scripts/compose-pages*'
+      - 'scripts/build-apt-repo.sh'
+      - '.github/workflows/apt-repo.yml'
 
 permissions:
   contents: read
@@ -18,9 +26,47 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  web:
+    name: Build public website
+    if: github.ref == 'refs/heads/main' && (github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      revision: ${{ steps.source.outputs.revision }}
+    steps:
+      - name: Checkout trusted main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
+      - name: Pin composition source
+        id: source
+        run: echo "revision=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          package_json_file: site/package.json
+      - name: Build static website without signing credentials
+        working-directory: site
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm test
+          pnpm build
+      - name: Retain website for signed repository composition
+        uses: actions/upload-artifact@v4
+        with:
+          name: gomap-website
+          path: site/dist
+          retention-days: 7
+
   publish:
-    name: Publish APT Repository
-    if: github.ref == 'refs/heads/main' && (github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success')
+    name: Publish website and signed APT
+    needs: web
     runs-on: ubuntu-latest
     env:
       PAGES_BASE_URL: https://nexusfireman.github.io/gomap
@@ -28,7 +74,19 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: main
+          ref: ${{ needs.web.outputs.revision }}
+          persist-credentials: false
+
+      - name: Setup Node for dependency-free composition
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Download validated website
+        uses: actions/download-artifact@v4
+        with:
+          name: gomap-website
+          path: .web-input
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
@@ -54,33 +112,30 @@ jobs:
 
           test -n "$(find .apt-input -maxdepth 1 -type f -name '*.deb' -print -quit)"
 
-      - name: Import signing key
+      - name: Build and sign APT in an isolated temporary keyring
         env:
           APT_GPG_PRIVATE_KEY: ${{ secrets.APT_GPG_PRIVATE_KEY }}
           APT_GPG_PASSPHRASE: ${{ secrets.APT_GPG_PASSPHRASE }}
         run: |
           set -euo pipefail
+          bash ./scripts/build-apt-repo.sh .apt-input .apt-site "${PAGES_BASE_URL}"
           export GNUPGHOME="$(mktemp -d)"
           chmod 700 "${GNUPGHOME}"
+          trap 'rm -rf "$GNUPGHOME"' EXIT
           printf '%s' "${APT_GPG_PRIVATE_KEY}" | gpg --batch --import
           FPR="$(gpg --batch --with-colons --list-secret-keys | awk -F: '/^fpr:/ { print $10; exit }')"
           test -n "${FPR}"
-          echo "GNUPGHOME=${GNUPGHOME}" >> "${GITHUB_ENV}"
-          echo "APT_GPG_FPR=${FPR}" >> "${GITHUB_ENV}"
-          echo "APT_GPG_PASSPHRASE=${APT_GPG_PASSPHRASE}" >> "${GITHUB_ENV}"
+          gpg --batch --yes --export "${FPR}" > .apt-site/gomap-archive-keyring.gpg
+          gpg --batch --yes --armor --export "${FPR}" > .apt-site/gomap-archive-keyring.asc
+          gpg --batch --yes --pinentry-mode loopback --passphrase "${APT_GPG_PASSPHRASE}" \
+            --default-key "${FPR}" \
+            --clearsign -o .apt-site/dists/stable/InRelease .apt-site/dists/stable/Release
+          gpg --batch --yes --pinentry-mode loopback --passphrase "${APT_GPG_PASSPHRASE}" \
+            --default-key "${FPR}" \
+            -abs -o .apt-site/dists/stable/Release.gpg .apt-site/dists/stable/Release
 
-      - name: Build APT repository
-        run: |
-          set -euo pipefail
-          bash ./scripts/build-apt-repo.sh .apt-input .pages "${PAGES_BASE_URL}"
-          gpg --batch --yes --export "${APT_GPG_FPR}" > .pages/gomap-archive-keyring.gpg
-          gpg --batch --yes --armor --export "${APT_GPG_FPR}" > .pages/gomap-archive-keyring.asc
-          gpg --batch --yes --pinentry-mode loopback --passphrase "${APT_GPG_PASSPHRASE}" \
-            --default-key "${APT_GPG_FPR}" \
-            --clearsign -o .pages/dists/stable/InRelease .pages/dists/stable/Release
-          gpg --batch --yes --pinentry-mode loopback --passphrase "${APT_GPG_PASSPHRASE}" \
-            --default-key "${APT_GPG_FPR}" \
-            -abs -o .pages/dists/stable/Release.gpg .pages/dists/stable/Release
+      - name: Compose one artifact without modifying signed APT bytes
+        run: node scripts/compose-pages.mjs .apt-site .web-input .pages
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3

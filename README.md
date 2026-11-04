@@ -45,6 +45,9 @@ A fast TCP/UDP port scanner written in Go, with optional service/version detecti
 
 ## Why gomap?
 
+Project portal: [nexusfireman.github.io/gomap](https://nexusfireman.github.io/gomap/).
+The website and signed APT repository share Pages without changing existing package URLs.
+
 - Quick first look before deeper enumeration.
 - Lightweight single-binary workflow.
 - Structured output for Bash, Python, and CI/lab pipelines.

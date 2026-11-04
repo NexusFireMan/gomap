@@ -14,6 +14,37 @@ permissions:
   contents: read
 
 jobs:
+  website:
+    name: Website
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: site/package.json
+      - name: Test composition and build website
+        working-directory: site
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm test
+          pnpm build
+      - name: Browser smoke checks
+        working-directory: site
+        run: |
+          pnpm exec playwright install --with-deps chromium
+          pnpm test:browser
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: website-browser-failure
+          path: site/test-results
+          retention-days: 7
+
   branch-policy:
     name: Branch Policy
     runs-on: ubuntu-latest
