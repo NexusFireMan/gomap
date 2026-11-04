@@ -287,6 +287,23 @@ scope, subject to protected PR checks.** General live-network stability and
 privileged SYN/netlink validation remain disclosed limitations, not release
 claims. Subsequent documentation-only commits do not change this tested code.
 
+### Publication Resumption, November 4, 2026
+
+The October 22 promotion was delayed by GitHub Actions result processing; no
+v2.6.0 tag was published during that attempt. The resumed publication uses
+November 4 as its changelog date and retains all earlier validation dates.
+Production source and dependency versions are unchanged from the patched
+candidate above; this resumption does not claim a fresh live-VM regression.
+
+An updated `govulncheck` v1.7.0 analysis with Go 1.26.10 found zero reachable
+vulnerabilities and zero advisories in imported packages. It reported two
+module-only advisories in unused `golang.org/x/net/html` code,
+[GO-2026-6866](https://pkg.go.dev/vuln/GO-2026-6866) and
+[GO-2026-6860](https://pkg.go.dev/vuln/GO-2026-6860), fixed upstream in x/net
+v0.62.0. These are retained findings, not a claim of an advisory-free dependency
+graph. The frozen candidate keeps x/net v0.60.0; dependency maintenance remains
+follow-up work and future changes must repeat the relevant checks.
+
 ## Known Limitations
 
 - TCP silence, packet loss, filtering, VM load/restarts and dynamic listeners can change counts. Full-range stability across constrained VirtualBox/VPN networks remains a roadmap task, not a solved consequence of these tests.
