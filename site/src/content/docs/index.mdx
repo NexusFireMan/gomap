@@ -1,0 +1,65 @@
+---
+title: GoMap
+description: A native Go scanner for authorized reconnaissance, with evidence-led service detection and automation-friendly output.
+tableOfContents: false
+prev: false
+next: false
+---
+import { LinkButton, Tabs, TabItem } from '@astrojs/starlight/components';
+
+<p class="project-label">NETWORK RECONNAISSANCE / NATIVE GO</p>
+<p class="project-lead">See what responds. Keep the evidence.</p>
+
+TCP/UDP scanning and native service detection for authorized assessments,
+internal labs and repeatable automation. A single binary, structured results
+and controlled-rate profiles, without an external scanner dependency.
+
+<div class="project-actions">
+  <LinkButton href="/gomap/install/" icon="right-arrow">Install GoMap</LinkButton>
+  <LinkButton href="/gomap/generated/cli/" variant="secondary" icon="document">CLI reference</LinkButton>
+</div>
+
+<div class="project-facts"><span>TCP / UDP / SYN</span><span>JSON / JSONL / CSV</span><span>Evidence + confidence</span></div>
+
+## A first look
+
+<Tabs>
+  <TabItem label="Services">
+    ```bash
+    gomap -s 10.0.11.6
+    ```
+  </TabItem>
+  <TabItem label="Structured output">
+    ```bash
+    gomap -s --format json --out scan.json 10.0.11.6
+    ```
+  </TabItem>
+  <TabItem label="Controlled rate">
+    ```bash
+    gomap -s --rate 50 --global-rate 100 10.0.11.6
+    ```
+  </TabItem>
+</Tabs>
+
+<figure class="terminal-figure">
+  <img src="/gomap/terminal.png" width="1120" height="600" alt="GoMap service scan of a local loopback HTTP fixture, showing a confirmed open port with service evidence." loading="eager" />
+  <figcaption>Real CLI output from a local HTTP fixture. An illustration, not a performance benchmark.</figcaption>
+</figure>
+
+## Results, with their limits
+
+An open connection is evidence. A silent port is not proof of closure.
+GoMap distinguishes observed refusals, timeout-inferred filtering and other
+unresolved failures, and reports how much of the requested scope it confirmed.
+
+Read the [detection model](/gomap/docs/detection/) before interpreting a product
+version, certificate name or port hint as a verified identity.
+
+## Built for the next step
+
+- [Start small](/gomap/generated/quick-start/) with an explicitly authorized target.
+- [Export observations](/gomap/generated/output/) to Bash, Python and CI/lab pipelines.
+- [Inspect the benchmarks](/gomap/benchmarks/), including incomplete coverage and failed attempts.
+- [Review releases](/gomap/releases/) and verify your download before running it.
+
+Use GoMap only on systems you own or are explicitly authorized to assess.

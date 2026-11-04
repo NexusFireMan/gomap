@@ -152,6 +152,12 @@ The Docker build embeds:
 
 ## APT Repository On GitHub Pages
 
+The project portal and APT payload share one validated Pages artifact. The
+portfolio repository serves `/`, while this repository serves `/gomap/`.
+See [website hosting and rollback](WEBSITE.md) for source layout, collision guards
+and the separate website-build/signing jobs. Do not deploy a website-only tree
+over Pages or move existing `dists/`, `pool/` or public-key URLs.
+
 The `APT Repository` workflow publishes a signed APT repository to GitHub Pages after the `Release` workflow completes successfully.
 
 Its workflow and any manual dispatch run from `main`, never from `dev`.

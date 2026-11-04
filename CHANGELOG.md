@@ -8,6 +8,8 @@ Note: this changelog is maintained from this point forward in the project histor
 
 ### Added
 
+- Add a static Astro/Starlight project portal alongside signed APT on GitHub Pages, with README-derived reference pages, local search and responsive documentation. Validate composition without altering package/key/metadata paths; keep website builds separate from signing credentials.
+
 ### Changed
 
 ### Fixed

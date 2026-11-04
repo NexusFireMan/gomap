@@ -1,0 +1,68 @@
+---
+title: Install GoMap
+description: Install the GoMap CLI with signed APT packages, release archives, Go or a container image.
+---
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+Choose the distribution that fits your environment. The website is static;
+GoMap runs locally, not in your browser.
+
+<Tabs>
+  <TabItem label="APT">
+    For Debian-compatible distributions, install the public signing key and source:
+    ```bash
+    curl -fsSL https://nexusfireman.github.io/gomap/gomap-archive-keyring.gpg \
+      | sudo tee /usr/share/keyrings/gomap-archive-keyring.gpg > /dev/null
+    echo 'deb [signed-by=/usr/share/keyrings/gomap-archive-keyring.gpg] https://nexusfireman.github.io/gomap stable main' \
+      | sudo tee /etc/apt/sources.list.d/gomap.list > /dev/null
+    sudo apt update
+    sudo apt install gomap
+    ```
+    The `.gpg` download is already a binary keyring. Review the publisher and key
+    through a trusted channel before installing it. Metadata signatures establish
+    trust in that key, not an independent audit of the software.
+  </TabItem>
+  <TabItem label="Release binary">
+    Download the archive for your OS and architecture from
+    [GitHub Releases](https://github.com/NexusFireMan/gomap/releases/latest), together
+    with its matching `checksums.txt`. Releases include Linux, macOS and Windows
+    builds for amd64 and arm64, plus Linux Debian packages.
+    ```bash
+    # In the download directory; verify files you actually downloaded.
+    sha256sum --ignore-missing -c checksums.txt
+    ```
+    A matching checksum detects mismatches; it is not independent publisher authentication.
+  </TabItem>
+  <TabItem label="Go">
+    Use the minimum Go version declared in
+    [go.mod](https://github.com/NexusFireMan/gomap/blob/main/go.mod).
+    ```bash
+    go install github.com/NexusFireMan/gomap/v2@latest
+    ```
+    Ensure Go's binary directory is in your `PATH`.
+  </TabItem>
+  <TabItem label="Docker">
+    ```bash
+    docker run --rm ghcr.io/nexusfireman/gomap:latest --version
+    ```
+    Scanning from a container uses its networking environment. Native SYN and
+    source-address management need appropriate isolated-lab permissions; do not
+    grant broad privileges simply to run a version or CONNECT check.
+  </TabItem>
+</Tabs>
+
+## Verify the installation
+
+```bash
+gomap --version
+gomap -h
+```
+
+The installed binary may differ from a local checkout. Use `go run .` inside
+the source repository when testing development changes.
+
+## Existing APT installations
+
+No repository migration is needed. The public `dists/`, `pool/`, keyring and
+`gomap.list` URLs stay unchanged. The [APT repository page](/gomap/apt/) remains
+available alongside this portal.
