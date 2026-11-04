@@ -61,6 +61,8 @@ test('refuses missing signatures, packages and incomplete web builds', async t =
   await writeFile(join(f.apt, 'pool/example.deb'), 'deb');
   await rm(join(f.web, 'index.html'));
   await assert.rejects(composePages(f.apt, f.web, f.out), /website index/);
+  await writeFile(join(f.web, 'index.html'), '');
+  await assert.rejects(composePages(f.apt, f.web, f.out), /empty website/);
 });
 test('rejects symlinks, overlapping paths and existing output without deleting it', async t => {
   const f = await fixture(t);

@@ -63,7 +63,9 @@ export async function composePages(aptInput, webInput, output) {
   if (!aptFiles.some(path => path.startsWith(`pool${sep}`) && path.endsWith('.deb'))) {
     throw new Error('Missing APT packages');
   }
-  if (!webFiles.includes('index.html')) throw new Error('Missing website index');
+  if (!webFiles.includes('index.html') || !(await lstat(join(web, 'index.html'))).size) {
+    throw new Error('Missing or empty website index');
+  }
   const aptNames = new Set(await readdir(apt));
   for (const name of await readdir(web)) {
     if (protectedNames.has(name) || (name !== 'index.html' && aptNames.has(name))) {

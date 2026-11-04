@@ -11,6 +11,7 @@ on:
     branches: [main]
     paths:
       - 'site/**'
+      - 'README.md'
       - 'scripts/compose-pages*'
       - 'scripts/build-apt-repo.sh'
       - '.github/workflows/apt-repo.yml'
