@@ -17,7 +17,7 @@ GoMap's roadmap focuses on improving reliability, test coverage, documentation, 
 - [x] Raise the enforced total statement coverage floor past 25% to 40%, consistently in local checks and CI.
 - [x] Raise the enforced total statement coverage floor to 60% with sufficient headroom and meaningful tests.
 - Integrated v2.5.0 validation reached 59.3% total coverage. Parser regressions do not imply complete installer/updater or CLI entry-point coverage; those remain follow-up work.
-- Development validation including opt-in timeout recovery and the mobile profile reaches 72.7% total statement coverage; the enforced floor is 60%.
+- Development validation including opt-in timeout recovery, the mobile profile and the Android CONNECT bridge reaches 73.3% total statement coverage; the enforced floor is 60%.
 
 ## Detection and Scan Reliability
 
@@ -80,7 +80,9 @@ GoMap's roadmap focuses on improving reliability, test coverage, documentation, 
 - [ ] Validate the development profile on physical Termux devices without root: DNS, Wi-Fi/VPN, TCP/UDP states, narrow text, interruption, background/power behavior and private output paths.
 - [ ] Measure resource use, sustained throughput and thermal/battery behavior on representative devices before claiming an optimized device-specific budget or enabling automatic selection.
 - [ ] Add Android execution CI and reviewed release artifacts/checksums/updater behavior after interoperability validation; cross-compilation alone is not runtime support.
-- [ ] Define a separate APK architecture and permission/lifecycle/storage model while reusing native scan logic. No dates or privileged-feature support are promised.
+- [x] Define an initial APK architecture and permission/lifecycle/storage contract; add a cancellation-aware, bounded CONNECT bridge reusing native primitives, deterministic negative/lifecycle fixtures and separately pinned binding tools. See the [Android foundation](docs/ANDROID.md); this is not an APK or runtime certification.
+- [x] Build a development ARM64/x86_64 AAR with real SDK/NDK, minimum Android 12/API 31 and no maximum SDK; add repeatable builds and deterministic ZIP/XML/ELF compatibility checks, including 16 KB LOAD alignment. This is static validation, not an APK or runtime matrix completion.
+- [ ] Implement the minimal Kotlin/Compose APK with minimum API 31, add Android Java/Kotlin/instrumentation CI and validate Android 12 through the current version, local-network permissions and lifecycle cleanup before release. SDK 37 availability/current-target compilation and runtime validation remain pending.
 
 ## Documentation and Release Workflow
 
