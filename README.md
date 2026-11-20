@@ -345,6 +345,7 @@ Main options:
   -nd               disable host discovery for CIDR targets
 
 Performance/robustness:
+  --mobile          opt-in mobile scan budget and compact text (see Termux guide)
   --workers         concurrent workers (default: auto by mode)
   --rate            max scan rate in ports/second per host (0 = unlimited)
   --global-rate     max connection/probe starts/second across the entire scan (0 = unlimited)
@@ -706,6 +707,33 @@ JSONL and CSV keep their existing per-result records/columns. Performance and co
 One row per reported port, including uncertain and closed UDP outcomes, with columns:
 
 `host,port,state,service,version,hostname,tls,tls_version,tls_cipher,tls_alpn,tls_server_name,tls_issuer,latency_ms,confidence,evidence,detection_path`
+
+## Termux And Mobile Terminals (Development)
+
+The development branch adds an opt-in `--mobile` profile. It does not assume
+root or automatically change desktop/Android defaults. It uses 32 scan workers,
+a shared 100-attempt/s global limit and a 750 ms initial connection timeout
+unless overridden, plus at most eight discovery workers. Existing controlled
+profiles keep their stricter worker/rate limits and longer timeouts.
+
+```bash
+# From a development checkout containing the new flag; not the v2.6.0 binary.
+go build -o ./gomap .
+./gomap --mobile -s -p 22,80,443 10.0.11.6
+./gomap --mobile -s --format json --out scan.json 10.0.11.6
+```
+
+Compact text uses one port block with separate fields, relying on the terminal's
+soft wrapping instead of wide tables. It does not truncate evidence. JSONL/CSV
+records are unchanged; JSON metrics add `mobile: true` only when selected and
+record resolved limits. Explicit `--workers`, `--timeout`, `--global-rate`
+and host overrides retain their meanings; `--global-rate=0` explicitly removes
+the mobile global cap. No ports/hosts or detection modes are silently omitted.
+
+This is a resource-conscious starting point, not a claim of lower battery use,
+faster full scans or certified Android support. Physical Termux validation,
+Android distribution/updating and an APK remain separate tasks. See the
+[Termux setup, limits and test checklist](docs/TERMUX.md).
 
 ## Responsible Use
 

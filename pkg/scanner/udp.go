@@ -29,6 +29,10 @@ func GetTopUDPPorts() []int {
 
 // ScanUDP retains uncertain outcomes as well as confirmed responses.
 func (s *Scanner) ScanUDP(ports []int, detectServices bool) []ScanResult {
+	return s.scanUDPWithProbe(ports, detectServices, s.scanUDPPort)
+}
+
+func (s *Scanner) scanUDPWithProbe(ports []int, detectServices bool, probe func(int, bool) ScanResult) []ScanResult {
 	ports = uniquePortsOrdered(ports)
 	if s.GhostMode {
 		rand.Shuffle(len(ports), func(i, j int) {
@@ -38,7 +42,7 @@ func (s *Scanner) ScanUDP(ports []int, detectServices bool) []ScanResult {
 
 	workers := max(1, min(s.NumWorkers, len(ports)))
 	portsChan := make(chan int, workers)
-	resultsChan := make(chan ScanResult, len(ports))
+	resultsChan := make(chan ScanResult, workers)
 	var rateLimiter <-chan time.Time
 	if s.Rate > 0 {
 		interval := time.Second / time.Duration(s.Rate)
@@ -62,18 +66,19 @@ func (s *Scanner) ScanUDP(ports []int, detectServices bool) []ScanResult {
 				if rateLimiter != nil {
 					<-rateLimiter
 				}
-				resultsChan <- s.scanUDPPort(port, detectServices)
+				resultsChan <- probe(port, detectServices)
 			}
 		}()
 	}
 
-	for _, port := range ports {
-		portsChan <- port
-	}
-	close(portsChan)
-
-	wg.Wait()
-	close(resultsChan)
+	go func() {
+		for _, port := range ports {
+			portsChan <- port
+		}
+		close(portsChan)
+		wg.Wait()
+		close(resultsChan)
+	}()
 
 	openPorts := make([]ScanResult, 0)
 	for result := range resultsChan {
