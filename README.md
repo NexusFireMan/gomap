@@ -735,6 +735,10 @@ faster full scans or certified Android support. Physical Termux validation,
 Android distribution/updating and an APK remain separate tasks. See the
 [Termux setup, limits and test checklist](docs/TERMUX.md).
 
+The separate [Android APK foundation](docs/ANDROID.md) defines a small native
+CONNECT bridge and its lifecycle/permission contract. It is not yet an APK;
+SDK/NDK packaging, the Android UI and device validation remain pending.
+
 ## Responsible Use
 
 Use this tool only on systems and networks you are authorized to test.

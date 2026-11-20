@@ -1,0 +1,11 @@
+.gradle/
+**/build/
+**/.cxx/
+generated/
+local.properties
+*.aar
+*.apk
+*.aab
+*.jks
+*.keystore
+*.hprof

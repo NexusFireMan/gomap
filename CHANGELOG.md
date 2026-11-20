@@ -8,6 +8,8 @@ Note: this changelog is maintained from this point forward in the project histor
 
 ### Added
 
+- Add an experimental Android CONNECT library foundation: cancellable native sessions, bounded JSON events with explicit partial coverage, lifecycle/negative fixtures, and separately pinned binding tools. No APK, Android runtime certification, privileged support or CLI behavior change is included.
+
 - Add experimental opt-in `--mobile` scan defaults and compact text blocks for Termux/narrow terminals. Honor explicit global-rate disabling and manual settings, keep desktop defaults and structured row schemas unchanged, and record the selected profile in optional JSON metadata. Physical Android validation and packaging remain pending.
 
 - Add a static Astro/Starlight project portal alongside signed APT on GitHub Pages, with README-derived reference pages, local search and responsive documentation. Validate composition without altering package/key/metadata paths; keep website builds separate from signing credentials.
