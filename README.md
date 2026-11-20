@@ -736,8 +736,9 @@ Android distribution/updating and an APK remain separate tasks. See the
 [Termux setup, limits and test checklist](docs/TERMUX.md).
 
 The separate [Android APK foundation](docs/ANDROID.md) defines a small native
-CONNECT bridge and its lifecycle/permission contract. It is not yet an APK;
-SDK/NDK packaging, the Android UI and device validation remain pending.
+CONNECT bridge and its lifecycle/permission contract. Its development AAR targets
+Android 12/API 31 and newer on ARM64/x86_64, with static native-library checks.
+It is not yet an APK; the Android UI and OS/device validation remain pending.
 
 ## Responsible Use
 

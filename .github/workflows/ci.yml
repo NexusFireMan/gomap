@@ -116,6 +116,8 @@ jobs:
         working-directory: android/bindings
         run: |
           go mod verify
+          go test -race ./...
+          go vet ./...
           go test github.com/NexusFireMan/gomap/v2/mobile github.com/NexusFireMan/gomap/v2/pkg/scanner
           go tool gobind -lang=java -javapkg=com.nexusfireman.gomap \
             -outdir="${RUNNER_TEMP}/gomap-bindings" github.com/NexusFireMan/gomap/v2/mobile

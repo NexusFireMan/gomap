@@ -21,6 +21,32 @@ Implemented layers:
   dependencies do not enter the root CLI module. Its dependency graph can select
   newer transitive libraries, so test both module contexts.
 
+## Android Compatibility Baseline
+
+The minimum is **Android 12 (API 31)**, not Android 13. The AAR is compiled with
+`-androidapi=31`, declares `minSdkVersion=31` and has no `maxSdkVersion`.
+The planned APK must also use `minSdk=31`; its compile/target SDK are separate
+settings and must not be confused with the minimum supported OS.
+
+| OS | API | Runtime acceptance |
+| --- | --- | --- |
+| Android 12 / 12L | 31 / 32 | Pending |
+| Android 13 | 33 | Pending |
+| Android 14 | 34 | Pending |
+| Android 15 | 35 | Pending, including 16 KB page-size behavior |
+| Android 16 | 36 | Pending |
+| Android 17 | 37 | Pending, including local-network permission |
+
+This is the intended range, not certification from a successful build. The
+current AAR contains `arm64-v8a` and `x86_64` only: 32-bit phones/emulators are
+not supported by this artifact. Do not infer CPU support from Android version.
+
+The inspected installation provides SDK 36, Build Tools 36.0.0 and NDK
+30.0.16248370. On November 20, 2026, an attempt to install `platforms;android-37`
+returned "Failed to find package". Resolve SDK availability before declaring
+current-target APK compilation complete; do not silently lower the target to
+avoid Android 17 permission requirements.
+
 ## Prototype Contract
 
 `StartConnect(host, ports)` validates and starts one session. Accept only one
@@ -101,19 +127,27 @@ go tool gobind -lang=java -javapkg=com.nexusfireman.gomap \
   -outdir=../generated github.com/NexusFireMan/gomap/v2/mobile
 ```
 
-Generated files are disposable and ignored. To compile an actual AAR, first
+Generated files are disposable and ignored. To compile the AAR, first
 install/review an Android SDK and compatible NDK, accept their licenses explicitly,
-and configure `ANDROID_HOME`/`ANDROID_NDK_HOME`. Then, from the same directory:
+and configure `ANDROID_HOME`/`ANDROID_NDK_HOME`. From the repository root:
 
 ```bash
-mkdir -p ../build
-go tool gomobile bind -target=android/arm64 -androidapi=26 \
-  -javapkg=com.nexusfireman.gomap -o ../build/gomap.aar \
-  github.com/NexusFireMan/gomap/v2/mobile
+bash android/build-aar.sh
 ```
 
-This AAR command is preparation, not a validated artifact claim. An AAR still
-needs a Gradle Android app, manifest, Compose UI and lifecycle implementation to
+The script builds the pinned `gobind` into an ignored local tools directory so
+`gomobile` can find it, builds both 64-bit ABIs with API 31 and `-trimpath`, and
+checks the AAR.
+Defaults use JDK 21 at `/usr/lib/jvm/java-21-openjdk-amd64` and the SDK under
+`$HOME/Android/Sdk`; override the environment for other installations.
+
+The structured ZIP/XML/ELF checker in `android/bindings/cmd/checkaar` verifies the
+minimum/no maximum SDK, required Java class entries, exactly the expected native
+libraries/machines and at least 16 KB alignment of every ELF LOAD segment. Its
+negative fixtures run in CI. These static checks do not verify APK ZIP alignment,
+JNI loading, native symbol availability or device behavior.
+
+An AAR still needs a Gradle Android app, manifest, Compose UI and lifecycle implementation to
 produce an APK. Pin/review SDK, NDK, AGP, Kotlin and Compose versions when adding
 that app; do not download arbitrary tool versions in a release pipeline. Keep
 debug builds and signing keys out of Git. Do not reuse CLI release tags or
@@ -130,9 +164,14 @@ compile fixture for Go's Seq support. That fixture is not an Android runtime and
 must never be shipped. Android/arm64 package compilation, Java generation and
 host-only signature checks do not establish JNI runtime/device support.
 
-Still required: build the AAR with real SDK/NDK, assemble the minimal APK, add
-Java/Kotlin compilation/instrumentation CI, and test arm64 hardware (plus emulator
-ABI if supported). Validate permission denial/grant, stop/navigation/rotation,
+Local validation on November 20, 2026 built the two-ABI AAR using the real
+SDK 36/NDK 30 toolchain and passed the static checker with `minSdk=31`, no maximum
+SDK and 16 KB ELF alignment. The artifact is ignored at `android/build/gomap.aar`;
+it is a development library, not an installable or published release.
+
+Still required: assemble the minimal APK, add Android Java/Kotlin compilation/
+instrumentation CI, and execute the OS acceptance matrix on hardware/emulators.
+Validate permission denial/grant, stop/navigation/rotation,
 screen-off, Wi-Fi/VPN changes, private storage/export, RSS/FD stability and port
 states against the same authorized lab scope as the CLI. APK implementation,
 signing/distribution and service detection remain separate follow-up work.

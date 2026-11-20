@@ -81,7 +81,8 @@ GoMap's roadmap focuses on improving reliability, test coverage, documentation, 
 - [ ] Measure resource use, sustained throughput and thermal/battery behavior on representative devices before claiming an optimized device-specific budget or enabling automatic selection.
 - [ ] Add Android execution CI and reviewed release artifacts/checksums/updater behavior after interoperability validation; cross-compilation alone is not runtime support.
 - [x] Define an initial APK architecture and permission/lifecycle/storage contract; add a cancellation-aware, bounded CONNECT bridge reusing native primitives, deterministic negative/lifecycle fixtures and separately pinned binding tools. See the [Android foundation](docs/ANDROID.md); this is not an APK or runtime certification.
-- [ ] Build the AAR with SDK/NDK, implement the minimal Kotlin/Compose APK and add Java/Kotlin/instrumentation CI; validate local-network permissions and lifecycle cleanup on real Android before packaging or release.
+- [x] Build a development ARM64/x86_64 AAR with real SDK/NDK, minimum Android 12/API 31 and no maximum SDK; add repeatable builds and deterministic ZIP/XML/ELF compatibility checks, including 16 KB LOAD alignment. This is static validation, not an APK or runtime matrix completion.
+- [ ] Implement the minimal Kotlin/Compose APK with minimum API 31, add Android Java/Kotlin/instrumentation CI and validate Android 12 through the current version, local-network permissions and lifecycle cleanup before release. SDK 37 availability/current-target compilation and runtime validation remain pending.
 
 ## Documentation and Release Workflow
 

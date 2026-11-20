@@ -8,7 +8,7 @@ Note: this changelog is maintained from this point forward in the project histor
 
 ### Added
 
-- Add an experimental Android CONNECT library foundation: cancellable native sessions, bounded JSON events with explicit partial coverage, lifecycle/negative fixtures, and separately pinned binding tools. No APK, Android runtime certification, privileged support or CLI behavior change is included.
+- Add an experimental Android CONNECT library foundation: cancellable native sessions, bounded JSON events with explicit partial coverage, lifecycle/negative fixtures, separately pinned binding tools and a repeatable Android 12/API 31 ARM64/x86_64 AAR build with static SDK/ABI/16 KB ELF checks. No APK, Android runtime certification, privileged support or CLI behavior change is included.
 
 - Add experimental opt-in `--mobile` scan defaults and compact text blocks for Termux/narrow terminals. Honor explicit global-rate disabling and manual settings, keep desktop defaults and structured row schemas unchanged, and record the selected profile in optional JSON metadata. Physical Android validation and packaging remain pending.
 
