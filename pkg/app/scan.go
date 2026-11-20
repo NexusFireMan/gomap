@@ -17,6 +17,8 @@ import (
 
 // ScanRequest contains normalized scan options coming from CLI.
 type ScanRequest struct {
+	Mobile          bool
+	GlobalRateSet   bool // Preserve explicit unlimited zero instead of applying the mobile default.
 	Build           output.BuildInfo
 	Target          string
 	PortsFlag       string
@@ -56,6 +58,7 @@ type ScanRequest struct {
 // ExecuteScan runs the complete scan workflow: target expansion, host discovery, scan, and rendering.
 func ExecuteScan(req ScanRequest) (resultErr error) {
 	runStart := time.Now()
+	req = applyMobileDefaults(req)
 	var discoveryDuration time.Duration
 	if req.SNMPConfig != "" && (!req.UDP || req.GhostMode || req.RandomIP || req.SourceInterface != "") {
 		return errors.New("--snmp-config requires UDP and cannot combine with controlled-profile or source-identity options")
@@ -253,6 +256,9 @@ func ExecuteScan(req ScanRequest) (resultErr error) {
 				fmt.Printf("%s\n", output.StatusWarn("Ghost discovery profile active: low-noise probes on 443,80,22. Use -nd to skip discovery completely."))
 			}
 		}
+		if req.Mobile {
+			discoveryOpts = mobileDiscoveryOptions(discoveryOpts)
+		}
 		discoveryOpts.AttemptLimiter = limiter
 		discoveryStart := time.Now()
 		targets = scanner.DiscoverActiveHostsWithOptions(targets, discoveryOpts)
@@ -321,6 +327,7 @@ func ExecuteScan(req ScanRequest) (resultErr error) {
 	if req.DeepVersion || req.CaptureUnknown {
 		formatter = output.NewEvidenceOutputFormatter()
 	}
+	formatter.Compact = req.Mobile
 	allResults := make(map[string][]scanner.ScanResult)
 	connectDiagnostics := make(map[string]scanner.ConnectDiagnostics)
 	scanStart := time.Now()

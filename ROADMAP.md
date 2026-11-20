@@ -17,7 +17,7 @@ GoMap's roadmap focuses on improving reliability, test coverage, documentation, 
 - [x] Raise the enforced total statement coverage floor past 25% to 40%, consistently in local checks and CI.
 - [x] Raise the enforced total statement coverage floor to 60% with sufficient headroom and meaningful tests.
 - Integrated v2.5.0 validation reached 59.3% total coverage. Parser regressions do not imply complete installer/updater or CLI entry-point coverage; those remain follow-up work.
-- Development validation including opt-in timeout recovery reaches 72.5% total statement coverage; the enforced floor is 60%.
+- Development validation including opt-in timeout recovery and the mobile profile reaches 72.7% total statement coverage; the enforced floor is 60%.
 
 ## Detection and Scan Reliability
 
@@ -72,6 +72,15 @@ GoMap's roadmap focuses on improving reliability, test coverage, documentation, 
 - [ ] Expand native fingerprints for SMB server identity, NetBIOS workgroup data, and IRC product/version banners.
 - [x] Keep unidentified open TCP ports explicit when service detection is enabled, without inventing service or version data.
 - [x] Track benchmark variance across repeated runs, worker counts, and filtered-port conditions in a bounded twelve-run full-range Windows/Linux/VPN matrix; record settings, all runs, open-set differences and unresolved coverage in the [benchmark report](docs/CONNECT_BENCHMARK.md). This does not certify other networks or general stability.
+
+## Android And Termux
+
+- [x] Add opt-in `--mobile` scan defaults and compact evidence-preserving text without changing desktop defaults; retain explicit performance overrides and structured row schemas.
+- [x] Bound the UDP result queue by worker count and cover full-range/deduplication/state/concurrency behavior with deterministic fake probes.
+- [ ] Validate the development profile on physical Termux devices without root: DNS, Wi-Fi/VPN, TCP/UDP states, narrow text, interruption, background/power behavior and private output paths.
+- [ ] Measure resource use, sustained throughput and thermal/battery behavior on representative devices before claiming an optimized device-specific budget or enabling automatic selection.
+- [ ] Add Android execution CI and reviewed release artifacts/checksums/updater behavior after interoperability validation; cross-compilation alone is not runtime support.
+- [ ] Define a separate APK architecture and permission/lifecycle/storage model while reusing native scan logic. No dates or privileged-feature support are promised.
 
 ## Documentation and Release Workflow
 
