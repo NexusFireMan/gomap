@@ -168,11 +168,11 @@ func TestDeepVersionHelpers(t *testing.T) {
 	if got := normalizeVersionProbeService("imaps"); got != "imap" {
 		t.Fatalf("expected imaps to normalize to imap, got %q", got)
 	}
-	payloads := deepVersionPayloads(8443, "http")
+	payloads := deepVersionPayloads("http")
 	if len(payloads) == 0 || payloads[0] != "HEAD / HTTP/1.0\r\n\r\n" {
 		t.Fatalf("unexpected HTTP deep version payloads: %#v", payloads)
 	}
-	if got := deepVersionPayloads(22, "ssh"); got != nil {
+	if got := deepVersionPayloads("ssh"); got != nil {
 		t.Fatalf("expected no generic deep probes for ssh, got %#v", got)
 	}
 }

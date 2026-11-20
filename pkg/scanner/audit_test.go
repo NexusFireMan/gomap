@@ -199,7 +199,7 @@ func TestSMBNegotiateWireFormat(t *testing.T) {
 }
 
 func BenchmarkParseSSH(b *testing.B) {
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		parseSSH("SSH-2.0-OpenSSH_9.6p1 Debian-4")
 	}
 }
@@ -209,8 +209,7 @@ func BenchmarkDiscoveryWorkers(b *testing.B) {
 	for i := range hosts {
 		hosts[i] = fmt.Sprint(i)
 	}
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		discoverHosts(hosts, 8, func(string) bool { return true })
 	}
 }
