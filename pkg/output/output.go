@@ -15,6 +15,7 @@ import (
 
 // OutputFormatter handles the formatting and display of scan results
 type OutputFormatter struct {
+	Compact         bool
 	IncludeServices bool
 	IncludeDetails  bool
 	IncludeEvidence bool
@@ -25,6 +26,10 @@ type OutputFormatter struct {
 
 // WriteStreamResult emits one self-contained line without waiting to size a table.
 func (of *OutputFormatter) WriteStreamResult(w io.Writer, host string, result scanner.ScanResult) error {
+	if of.Compact {
+		_, err := fmt.Fprint(w, of.compactResult(host, result))
+		return err
+	}
 	var line strings.Builder
 	fmt.Fprintf(&line, "%s %s", net.JoinHostPort(terminalText(host), strconv.Itoa(result.Port)), terminalText(result.EffectiveState()))
 	if of.IncludeServices {
@@ -103,6 +108,12 @@ func padANSI(text string, width int) string {
 
 // PrintResults displays the scan results in a formatted table
 func (of *OutputFormatter) PrintResults(results []scanner.ScanResult) {
+	if of.Compact {
+		for _, result := range results {
+			of.printf("%s", of.compactResult("", result))
+		}
+		return
+	}
 	of.stateWidth = stateColWidth
 	for _, result := range results {
 		of.stateWidth = max(of.stateWidth, len(result.EffectiveState()))

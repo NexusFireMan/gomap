@@ -13,6 +13,8 @@ import (
 
 // CLIOptions holds all parsed/validated CLI arguments.
 type CLIOptions struct {
+	Mobile          bool
+	GlobalRateSet   bool
 	PortsFlag       string
 	ScanType        string
 	UDPFlag         bool
@@ -88,6 +90,7 @@ func ParseCLIOptions(args []string) (CLIOptions, error) {
 	fs.IntVar(&opts.TopPortsAlias, "top-ports", 0, "scan top N ports from curated protocol list")
 	fs.IntVar(&opts.Rate, "rate", 0, "max scan rate in ports/second per host (0 = unlimited)")
 	fs.IntVar(&opts.GlobalRate, "global-rate", 0, "max connection/probe starts per second across all hosts and phases (0 = unlimited)")
+	fs.BoolVar(&opts.Mobile, "mobile", false, "opt-in resource-conscious scan defaults and compact text for mobile terminals")
 	fs.IntVar(&opts.MaxHosts, "max-hosts", 0, "maximum number of hosts to scan after discovery (0 = unlimited)")
 	fs.IntVar(&opts.TimeoutMS, "timeout", 0, "connection timeout per attempt in milliseconds (default: auto by mode)")
 	fs.IntVar(&opts.Workers, "workers", 0, "number of concurrent workers (default: auto by mode)")
@@ -117,6 +120,11 @@ func ParseCLIOptions(args []string) (CLIOptions, error) {
 		}
 		return opts, errUsage
 	}
+	fs.Visit(func(f *flag.Flag) {
+		if f.Name == "global-rate" {
+			opts.GlobalRateSet = true
+		}
+	})
 
 	// Special flags can run without host argument.
 	if opts.VersionFlag || opts.RemoveFlag || opts.UpdateFlag || opts.DoctorFlag {
@@ -344,6 +352,7 @@ func printHelp(w *os.File) {
   -nd                        disable CIDR host discovery
 
 %sPerformance & Robustness:%s
+  --mobile                   mobile defaults + compact text (opt-in; explicit limits override)
   --workers <N>              concurrent workers (auto by mode if 0)
   --rate <N>                 max ports/second per host (0 = unlimited)
   --global-rate <N>          max connection/probe starts/second for the entire scan

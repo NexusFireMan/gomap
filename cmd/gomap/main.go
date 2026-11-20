@@ -54,6 +54,8 @@ func Run() {
 
 	version, commit, date := EffectiveBuildInfo()
 	req := app.ScanRequest{
+		Mobile:          opts.Mobile,
+		GlobalRateSet:   opts.GlobalRateSet,
 		Build:           output.BuildInfo{Version: version, Commit: commit, Date: date},
 		Target:          opts.Host,
 		PortsFlag:       opts.PortsFlag,
@@ -90,7 +92,11 @@ func Run() {
 		SNMPConfig:      opts.SNMPConfig,
 	}
 	if req.Format == "text" {
-		output.PrintBanner()
+		if req.Mobile {
+			output.PrintMobileBanner(version)
+		} else {
+			output.PrintBanner()
+		}
 	}
 
 	if err := app.ExecuteScan(req); err != nil {
