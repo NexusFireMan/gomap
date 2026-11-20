@@ -60,8 +60,7 @@ func BenchmarkUDPBoundedQueue(b *testing.B) {
 	s := NewScanner("unused", false)
 	s.NumWorkers = 32
 	b.ReportAllocs()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		if len(s.scanUDPWithProbe(ports, false, func(port int, _ bool) ScanResult { return ScanResult{Port: port, State: "unknown"} })) != len(ports) {
 			b.Fatal("missing results")
 		}
@@ -75,7 +74,7 @@ func BenchmarkUDPResultQueueCapacity(b *testing.B) {
 	for _, capacity := range []int{32, 200, 65535} {
 		b.Run(fmt.Sprint(capacity), func(b *testing.B) {
 			b.ReportAllocs()
-			for i := 0; i < b.N; i++ {
+			for b.Loop() {
 				benchmarkUDPResultQueue = make(chan ScanResult, capacity)
 			}
 		})

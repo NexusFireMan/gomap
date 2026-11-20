@@ -65,7 +65,7 @@ func TestTextGreetingDeadlineFailurePreventsIO(t *testing.T) {
 
 func BenchmarkTextGreetingCompleteLine(b *testing.B) {
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		readTextGreeting(strings.NewReader("SSH-2.0-OpenSSH_9.6p1 fixture\r\n"))
 	}
 }

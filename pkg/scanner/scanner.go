@@ -1264,7 +1264,7 @@ func (s *Scanner) tryDeepVersionProbe(port int, serviceName string) string {
 	if response := s.tryServiceProbeForService(port, serviceName); response != "" {
 		return response
 	}
-	for _, payload := range deepVersionPayloads(port, serviceName) {
+	for _, payload := range deepVersionPayloads(serviceName) {
 		if response := s.probeTextServiceWriteFirstWithTimeout(port, payload, 700*time.Millisecond, 1500*time.Millisecond); response != "" {
 			if service, _ := parseObservedBanner(response); service != "" {
 				return response
@@ -1313,7 +1313,7 @@ func (s *Scanner) tryServiceProbeForService(port int, serviceName string) string
 	}
 }
 
-func deepVersionPayloads(port int, serviceName string) []string {
+func deepVersionPayloads(serviceName string) []string {
 	serviceName = normalizeVersionProbeService(serviceName)
 	switch serviceName {
 	case "http", "http-proxy", "winrm":
