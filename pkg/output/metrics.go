@@ -170,6 +170,9 @@ func (m *ScanMetrics) SetTimings(total, discovery, scan time.Duration) {
 }
 
 func WriteScanMetrics(w io.Writer, metrics ScanMetrics) error {
+	if metrics.Options.Mobile {
+		return WriteMobileScanMetrics(w, metrics)
+	}
 	version := metrics.Build.Version
 	if version == "" {
 		version = "unknown"
@@ -186,12 +189,7 @@ func WriteScanMetrics(w io.Writer, metrics ScanMetrics) error {
 		if connect {
 			closedLabel, filteredLabel, unresolvedLabel = "closed (refused)", "filtered (timeout-inferred)", "unresolved (other failures)"
 		}
-		percent := fmt.Sprintf("%.1f%%", c.OpenClosedPercent)
-		if c.OpenClosedPercent > 0 && c.OpenClosedPercent < 0.1 {
-			percent = "<0.1%"
-		} else if c.OpenClosedPercent < 100 && c.OpenClosedPercent > 99.9 {
-			percent = ">99.9%"
-		}
+		percent := coveragePercent(c)
 		_, err := fmt.Fprintf(w, "- %s | requested: %d | open: %d | %s: %d | %s: %d | open|filtered: %d | %s: %d | unreported: %d | inconclusive subtotal: %d | open/closed evidence: %s (%d/%d)\n",
 			terminalText(label), c.Requested, c.Open, closedLabel, c.Closed, filteredLabel, c.Filtered, c.OpenFiltered, unresolvedLabel, c.Unresolved, c.Unreported, c.Inconclusive(), percent, c.Open+c.Closed, c.Requested)
 		return err
@@ -213,4 +211,14 @@ func WriteScanMetrics(w io.Writer, metrics ScanMetrics) error {
 		return err
 	}
 	return nil
+}
+
+func coveragePercent(c Coverage) string {
+	if c.OpenClosedPercent > 0 && c.OpenClosedPercent < 0.1 {
+		return "<0.1%"
+	}
+	if c.OpenClosedPercent < 100 && c.OpenClosedPercent > 99.9 {
+		return ">99.9%"
+	}
+	return fmt.Sprintf("%.1f%%", c.OpenClosedPercent)
 }

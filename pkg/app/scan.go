@@ -307,7 +307,17 @@ func ExecuteScan(req ScanRequest) (resultErr error) {
 	}
 
 	if !machineOutput {
-		if len(targets) == 1 {
+		if req.Mobile {
+			profile := "mobile"
+			if req.GhostMode {
+				profile = "mobile + low-noise"
+			}
+			if err := output.WriteMobileBlock(os.Stdout, "Scanning",
+				[2]string{"target", req.Target}, [2]string{"hosts", fmt.Sprint(len(targets))},
+				[2]string{"ports per host", fmt.Sprint(len(portsToScan))}, [2]string{"engine", scanLabel}, [2]string{"profile", profile}); err != nil {
+				return err
+			}
+		} else if len(targets) == 1 {
 			if req.GhostMode {
 				fmt.Printf("%s\n\n", output.Info(fmt.Sprintf("🎯 Scanning %s (%s ports, %s scan) - %s (low-noise)", output.Host(targets[0]), output.Count(len(portsToScan)), output.Highlight(scanLabel), output.Warning("Ghost mode"))))
 			} else {
@@ -431,7 +441,11 @@ func ExecuteScan(req ScanRequest) (resultErr error) {
 	metrics.SetTimings(time.Since(runStart), discoveryDuration, scanDuration)
 
 	if machineOutput {
-		if warnings := connectWarnings(targets, connectDiagnostics); warnings != "" {
+		if req.Mobile {
+			if err := writeMobileConnectWarnings(os.Stderr, targets, connectDiagnostics); err != nil {
+				return fmt.Errorf("failed to write connection diagnostics: %w", err)
+			}
+		} else if warnings := connectWarnings(targets, connectDiagnostics); warnings != "" {
 			if _, err := fmt.Fprint(os.Stderr, warnings); err != nil {
 				return fmt.Errorf("failed to write connection diagnostics: %w", err)
 			}
@@ -463,6 +477,9 @@ func ExecuteScan(req ScanRequest) (resultErr error) {
 		return nil
 	}
 
+	if req.Mobile {
+		return writeMobileTextReport(destWriter, formatter, req.Stream, targets, allResults, connectDiagnostics, metrics, scanDuration)
+	}
 	var textReport bytes.Buffer
 	totalOpen := 0
 	for _, targetIP := range targets {
@@ -521,20 +538,13 @@ func hostSummaries(targets []string, allResults map[string][]scanner.ScanResult,
 	fmt.Fprintf(&report, "\n%s\n", output.Bold("Host Exposure Summary"))
 	for _, host := range targets {
 		results := allResults[host]
-		open := scanner.CountOpen(results)
-		critical := criticalServices(results)
-		exposure := exposureLevel(open, len(critical))
-		if len(diagnostics) > 0 && diagnostics[0][host].UnresolvedPorts > 0 {
-			exposure = "indeterminate (observed: " + exposure + ")"
-		}
-		for _, result := range results {
-			if result.EffectiveState() == "open|filtered" || result.EffectiveState() == "unknown" {
-				if !strings.HasPrefix(exposure, "indeterminate") {
-					exposure = "indeterminate (observed: " + exposure + ")"
-				}
-				break
+		var diag *scanner.ConnectDiagnostics
+		if len(diagnostics) > 0 {
+			if d, ok := diagnostics[0][host]; ok {
+				diag = &d
 			}
 		}
+		open, critical, exposure := hostExposure(results, diag)
 
 		criticalStr := "none"
 		if len(critical) > 0 {
@@ -556,6 +566,23 @@ func hostSummaries(targets []string, allResults map[string][]scanner.ScanResult,
 	return report.String()
 }
 
+func hostExposure(results []scanner.ScanResult, diag *scanner.ConnectDiagnostics) (int, []string, string) {
+	open := scanner.CountOpen(results)
+	critical := criticalServices(results)
+	exposure := exposureLevel(open, len(critical))
+	uncertain := diag != nil && diag.UnresolvedPorts > 0
+	for _, result := range results {
+		if result.EffectiveState() == "open|filtered" || result.EffectiveState() == "unknown" {
+			uncertain = true
+			break
+		}
+	}
+	if uncertain {
+		exposure = "indeterminate (observed: " + exposure + ")"
+	}
+	return open, critical, exposure
+}
+
 func connectWarnings(targets []string, diagnostics map[string]scanner.ConnectDiagnostics) string {
 	var report strings.Builder
 	for _, host := range targets {
@@ -566,33 +593,13 @@ func connectWarnings(targets []string, diagnostics map[string]scanner.ConnectDia
 		if diag.UnresolvedPorts == 0 {
 			continue
 		}
-		counts := make(map[string]int)
-		for _, issue := range diag.Issues {
-			if !issue.Recovered {
-				counts[issue.Kind]++
-			}
-		}
-		var kinds []string
-		for kind := range counts {
-			kinds = append(kinds, kind)
-		}
-		sort.Strings(kinds)
+		counts, minTimeout, maxTimeout := connectionIssueDetails(diag)
 		var parts []string
-		for _, kind := range kinds {
-			parts = append(parts, fmt.Sprintf("%s_ports=%d", kind, counts[kind]))
+		for _, count := range counts {
+			parts = append(parts, fmt.Sprintf("%s_ports=%d", count.kind, count.count))
 		}
 		fmt.Fprintf(&report, "TCP discovery inconclusive on %s: %d unresolved ports (%s); these are not confirmed closed.\n", host, diag.UnresolvedPorts, strings.Join(parts, ", "))
 		fmt.Fprintf(&report, "TCP states on %s: closed=%d (connection refused), filtered=%d (inferred from timeout), unknown=%d; configured_timeout_ms=%d", host, diag.RefusedPorts, diag.FilteredPorts, diag.UnresolvedPorts-diag.FilteredPorts, diag.TimeoutMS)
-		var minTimeout, maxTimeout int64
-		for _, issue := range diag.Issues {
-			if issue.Recovered || issue.TimeoutMS <= 0 {
-				continue
-			}
-			if minTimeout == 0 || issue.TimeoutMS < minTimeout {
-				minTimeout = issue.TimeoutMS
-			}
-			maxTimeout = max(maxTimeout, issue.TimeoutMS)
-		}
 		if minTimeout > 0 {
 			fmt.Fprintf(&report, "; last_attempt_timeout_ms=%d..%d", minTimeout, maxTimeout)
 		}
