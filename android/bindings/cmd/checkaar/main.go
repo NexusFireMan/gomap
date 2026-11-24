@@ -16,15 +16,65 @@ import (
 const pageSize = 16 * 1024
 
 func main() {
-	if len(os.Args) != 2 {
-		fmt.Fprintln(os.Stderr, "usage: checkaar path/to/gomap.aar")
+	nativeAPK := len(os.Args) == 3 && os.Args[1] == "--native-apk"
+	if len(os.Args) != 2 && !nativeAPK {
+		fmt.Fprintln(os.Stderr, "usage: checkaar [--native-apk] path/to/archive")
 		os.Exit(1)
 	}
-	if err := checkArchive(os.Args[1]); err != nil {
+	path := os.Args[len(os.Args)-1]
+	check := checkArchive
+	if nativeAPK {
+		check = checkNativeAPK
+	}
+	if err := check(path); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
+	if nativeAPK {
+		fmt.Println("APK native checks passed: ARM64/x86_64, Go JNI present, all native LOAD segments 16 KB aligned. Manifest, signing and runtime require separate checks.")
+		return
+	}
 	fmt.Println("AAR static checks passed: minSdk=31, no maxSdk, ARM64/x86_64, 16 KB ELF alignment, Java classes present. Device execution is not verified.")
+}
+
+func checkNativeAPK(path string) error {
+	r, err := zip.OpenReader(path)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = r.Close() }()
+	machines := map[string]elf.Machine{"arm64-v8a": elf.EM_AARCH64, "x86_64": elf.EM_X86_64}
+	seen := make(map[string]bool)
+	for _, f := range r.File {
+		if seen[f.Name] {
+			return fmt.Errorf("duplicate APK entry: %s", f.Name)
+		}
+		seen[f.Name] = true
+		if !strings.HasPrefix(f.Name, "lib/") || !strings.HasSuffix(f.Name, ".so") {
+			continue
+		}
+		parts := strings.Split(f.Name, "/")
+		if len(parts) != 3 {
+			return fmt.Errorf("invalid native entry: %s", f.Name)
+		}
+		machine, ok := machines[parts[1]]
+		if !ok {
+			return fmt.Errorf("unsupported native ABI: %s", parts[1])
+		}
+		data, err := readEntry(f, 128<<20)
+		if err != nil {
+			return err
+		}
+		if err := checkELF(data, machine); err != nil {
+			return fmt.Errorf("%s: %w", f.Name, err)
+		}
+	}
+	for abi := range machines {
+		if !seen["lib/"+abi+"/libgojni.so"] {
+			return fmt.Errorf("missing Go JNI library for %s", abi)
+		}
+	}
+	return nil
 }
 
 func checkArchive(path string) error {

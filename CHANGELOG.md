@@ -8,7 +8,8 @@ Note: this changelog is maintained from this point forward in the project histor
 
 ### Added
 
-- Add an experimental Android CONNECT library foundation: cancellable native sessions, bounded JSON events with explicit partial coverage, lifecycle/negative fixtures, separately pinned binding tools and a repeatable Android 12/API 31 ARM64/x86_64 AAR build with static SDK/ABI/16 KB ELF checks. No APK, Android runtime certification, privileged support or CLI behavior change is included.
+- Add an experimental Android CONNECT library foundation: cancellable native sessions, bounded JSON events with explicit partial coverage, lifecycle/negative fixtures, separately pinned binding tools and a repeatable Android 12/API 31 ARM64/x86_64 AAR build with static SDK/ABI/16 KB ELF checks. No Android runtime certification, privileged support or CLI behavior change is included.
+- Add a native Kotlin/Compose development APK (minimum API 31, target API 37): explicit authorization and Start/Stop, bounded background JNI consumption, state filters, partial coverage, foreground cancellation, English/Spanish resources and explicit JSON document export without scan-history persistence. Add deterministic controller/protocol/UI tests, narrow/large-font host screenshots, compiled loopback instrumentation and a separate Android build workflow. Physical JNI, permission/lifecycle and OS-matrix validation remain pending; debug artifacts are not public releases.
 
 - Add experimental opt-in `--mobile` scan defaults and compact text blocks for Termux/narrow terminals. Honor explicit global-rate disabling and manual settings, keep desktop defaults and structured row schemas unchanged, and record the selected profile in optional JSON metadata. Physical Android validation and packaging remain pending.
 

@@ -106,3 +106,30 @@ func TestMissingArchiveEntry(t *testing.T) {
 		t.Fatal("accepted missing archive")
 	}
 }
+
+func TestNativeAPKIncludesThirdPartyAlignmentChecks(t *testing.T) {
+	for _, name := range []string{"valid", "missing Go", "unaligned dependency", "unexpected ABI"} {
+		t.Run(name, func(t *testing.T) {
+			entries := map[string][]byte{
+				"lib/arm64-v8a/libgojni.so":      fixtureELF(elf.EM_AARCH64, pageSize),
+				"lib/x86_64/libgojni.so":         fixtureELF(elf.EM_X86_64, pageSize),
+				"lib/arm64-v8a/libdependency.so": fixtureELF(elf.EM_AARCH64, pageSize),
+			}
+			switch name {
+			case "missing Go":
+				delete(entries, "lib/x86_64/libgojni.so")
+			case "unaligned dependency":
+				entries["lib/arm64-v8a/libdependency.so"] = fixtureELF(elf.EM_AARCH64, 4096)
+			case "unexpected ABI":
+				entries["lib/armeabi-v7a/libdependency.so"] = fixtureELF(elf.EM_ARM, pageSize)
+			}
+			path := filepath.Join(t.TempDir(), "fixture.apk")
+			if err := os.WriteFile(path, fixtureZip(t, entries), 0600); err != nil {
+				t.Fatal(err)
+			}
+			if err := checkNativeAPK(path); (err == nil) != (name == "valid") {
+				t.Fatal(err)
+			}
+		})
+	}
+}

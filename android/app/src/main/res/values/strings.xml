@@ -1,0 +1,43 @@
+<resources>
+    <string name="app_name">GoMap Dev</string>
+    <string name="target">Target IP</string>
+    <string name="ports">Ports</string>
+    <string name="authorization">I am authorized to scan this target</string>
+    <string name="start">Start</string>
+    <string name="stop">Stop</string>
+    <string name="clear">Clear results</string>
+    <string name="export">Export JSON</string>
+    <string name="about">About GoMap</string>
+    <string name="close">Close</string>
+    <string name="all_results">All</string>
+    <string name="open_results">Open</string>
+    <string name="results">Results</string>
+    <plurals name="observed">
+        <item quantity="one">%1$d observed port</item>
+        <item quantity="other">%1$d observed ports</item>
+    </plurals>
+    <string name="idle">Ready</string>
+    <string name="running">Scanning</string>
+    <string name="stopping">Stopping</string>
+    <string name="completed">Completed</string>
+    <string name="cancelled">Cancelled</string>
+    <string name="failed">Failed</string>
+    <string name="empty_results">No results</string>
+    <string name="coverage">Coverage</string>
+    <string name="open_count">Open: %1$d</string>
+    <string name="closed_count">Closed (refused): %1$d</string>
+    <string name="filtered_count">Filtered (inferred): %1$d</string>
+    <string name="unknown_count">Unknown: %1$d</string>
+    <string name="unreported_count">Unreported: %1$d</string>
+    <string name="completed_count">Observed: %1$d/%2$d</string>
+    <string name="state_open">Open</string>
+    <string name="state_closed">Closed</string>
+    <string name="state_filtered">Filtered (inferred)</string>
+    <string name="state_unknown">Unknown</string>
+    <string name="probable_service">%1$s · port hint</string>
+    <string name="permission_granted">Local network permission granted</string>
+    <string name="permission_denied">Local network permission denied</string>
+    <string name="export_failed">Export failed</string>
+    <string name="exported">Report exported</string>
+    <string name="development_version">Development %1$s</string>
+</resources>

@@ -20,3 +20,14 @@ go tool gomobile bind -trimpath -target=android/arm64,android/amd64 -androidapi=
   -javapkg=com.nexusfireman.gomap -o "$root/android/build/gomap.aar" \
   github.com/NexusFireMan/gomap/v2/mobile
 go run ./cmd/checkaar "$root/android/build/gomap.aar"
+
+notices="$root/android/build/notices"
+mkdir -p "$notices"
+cp "$(go env GOROOT)/LICENSE" "$notices/Go-LICENSE"
+for module in golang.org/x/mobile golang.org/x/net golang.org/x/sys golang.org/x/sync \
+  github.com/gosnmp/gosnmp github.com/vishvananda/netlink github.com/vishvananda/netns; do
+  directory="$(go list -m -f '{{.Dir}}' "$module")"
+  if [[ -f "$directory/LICENSE" ]]; then
+    cp "$directory/LICENSE" "$notices/${module//\//_}-LICENSE"
+  fi
+done

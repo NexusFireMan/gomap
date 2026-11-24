@@ -732,13 +732,15 @@ the mobile global cap. No ports/hosts or detection modes are silently omitted.
 
 This is a resource-conscious starting point, not a claim of lower battery use,
 faster full scans or certified Android support. Physical Termux validation,
-Android distribution/updating and an APK remain separate tasks. See the
+Android distribution/updating remain separate tasks. See the
 [Termux setup, limits and test checklist](docs/TERMUX.md).
 
-The separate [Android APK foundation](docs/ANDROID.md) defines a small native
-CONNECT bridge and its lifecycle/permission contract. Its development AAR targets
-Android 12/API 31 and newer on ARM64/x86_64, with static native-library checks.
-It is not yet an APK; the Android UI and OS/device validation remain pending.
+The separate [native Android prototype](docs/ANDROID.md) builds a Kotlin/Compose
+development APK with a Go CONNECT bridge, explicit authorization, Start/Stop,
+state filtering, coverage and user-requested JSON export. It uses minimum
+Android 12/API 31, target API 37 and ARM64/x86_64 native libraries. Host tests and
+static artifact checks pass; JNI/device acceptance, service detection and public
+Android distribution remain pending. This is not a mobile equivalent of every CLI mode.
 
 ## Responsible Use
 
