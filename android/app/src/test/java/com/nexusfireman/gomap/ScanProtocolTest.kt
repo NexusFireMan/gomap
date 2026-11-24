@@ -12,7 +12,7 @@ class ScanProtocolTest {
     }
     @Test fun unsupportedOrContradictoryEventsAreRejected() {
         for (text in listOf(resultEvent(Observation(0, "open", true)), resultEvent(Observation(22, "closed", true)),
-            resultEvent(Observation(22, "open", true)).replace("\"schema_version\":1", "\"schema_version\":2"))) {
+            resultEvent(Observation(22, "open", true)).replace("\"schema_version\":1", "\"schema_version\":3"))) {
             assertThrows(Exception::class.java) { parseObservation(text) }
         }
     }

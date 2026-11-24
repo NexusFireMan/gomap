@@ -32,6 +32,8 @@ type event struct {
 	Result        *scanner.ScanResult     `json:"result,omitempty"`
 	Summary       *scanner.ConnectSummary `json:"summary,omitempty"`
 	Error         string                  `json:"error,omitempty"`
+	Discovery     *discoverySummary       `json:"discovery,omitempty"`
+	HostResult    *hostObservation        `json:"host_result,omitempty"`
 }
 
 // StartConnect validates before starting work. The prototype accepts one literal

@@ -8,6 +8,8 @@ Note: this changelog is maintained from this point forward in the project histor
 
 ### Added
 
+- Extend the development Android APK with bounded IP/CIDR TCP host discovery, responding/no-response/unknown host evidence, separate discovery coverage, host/port views and optional Go-native services/banners with per-port budgets. Share pacing across hosts/phases, preserve host identity in rows/exports and leave skipped host-port pairs unreported. Retain the original connection-only bridge contract and CLI defaults; add deterministic discovery/parser/lifecycle/UI regressions. Record user-reported initial Pixel 8 Pro/GrapheneOS/Android 17 validation separately from the new features.
+
 - Add an experimental Android CONNECT library foundation: cancellable native sessions, bounded JSON events with explicit partial coverage, lifecycle/negative fixtures, separately pinned binding tools and a repeatable Android 12/API 31 ARM64/x86_64 AAR build with static SDK/ABI/16 KB ELF checks. No Android runtime certification, privileged support or CLI behavior change is included.
 - Add a native Kotlin/Compose development APK (minimum API 31, target API 37): explicit authorization and Start/Stop, bounded background JNI consumption, state filters, partial coverage, foreground cancellation, English/Spanish resources and explicit JSON document export without scan-history persistence. Add deterministic controller/protocol/UI tests, narrow/large-font host screenshots, compiled loopback instrumentation and a separate Android build workflow. Physical JNI, permission/lifecycle and OS-matrix validation remain pending; debug artifacts are not public releases.
 

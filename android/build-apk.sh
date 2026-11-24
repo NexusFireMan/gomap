@@ -4,6 +4,7 @@ set -euo pipefail
 root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 export ANDROID_HOME="${ANDROID_HOME:-$HOME/Android/Sdk}"
 export JAVA_HOME="${JAVA_HOME:-/usr/lib/jvm/java-21-openjdk-amd64}"
+export GOTOOLCHAIN="${GOTOOLCHAIN:-go1.26.10}"
 export PATH="$JAVA_HOME/bin:$PATH"
 
 if [[ ! -f "$ANDROID_HOME/platforms/android-37.0/android.jar" ]]; then

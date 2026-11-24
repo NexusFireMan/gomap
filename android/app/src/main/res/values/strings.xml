@@ -1,6 +1,19 @@
 <resources>
     <string name="app_name">GoMap Dev</string>
-    <string name="target">Target IP</string>
+    <string name="target">Target IP / CIDR</string>
+    <string name="port_scan">Port scan</string>
+    <string name="host_discovery">Host discovery</string>
+    <string name="services">Services and banners</string>
+    <string name="ports_view">Ports</string>
+    <string name="hosts_view">Hosts</string>
+    <string name="all_hosts">All hosts</string>
+    <string name="responding_hosts">Responding</string>
+    <string name="host_responding">TCP response observed</string>
+    <string name="host_no_response">No TCP response · not confirmed down</string>
+    <string name="hosts_observed">Responding hosts: %1$d · checked: %2$d</string>
+    <string name="discovery_coverage">Host discovery coverage</string>
+    <string name="host_coverage_counts">Checked: %1$d/%2$d\nResponding: %3$d · no response: %4$d\nUnknown: %5$d · unreported: %6$d</string>
+    <string name="confidence">Confidence: %1$s</string>
     <string name="ports">Ports</string>
     <string name="authorization">I am authorized to scan this target</string>
     <string name="start">Start</string>

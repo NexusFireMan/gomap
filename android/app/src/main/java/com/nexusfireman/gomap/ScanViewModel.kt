@@ -17,10 +17,16 @@ data class ScanState(
     val host: String = "",
     val ports: String = "22,80,443",
     val authorized: Boolean = false,
+    val services: Boolean = true,
+    val discoveryOnly: Boolean = false,
+    val scannedServices: Boolean? = null,
+    val scannedDiscoveryOnly: Boolean? = null,
     val scannedHost: String? = null,
     val scannedPorts: String? = null,
     val phase: ScanPhase = ScanPhase.IDLE,
     val observations: List<Observation> = emptyList(),
+    val hosts: List<HostObservation> = emptyList(),
+    val discovery: DiscoverySummary? = null,
     val summary: CoverageSummary? = null,
     val error: String? = null,
 ) {
@@ -33,12 +39,24 @@ interface ScanSession {
     fun awaitSummary(): String
 }
 
-fun interface ScanBackend { fun start(host: String, ports: String): ScanSession }
+fun interface ScanBackend {
+    fun start(host: String, ports: String): ScanSession
+    fun survey(host: String, ports: String, services: Boolean, discoveryOnly: Boolean): ScanSession = start(host, ports)
+}
 
 class GoScanBackend(private val ready: Boolean = true) : ScanBackend {
     override fun start(host: String, ports: String): ScanSession {
         check(ready) { "Native library unavailable" }
         val session = Mobile.startConnect(host, ports)
+        return object : ScanSession {
+            override fun nextEvent(): String = session.nextEvent()
+            override fun cancel() = session.cancel()
+            override fun awaitSummary(): String = session.awaitSummary()
+        }
+    }
+    override fun survey(host: String, ports: String, services: Boolean, discoveryOnly: Boolean): ScanSession {
+        check(ready) { "Native library unavailable" }
+        val session = Mobile.startSurvey(host, ports, services, discoveryOnly)
         return object : ScanSession {
             override fun nextEvent(): String = session.nextEvent()
             override fun cancel() = session.cancel()
@@ -68,15 +86,17 @@ class ScanViewModel(
     fun setHost(value: String) = edit { it.copy(host = value, authorized = it.authorized && value == it.host) }
     fun setPorts(value: String) = edit { it.copy(ports = value, authorized = it.authorized && value == it.ports) }
     fun setAuthorized(value: Boolean) = edit { it.copy(authorized = value) }
+    fun setServices(value: Boolean) = edit { it.copy(services = value, authorized = it.authorized && value == it.services) }
+    fun setDiscoveryOnly(value: Boolean) = edit { it.copy(discoveryOnly = value, authorized = it.authorized && value == it.discoveryOnly) }
     private fun edit(transform: (ScanState) -> ScanState) = synchronized(gate) {
         if (active == null && !disposed) mutableState.update(transform)
     }
 
-    fun clear() = edit { pendingExport = null; it.copy(phase = ScanPhase.IDLE, scannedHost = null, scannedPorts = null, observations = emptyList(), summary = null, error = null) }
+    fun clear() = edit { pendingExport = null; it.copy(phase = ScanPhase.IDLE, scannedHost = null, scannedPorts = null, scannedServices = null, scannedDiscoveryOnly = null, observations = emptyList(), hosts = emptyList(), discovery = null, summary = null, error = null) }
 
     fun prepareExport(): Boolean = synchronized(gate) {
         val snapshot = mutableState.value
-        if (disposed || active != null || (snapshot.summary == null && snapshot.observations.isEmpty())) return@synchronized false
+        if (disposed || active != null || (snapshot.summary == null && snapshot.observations.isEmpty() && snapshot.hosts.isEmpty())) return@synchronized false
         pendingExport = snapshot
         true
     }
@@ -84,11 +104,11 @@ class ScanViewModel(
 
     fun start() = synchronized(gate) {
         val input = mutableState.value
-        if (disposed || active != null || !input.authorized || input.host.isBlank() || input.ports.isBlank()) return@synchronized
+        if (disposed || active != null || !input.authorized || input.host.isBlank() || (!input.discoveryOnly && input.ports.isBlank())) return@synchronized
         val run = RunControl()
         active = run
-        mutableState.value = input.copy(phase = ScanPhase.RUNNING, scannedHost = input.host.trim(), scannedPorts = input.ports.trim(), observations = emptyList(), summary = null, error = null)
-        try { executor.execute { execute(run, input.host.trim(), input.ports.trim()) } }
+        mutableState.value = input.copy(phase = ScanPhase.RUNNING, scannedHost = input.host.trim(), scannedPorts = if (input.discoveryOnly) "" else input.ports.trim(), scannedServices = input.services && !input.discoveryOnly, scannedDiscoveryOnly = input.discoveryOnly, observations = emptyList(), hosts = emptyList(), discovery = null, summary = null, error = null)
+        try { executor.execute { execute(run, input.host.trim(), input.ports.trim(), input.services, input.discoveryOnly) } }
         catch (_: RejectedExecutionException) {
             run.cancel()
             active = null
@@ -103,32 +123,48 @@ class ScanViewModel(
         }
     }
 
-    private fun execute(run: RunControl, host: String, ports: String) {
-        val rows = linkedMapOf<Int, Observation>()
+    private fun execute(run: RunControl, host: String, ports: String, services: Boolean, discoveryOnly: Boolean) {
+        val rows = linkedMapOf<String, Observation>()
+        val hosts = linkedMapOf<String, HostObservation>()
         var summary: CoverageSummary? = null
+        var discovery: DiscoverySummary? = null
         var error: String? = null
         var lastPublish = 0L
         var pending = 0
         try {
             if (!run.cancelled.get()) {
-                val session = backend.start(host, ports)
+                val session = backend.survey(host, ports, services, discoveryOnly)
                 run.attach(session)
                 while (true) {
                     val text = session.nextEvent()
                     if (text.isEmpty()) break
-                    val row = parseObservation(text)
-                    require(rows.size < 4096 && !rows.containsKey(row.port)) { "Duplicate or oversized native result set" }
-                    rows[row.port] = row
+                    when (nativeEventType(text)) {
+                        "result" -> {
+                            val row = parseObservation(text)
+                            val key = "${row.host}/${row.port}"
+                            require(rows.size < 4096 && !rows.containsKey(key)) { "Duplicate or oversized native result set" }
+                            rows[key] = row
+                        }
+                        "host" -> {
+                            val observed = parseHost(text)
+                            require(hosts.size < 256 && !hosts.containsKey(observed.address)) { "Duplicate or oversized host set" }
+                            hosts[observed.address] = observed
+                        }
+                        else -> throw IllegalArgumentException("Unsupported native event")
+                    }
                     pending++
                     val now = System.nanoTime()
                     if (pending >= 16 || now - lastPublish >= 100_000_000L) {
-                        val snapshot = rows.values.sortedBy { it.port }
-                        mutableState.update { it.copy(observations = snapshot) }
+                        val snapshot = sortedRows(rows.values)
+                        val hostSnapshot = hosts.values.sortedBy { it.address }
+                        mutableState.update { it.copy(observations = snapshot, hosts = hostSnapshot) }
                         pending = 0
                         lastPublish = now
                     }
                 }
-                val (nativeSummary, nativeError) = parseSummary(session.awaitSummary(), rows.values)
+                val text = session.awaitSummary()
+                val (nativeSummary, nativeError) = parseSummary(text, rows.values)
+                discovery = parseDiscovery(text, hosts.values)
                 summary = nativeSummary
                 if (nativeError == "cancelled") run.cancelled.set(true)
                 if (nativeError.isNotEmpty() && nativeError != "cancelled") error = "Native scan failed"
@@ -151,7 +187,7 @@ class ScanViewModel(
                         summary != null -> ScanPhase.COMPLETED
                         else -> ScanPhase.FAILED
                     }
-                    mutableState.update { it.copy(phase = phase, observations = rows.values.sortedBy { row -> row.port }, summary = summary, error = error) }
+                    mutableState.update { it.copy(phase = phase, observations = sortedRows(rows.values), hosts = hosts.values.sortedBy { it.address }, discovery = discovery, summary = summary, error = error) }
                     active = null
                 }
             }
@@ -164,6 +200,8 @@ class ScanViewModel(
     }
     override fun onCleared() = dispose()
 }
+
+private fun sortedRows(rows: Collection<Observation>): List<Observation> = rows.sortedWith(compareBy<Observation> { it.host }.thenBy { it.port })
 
 private fun safeError(text: String?): String = text.orEmpty().filter {
     !it.isISOControl() && Character.getType(it) != Character.FORMAT.toInt()

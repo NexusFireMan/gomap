@@ -46,6 +46,8 @@ type Scanner struct {
 	OnResult       func(ScanResult)
 	RecoveryBudget *TimeoutRecoveryBudget
 	targetPrefix   netip.Prefix
+	probeContext   context.Context
+	probeDial      recoveryDialFunc
 
 	adaptiveMu       sync.Mutex
 	ewmaLatency      time.Duration
@@ -626,6 +628,20 @@ func (s *Scanner) grabBanner(conn net.Conn, port int, result *ScanResult) {
 	deepProbeAttempted := false
 	mappedService := s.PortManager.GetServiceName(port, "")
 	mappedFTP := normalizeVersionProbeService(mappedService) == "ftp"
+	// The bounded mobile path prioritizes server-first greetings on unknown
+	// ports before spending its budget on speculative RPC connections.
+	if s.probeContext != nil && mappedService == "" {
+		banner = s.tryPassiveBanner(conn)
+		if service, version := parseObservedBanner(banner); service != "" {
+			result.ServiceName = service
+			result.Version = version
+			result.Confidence = bannerIdentificationConfidence(banner, version)
+			result.Evidence = evidenceFromBanner(banner)
+			result.Hostname = hostnameFromEvidence(result.Evidence)
+			result.DetectionPath = "banner-parser"
+			return
+		}
+	}
 
 	if !s.GhostMode && port == 3306 {
 		if version, evidence := detectMySQLGreetingFromConn(conn, s.boundedServiceTimeout(1200*time.Millisecond, 2500*time.Millisecond)); version != "" {
@@ -869,7 +885,7 @@ func (s *Scanner) grabBanner(conn net.Conn, port int, result *ScanResult) {
 				result.Evidence = "protocol banner (generic)"
 			}
 		}
-		if s.DeepVersion {
+		if s.DeepVersion || s.probeContext != nil {
 			if evidence := evidenceFromBanner(banner); evidence != "" {
 				result.Evidence = evidence
 			}

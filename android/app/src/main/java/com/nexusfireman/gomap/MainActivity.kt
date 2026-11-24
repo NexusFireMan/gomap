@@ -106,6 +106,8 @@ fun ScanScreen(scan: ScanViewModel) {
     val scope = rememberCoroutineScope()
     val snackbar = remember { SnackbarHostState() }
     var onlyOpen by remember { mutableStateOf(false) }
+    var hostView by remember { mutableStateOf(false) }
+    var respondingOnly by remember { mutableStateOf(true) }
     var about by remember { mutableStateOf(false) }
     val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         val snapshot = scan.takeExport()
@@ -125,11 +127,14 @@ fun ScanScreen(scan: ScanViewModel) {
         scope.launch { snackbar.showSnackbar(context.getString(if (granted) R.string.permission_granted else R.string.permission_denied)) }
     }
     val shown = remember(state.observations, onlyOpen) { if (onlyOpen) state.observations.filter { it.state == "open" } else state.observations }
+    val showHosts = state.scannedDiscoveryOnly == true || hostView
+    val shownHosts = remember(state.hosts, respondingOnly) { if (respondingOnly) state.hosts.filter { it.state == "responding" } else state.hosts }
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
             TopAppBar(title = { Text("GoMap") }, actions = {
-                ActionIcon(R.string.export, enabled = !state.running && (state.summary != null || state.observations.isNotEmpty()), icon = { Icon(Icons.Default.Share, null) }) {
+                if (state.running) ActionIcon(R.string.stop, enabled = state.phase == ScanPhase.RUNNING, icon = { Icon(Icons.Default.Close, null) }) { scan.stop() }
+                else ActionIcon(R.string.export, enabled = state.summary != null || state.observations.isNotEmpty() || state.hosts.isNotEmpty(), icon = { Icon(Icons.Default.Share, null) }) {
                     if (scan.prepareExport()) exportLauncher.launch("gomap-scan.json")
                 }
                 ActionIcon(R.string.clear, enabled = !state.running, icon = { Icon(Icons.Default.Delete, null) }) { scan.clear() }
@@ -137,17 +142,29 @@ fun ScanScreen(scan: ScanViewModel) {
             })
         },
     ) { padding ->
-        LazyColumn(modifier = Modifier.fillMaxSize().padding(padding).imePadding(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        LazyColumn(modifier = Modifier.fillMaxSize().padding(padding).imePadding().testTag("scan-content"), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             item {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
+                        listOf(R.string.port_scan, R.string.host_discovery).forEachIndexed { index, label ->
+                            SegmentedButton(selected = state.discoveryOnly == (index == 1), enabled = !state.running,
+                                onClick = { scan.setDiscoveryOnly(index == 1) }, shape = SegmentedButtonDefaults.itemShape(index, 2),
+                                modifier = Modifier.fillMaxHeight().testTag("scan-mode-$index")) { Text(stringResource(label)) }
+                        }
+                    }
                     OutlinedTextField(value = state.host, onValueChange = scan::setHost, enabled = !state.running,
-                        label = { Text(stringResource(R.string.target)) }, placeholder = { Text("10.0.11.6") },
+                        label = { Text(stringResource(R.string.target)) }, placeholder = { Text("10.0.11.0/24") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, autoCorrectEnabled = false),
                         singleLine = true, modifier = Modifier.fillMaxWidth())
-                    OutlinedTextField(value = state.ports, onValueChange = scan::setPorts, enabled = !state.running,
+                    if (!state.discoveryOnly) OutlinedTextField(value = state.ports, onValueChange = scan::setPorts, enabled = !state.running,
                         label = { Text(stringResource(R.string.ports)) },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii, autoCorrectEnabled = false),
                         singleLine = true, modifier = Modifier.fillMaxWidth())
+                    if (!state.discoveryOnly) Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text(stringResource(R.string.services), modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+                        Switch(checked = state.services, enabled = !state.running, onCheckedChange = scan::setServices,
+                            modifier = Modifier.semantics { contentDescription = context.getString(R.string.services) })
+                    }
                     Row(modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("authorization").toggleable(
                         value = state.authorized, enabled = !state.running, role = Role.Checkbox, onValueChange = scan::setAuthorized,
                     ), verticalAlignment = Alignment.CenterVertically) {
@@ -155,7 +172,7 @@ fun ScanScreen(scan: ScanViewModel) {
                         Text(stringResource(R.string.authorization), modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
                     }
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(enabled = !state.running && state.authorized && state.host.isNotBlank() && state.ports.isNotBlank(), onClick = {
+                        Button(enabled = !state.running && state.authorized && state.host.isNotBlank() && (state.discoveryOnly || state.ports.isNotBlank()), onClick = {
                             if (needsLocalNetworkPermission(Build.VERSION.SDK_INT, context.checkSelfPermission(LOCAL_NETWORK_PERMISSION) == PackageManager.PERMISSION_GRANTED)) permissionLauncher.launch(LOCAL_NETWORK_PERMISSION)
                             else scan.start()
                         }) { Icon(Icons.Default.PlayArrow, null); Spacer(Modifier.width(8.dp)); Text(stringResource(R.string.start)) }
@@ -169,12 +186,13 @@ fun ScanScreen(scan: ScanViewModel) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(stringResource(phaseLabel(state.phase)), style = MaterialTheme.typography.titleMedium)
                     state.scannedHost?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
-                    Text(pluralStringResource(R.plurals.observed, state.observations.size, state.observations.size), style = MaterialTheme.typography.bodySmall)
+                    if (!(state.scannedDiscoveryOnly ?: state.discoveryOnly)) Text(pluralStringResource(R.plurals.observed, state.observations.size, state.observations.size), style = MaterialTheme.typography.bodySmall)
+                    if (state.hosts.isNotEmpty()) Text(stringResource(R.string.hosts_observed, state.hosts.count { it.state == "responding" }, state.hosts.size), style = MaterialTheme.typography.bodySmall)
                     if (state.running) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                     state.error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
                 }
             }
-            state.summary?.let { summary ->
+            state.summary?.takeIf { it.requested > 0 }?.let { summary ->
                 item {
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(stringResource(R.string.coverage), style = MaterialTheme.typography.titleMedium)
@@ -189,29 +207,58 @@ fun ScanScreen(scan: ScanViewModel) {
                     }
                 }
             }
+            state.discovery?.let { discovery ->
+                item {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(stringResource(R.string.discovery_coverage), style = MaterialTheme.typography.titleMedium)
+                        Text(stringResource(R.string.host_coverage_counts, discovery.completed, discovery.requested, discovery.responding, discovery.noResponse, discovery.unknown, discovery.unreported))
+                    }
+                }
+            }
             item {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     HorizontalDivider()
                     Text(stringResource(R.string.results), style = MaterialTheme.typography.titleMedium)
+                    if (state.hosts.isNotEmpty() && state.scannedDiscoveryOnly != true) SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                        listOf(R.string.ports_view, R.string.hosts_view).forEachIndexed { index, label ->
+                            SegmentedButton(selected = hostView == (index == 1), onClick = { hostView = index == 1 }, shape = SegmentedButtonDefaults.itemShape(index, 2)) { Text(stringResource(label)) }
+                        }
+                    }
                     SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                        listOf(R.string.all_results, R.string.open_results).forEachIndexed { index, label ->
-                            SegmentedButton(selected = onlyOpen == (index == 1), onClick = { onlyOpen = index == 1 }, shape = SegmentedButtonDefaults.itemShape(index, 2)) { Text(stringResource(label)) }
+                        val labels = if (showHosts) listOf(R.string.all_hosts, R.string.responding_hosts) else listOf(R.string.all_results, R.string.open_results)
+                        labels.forEachIndexed { index, label ->
+                            SegmentedButton(selected = (if (showHosts) respondingOnly else onlyOpen) == (index == 1),
+                                onClick = { if (showHosts) respondingOnly = index == 1 else onlyOpen = index == 1 }, shape = SegmentedButtonDefaults.itemShape(index, 2)) { Text(stringResource(label)) }
                         }
                     }
                 }
             }
-            if (shown.isEmpty()) item { Text(stringResource(R.string.empty_results), style = MaterialTheme.typography.bodyMedium) }
-            items(shown, key = { it.port }) { row ->
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                        Text(row.port.toString(), fontFamily = FontFamily.Monospace, modifier = Modifier.widthIn(min = 64.dp))
-                        Text(stringResource(when (row.state) { "open" -> R.string.state_open; "closed" -> R.string.state_closed; "filtered" -> R.string.state_filtered; else -> R.string.state_unknown }),
-                            modifier = Modifier.weight(1f), color = if (row.state == "open") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
+            if (showHosts) {
+                if (shownHosts.isEmpty()) item { Text(stringResource(R.string.empty_results)) }
+                items(shownHosts, key = { "host/${it.address}" }) { host ->
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(host.address, fontFamily = FontFamily.Monospace)
+                        Text(stringResource(when (host.state) { "responding" -> R.string.host_responding; "no_response" -> R.string.host_no_response; else -> R.string.state_unknown }))
+                        Text(host.evidence, style = MaterialTheme.typography.bodySmall)
+                        HorizontalDivider(modifier = Modifier.padding(top = 8.dp))
                     }
-                    if (row.service.isNotEmpty()) Text(stringResource(R.string.probable_service, row.service), style = MaterialTheme.typography.bodySmall)
-                    if (row.version.isNotEmpty()) Text(row.version, style = MaterialTheme.typography.bodyMedium)
-                    if (row.evidence.isNotEmpty()) Text(row.evidence, style = MaterialTheme.typography.bodySmall)
-                    HorizontalDivider(modifier = Modifier.padding(top = 8.dp))
+                }
+            } else {
+                if (shown.isEmpty()) item { Text(stringResource(R.string.empty_results), style = MaterialTheme.typography.bodyMedium) }
+                items(shown, key = { "${it.host}/${it.port}" }) { row ->
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
+                        if (row.host.isNotEmpty()) Text(row.host, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
+                        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                            Text(row.port.toString(), fontFamily = FontFamily.Monospace, modifier = Modifier.widthIn(min = 64.dp))
+                            Text(stringResource(when (row.state) { "open" -> R.string.state_open; "closed" -> R.string.state_closed; "filtered" -> R.string.state_filtered; else -> R.string.state_unknown }),
+                                modifier = Modifier.weight(1f), color = if (row.state == "open") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
+                        }
+                        if (row.service.isNotEmpty()) Text(if (row.confidence == "low" && row.evidence.startsWith("port map")) stringResource(R.string.probable_service, row.service) else row.service, style = MaterialTheme.typography.bodySmall)
+                        if (row.version.isNotEmpty()) Text(row.version, style = MaterialTheme.typography.bodyMedium)
+                        if (row.confidence.isNotEmpty()) Text(stringResource(R.string.confidence, row.confidence), style = MaterialTheme.typography.bodySmall)
+                        if (row.evidence.isNotEmpty()) Text(row.evidence, style = MaterialTheme.typography.bodySmall)
+                        HorizontalDivider(modifier = Modifier.padding(top = 8.dp))
+                    }
                 }
             }
         }

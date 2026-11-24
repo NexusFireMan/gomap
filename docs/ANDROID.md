@@ -4,14 +4,15 @@
 
 This is an experimental, installable **debug APK**, not a published Android
 release or an Android runtime certification. The CLI and Termux profile remain
-separate; the APK currently implements connection-only TCP scanning.
+separate; the APK supports TCP CONNECT, optional native service/banner detection
+and bounded CIDR host discovery without root.
 
 The app uses Kotlin/Jetpack Compose, an owning ViewModel and a single background
 consumer. `gomobile bind` generates a JNI/AAR bridge to existing Go code. There
 is no CLI subprocess, embedded localhost server or duplicated protocol engine.
 
-- `pkg/scanner/connect_context.go`: cancellable connection-only runner reusing
-  GoMap's CONNECT primitive, dialer, service map, limiter and error classification.
+- `pkg/scanner/connect_context.go`: cancellable runner reusing GoMap's CONNECT
+  primitive, native service parsers, context-bound TCP/TLS sockets and limiter.
 - `mobile/`: binding-compatible session API with bounded JSON events, cancellation
   and a final coverage summary. No change to the CLI execution path.
 - `android/bindings/`: separately pinned `gomobile`/`gobind`; build-tool dependencies
@@ -33,7 +34,7 @@ are packaged; 32-bit devices are not supported by this artifact.
 | Android 14 | 34 | Pending |
 | Android 15 | 35 | Pending, including 16 KB page-size behavior |
 | Android 16 | 36 | Pending |
-| Android 17 | 37 | Pending, including local-network permission |
+| Android 17 | 37 | Initial 0.1-dev flow user-tested on Pixel 8 Pro/GrapheneOS; new CIDR/services and full permission/resource matrix pending |
 
 This is an intended range, not certification from a successful build. The SDK
 package is **`platforms;android-37.0`**, not `platforms;android-37`. The earlier
@@ -48,14 +49,40 @@ comma-separated entries and 4096 unique ports. Invalid/oversized scopes fail
 before scanning; nothing is silently truncated. These are APK prototype limits,
 not changes to CLI scope.
 
-Defaults are 32 workers, 100 starts/s and a 750 ms connection timeout. There are
-no retries, DNS resolution, CIDR discovery, banners/version probes, UDP, SYN, raw
-sockets, source rotation or interface changes. Port-map names are low-confidence
-hints, not confirmed protocols or versions.
+The original `StartConnect` defaults remain 32 workers, 100 starts/s and a 750 ms
+connection timeout, without service negotiation. It retains schema 1 compatibility.
+
+The app now calls `StartSurvey(target, ports, services, discoverOnly)`:
+
+- Accept one literal IP or CIDR, at most 256 addresses (IPv4 /24 or smaller,
+  IPv6 /120 or smaller), and at most 4096 requested host-port pairs. IPv4 network
+  and broadcast addresses are omitted except on /31 and /32. Reject larger
+  scopes before any connections; do not silently truncate.
+- Port scan defaults to optional services enabled; the switch allows connection-
+  only scans. Native parsers/probes reuse GoMap, with a four-second service budget
+  after each CONNECT, cancellation-aware TCP/TLS and retained open-state evidence even if
+  fingerprinting runs out of time. No exhaustive/deep CLI-mode parity is implied.
+- Multi-host CIDR port scans first discover responding endpoints using TCP ports
+  443,80,22,445,3389, a 400 ms timeout and at most 16 host jobs. A successful
+  connection **or refusal** counts as a TCP response, not OS identification.
+- Host discovery mode performs only that reachability pass; its port input is
+  ignored and there are no service probes. It is useful for `10.0.11.0/24`.
+- Silence is `no_response`, never confirmed offline. Unknown failures stay
+  separate. Networks that drop the discovery probes can hide reachable hosts;
+  scan an explicit IP (or /32 IPv4 / /128 IPv6 scope) to bypass pre-discovery.
+- Port scans use at most four hosts with eight workers each and a 750 ms
+  connection timeout. Discovery, primary connections and additional service
+  sockets share **one 100 starts/s budget**, not a separate budget per host.
+- Keep undiscovered/unscanned host-port pairs **unreported**, not closed or
+  timeout-filtered. Host coverage and port coverage are separate ledgers.
+
+There are no retries, DNS, UDP, SYN, raw sockets, source rotation or interface
+changes in the APK. Port-map names remain hints, not confirmed versions.
 
 | Go | Java | Contract |
 | --- | --- | --- |
 | `StartConnect` | `Mobile.startConnect` | Validation errors become exceptions |
+| `StartSurvey` | `Mobile.startSurvey` | Bounded IP/CIDR, service and discovery-only options |
 | `NextEvent` | `Session.nextEvent` | Blocking; one consumer; empty string closes the queue |
 | `Cancel` | `Session.cancel` | Idempotent, concurrent-safe, nonblocking |
 | `AwaitSummary` | `Session.awaitSummary` | Blocking join; drain events or cancel first |
@@ -64,7 +91,10 @@ Never block the Android main thread. `AwaitSummary` avoids Java's final
 `Object.wait()` name. Construct sessions through `startConnect`, not the
 generated Java constructor.
 
-Events use JSON `schema_version: 1`, `type: "result"`, `host` and `result`.
+Survey events use JSON `schema_version: 2`, `type: "result"`, `host` and `result`.
+Discovery adds `type: "host"` with `host_result.address`, `state` and `evidence`;
+states are `responding`, `no_response` and `unknown`. Every port row retains its
+host identity; the same port on different hosts is never deduplicated together.
 They include all observed states, not only open ports. `closed` requires a
 refusal; timeout-based `filtered` remains inferred/uncertain.
 
@@ -72,7 +102,10 @@ After the queue closes, `awaitSummary` returns `type: "summary"` with requested,
 completed, open, closed, filtered, unknown, unreported, cancelled and duration_ms.
 Completed counts delivered observations, including queued ones. Undelivered work
 is unreported, never closed. Cancellation has `error: "cancelled"`; other internal
-failures use `scan_failed`. The Kotlin decoder reconciles counts with actual rows.
+failures use `scan_failed`. Survey summaries also carry discovery requested,
+completed, responding, no_response, unknown and unreported counts. The Kotlin
+decoder reconciles both ledgers with actual delivered observations. JSON export
+retains per-row host identity, discovery evidence, and the frozen mode/options.
 
 The session queue holds 32 events; in-flight observations are also worker-bounded.
 Backpressure prevents unbounded production. Cancellation interrupts dials, pacing
@@ -102,13 +135,17 @@ provider determines where the exported file lives, including possible cloud
 storage. Editing target/ports resets authorization. Nothing scans on launch,
 network changes or permission grants.
 
-The first screen provides target/port inputs, authorization, Start/Stop, all/open
-filters, explicit coverage, Clear and JSON export. English/Spanish resources are
-included. No service-detection parity with the CLI is implied.
+The first screen provides IP/CIDR input, port-scan/host-discovery modes, a
+services/banners switch, authorization, Start/Stop, ports/hosts views, all/open
+and all/responding filters, separate coverage, Clear and JSON export.
+English/Spanish resources are included. Service evidence is control-character
+sanitized and capped in the bridge; arbitrary protocol content is not guaranteed
+secret-free. No service-detection parity with the CLI is implied.
 
 ## Build And Install
 
-Use the repository Go toolchain, JDK 21 and these pinned development tools:
+Use the repository Go toolchain, JDK 21 and these pinned development tools.
+Build scripts default `GOTOOLCHAIN` to `go1.26.10` unless explicitly overridden:
 
 | Component | Version |
 | --- | --- |
@@ -136,7 +173,7 @@ bash android/build-apk.sh
 Override environment paths for other installations. The script builds the AAR,
 runs JVM tests/lint, assembles debug and instrumentation APKs, then checks the
 debug signature, minimum/target SDK, 16 KB ZIP alignment and native ELF alignment.
-The app ID is `com.nexusfireman.gomap.dev`, version `0.1.0-dev`; its local debug
+The app ID is `com.nexusfireman.gomap.dev`, version `0.2.0-dev`; its local debug
 key is not suitable for distribution. A differently signed existing install may
 require removal before reinstalling, losing its local state.
 
@@ -188,6 +225,17 @@ and malformed/duplicate events. Two tests render Compose with a fake backend
 on Robolectric API 31, including 360 dp and 200% text fixtures. Reviewed screenshots
 are generated under `android/app/build/reports/ui/`; these are not JNI execution.
 
+The subsequent CIDR/service extension passes 20 JVM tests and adds deterministic mixed discovery states,
+same-port/different-host identity, shared pacing, cancellation, native SSH/FTP/
+HTTP fixtures and blocked-read/TLS cleanup tests. Host UI fixtures also cover
+the host list, service/version/evidence view, equal-height large-font mode controls
+and a fixed toolbar Stop action while browsing streamed ports. No external hosts are required.
+
+The user reports that the initial 0.1-dev APK works on a **Pixel 8 Pro running
+GrapheneOS/Android 17**, including cancellation, rotation, background transition
+and JSON export. This is user-reported manual validation of that build, not an
+instrumentation run or certification of the new CIDR/service implementation.
+
 The separate Android workflow runs JVM tests/lint and builds/checks both debug
 APKs; it does not execute instrumentation. Android lint has no errors; pinned
 dependency/tool update advisories remain for review before release. Debug
@@ -197,4 +245,5 @@ Still required: execute the OS acceptance matrix, permission denial/grant,
 stop/navigation/rotation, screen-off, Wi-Fi/VPN changes, export and RSS/FD
 stability against authorized lab scopes. Complete the runtime dependency/license
 inventory, dependency update review and release signing/distribution before a
-public Android release. Service detection and other CLI engines are follow-up work.
+public Android release. Validate CIDR discovery and service detection on physical
+devices; other CLI engines remain follow-up work.

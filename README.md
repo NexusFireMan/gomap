@@ -736,11 +736,14 @@ Android distribution/updating remain separate tasks. See the
 [Termux setup, limits and test checklist](docs/TERMUX.md).
 
 The separate [native Android prototype](docs/ANDROID.md) builds a Kotlin/Compose
-development APK with a Go CONNECT bridge, explicit authorization, Start/Stop,
-state filtering, coverage and user-requested JSON export. It uses minimum
+development APK with a Go CONNECT bridge, native service/banner detection,
+bounded IP/CIDR host discovery, explicit authorization, Start/Stop, host/port
+filtering, separate coverage and user-requested JSON export. It uses minimum
 Android 12/API 31, target API 37 and ARM64/x86_64 native libraries. Host tests and
-static artifact checks pass; JNI/device acceptance, service detection and public
-Android distribution remain pending. This is not a mobile equivalent of every CLI mode.
+static artifact checks cover the development build. The initial CONNECT/UI flow
+has user-reported validation on Pixel 8 Pro/GrapheneOS/Android 17; new CIDR/service
+device acceptance and public Android distribution remain pending. This is not a
+mobile equivalent of every CLI mode.
 
 ## Responsible Use
 

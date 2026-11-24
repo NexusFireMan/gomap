@@ -5,6 +5,7 @@ root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 export ANDROID_HOME="${ANDROID_HOME:-$HOME/Android/Sdk}"
 export ANDROID_NDK_HOME="${ANDROID_NDK_HOME:-$ANDROID_HOME/ndk/30.0.16248370}"
 export JAVA_HOME="${JAVA_HOME:-/usr/lib/jvm/java-21-openjdk-amd64}"
+export GOTOOLCHAIN="${GOTOOLCHAIN:-go1.26.10}"
 
 if [[ ! -x "$JAVA_HOME/bin/javac" || ! -f "$ANDROID_NDK_HOME/source.properties" ]]; then
   echo "Configure JAVA_HOME (JDK 21), ANDROID_HOME and ANDROID_NDK_HOME before building." >&2
@@ -23,11 +24,11 @@ go run ./cmd/checkaar "$root/android/build/gomap.aar"
 
 notices="$root/android/build/notices"
 mkdir -p "$notices"
-cp "$(go env GOROOT)/LICENSE" "$notices/Go-LICENSE"
+install -m 0644 "$(go env GOROOT)/LICENSE" "$notices/Go-LICENSE"
 for module in golang.org/x/mobile golang.org/x/net golang.org/x/sys golang.org/x/sync \
   github.com/gosnmp/gosnmp github.com/vishvananda/netlink github.com/vishvananda/netns; do
   directory="$(go list -m -f '{{.Dir}}' "$module")"
   if [[ -f "$directory/LICENSE" ]]; then
-    cp "$directory/LICENSE" "$notices/${module//\//_}-LICENSE"
+    install -m 0644 "$directory/LICENSE" "$notices/${module//\//_}-LICENSE"
   fi
 done

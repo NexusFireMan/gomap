@@ -10,12 +10,16 @@ import (
 	"time"
 )
 
-// ConnectOptions bounds the standalone CONNECT engine, not CLI service probes.
-// Zero values select 32 workers, 100 starts/s and a 750 ms timeout.
+// ConnectOptions bounds the embeddable CONNECT engine, not CLI orchestration.
+// Zero values select 32 workers, 100 starts/s and a 750 ms timeout. Optional
+// native service detection has a four-second budget after CONNECT. A supplied
+// limiter shares attempt starts across hosts, discovery and service sockets.
 type ConnectOptions struct {
-	Workers int
-	Rate    int
-	Timeout time.Duration
+	Workers        int
+	Rate           int
+	Timeout        time.Duration
+	DetectServices bool
+	AttemptLimiter *AttemptLimiter
 }
 
 // ConnectSummary counts delivered observations only. Unreported ports were not
@@ -32,8 +36,9 @@ type ConnectSummary struct {
 	DurationMS int64 `json:"duration_ms"`
 }
 
-// ScanConnectContext runs connection-only probes without stdout, files, DNS,
-// service negotiation or privileged operations. The callback runs serially and
+// ScanConnectContext defaults to connection-only probes without stdout, files,
+// DNS or privileged operations. DetectServices opts into bounded native probes.
+// The callback runs serially and
 // must return promptly; return an error to stop. It must not modify ports.
 // A timeout means inferred filtering, never a confirmed firewall drop.
 func ScanConnectContext(ctx context.Context, host string, ports []int, opts ConnectOptions, onResult func(ScanResult) error) (ConnectSummary, error) {
@@ -75,27 +80,55 @@ func scanConnectContext(parent context.Context, host string, ports []int, opts C
 	if dial == nil {
 		dial = s.recoveryDial
 	}
-	limiter := NewAttemptLimiter(opts.Rate)
+	limiter := opts.AttemptLimiter
+	if limiter == nil {
+		limiter = NewAttemptLimiter(opts.Rate)
+	}
 	workers := min(opts.Workers, len(ports))
 	jobs := make(chan int)
 	observations := make(chan ScanResult, workers)
 	var wg sync.WaitGroup
 	for range workers {
 		wg.Go(func() {
+			worker := NewScanner(ip.String(), false)
+			worker.Configure(ScanConfig{Timeout: opts.Timeout, AdaptiveTimeout: false})
+			worker.AttemptLimiter = limiter
+			worker.probeDial = dial
 			for port := range jobs {
 				if ctx.Err() != nil {
 					return
 				}
 				var dialErr error
-				result := s.scanPortWithDial(port, false, func(address string, timeout time.Duration) (net.Conn, error) {
+				probeCtx := ctx
+				finish := func() {}
+				worker.probeContext = probeCtx
+				// Initial attempts are paced by this closure; additional service
+				// sockets use the same limiter through the context-aware dialer.
+				worker.AttemptLimiter = nil
+				result := worker.scanPortWithDial(port, opts.DetectServices, func(address string, timeout time.Duration) (net.Conn, error) {
 					if err := limiter.WaitContext(ctx); err != nil {
 						dialErr = err
 						return nil, err
 					}
 					conn, err := dial(ctx, address, timeout)
 					dialErr = err
+					if err != nil {
+						return nil, err
+					}
+					if opts.DetectServices {
+						probeCtx, finish = context.WithTimeout(ctx, 4*time.Second)
+						worker.probeContext = probeCtx
+						worker.AttemptLimiter = limiter
+						// Keep the established connection for passive greetings.
+					}
+					conn, err = bindProbeConnection(probeCtx, conn)
+					dialErr = err
 					return conn, err
 				})
+				if result.IsOpen && opts.DetectServices && probeCtx.Err() != nil {
+					result.Evidence += "; service budget exhausted"
+				}
+				finish()
 				if ctx.Err() != nil {
 					return
 				}
