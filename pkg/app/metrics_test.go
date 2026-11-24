@@ -74,8 +74,12 @@ func TestExecuteScanJSONIncludesMetrics(t *testing.T) {
 }
 
 func TestMachineRowsKeepMetricsOnStderr(t *testing.T) {
-	for _, format := range []string{"jsonl", "csv"} {
-		t.Run(format, func(t *testing.T) {
+	for _, variant := range []struct {
+		format string
+		mobile bool
+	}{{"jsonl", false}, {"csv", false}, {"jsonl", true}, {"csv", true}} {
+		format := variant.format
+		t.Run(format+"/mobile="+strconv.FormatBool(variant.mobile), func(t *testing.T) {
 			listener, err := net.Listen("tcp", "127.0.0.1:0")
 			if err != nil {
 				t.Fatal(err)
@@ -94,7 +98,7 @@ func TestMachineRowsKeepMetricsOnStderr(t *testing.T) {
 			})
 			path := filepath.Join(t.TempDir(), "report."+format)
 			port := listener.Addr().(*net.TCPAddr).Port
-			err = ExecuteScan(ScanRequest{Target: "127.0.0.1", PortsFlag: strconv.Itoa(port), Format: format, OutputPath: path, Workers: 1})
+			err = ExecuteScan(ScanRequest{Mobile: variant.mobile, Target: "127.0.0.1", PortsFlag: strconv.Itoa(port), Format: format, OutputPath: path, Workers: 1})
 			if closeErr := writer.Close(); err != nil || closeErr != nil {
 				t.Fatalf("scan/write failed: %v, %v", err, closeErr)
 			}
@@ -102,6 +106,9 @@ func TestMachineRowsKeepMetricsOnStderr(t *testing.T) {
 			stderr, err := io.ReadAll(reader)
 			if err != nil || !strings.Contains(string(stderr), "Performance") || !strings.Contains(string(stderr), "Coverage") {
 				t.Fatalf("missing stderr summary: %s, %v", stderr, err)
+			}
+			if variant.mobile && strings.Contains(string(stderr), " | ") {
+				t.Fatalf("mobile stderr still has wide summaries: %s", stderr)
 			}
 			data, err := os.ReadFile(path)
 			if err != nil || strings.Contains(string(data), "Performance") || strings.Contains(string(data), "Coverage") {

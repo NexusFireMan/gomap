@@ -14,6 +14,8 @@ Note: this changelog is maintained from this point forward in the project histor
 
 ### Changed
 
+- Extend `--mobile` field blocks to scan headers and final diagnostic/exposure/performance/coverage summaries. Render final text with a bounded write buffer instead of retaining another complete report; preserve explicit uncertainty, evidence, desktop presentation and machine-readable rows, and propagate flush errors.
+
 - Bound the UDP result channel by active workers and drain results during production, rather than buffering the whole requested port range; preserve sorted observations, uncertain states and duplicate-port handling.
 
 ### Fixed

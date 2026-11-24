@@ -23,6 +23,7 @@ git switch dev
 go build -o ./gomap .
 ./gomap --version
 ./gomap --mobile -s -p 22,80,443 10.0.11.6
+./gomap --mobile --stream -s -p 22,80,443 10.0.11.6
 ```
 
 Choose only an authorized target. Keep the executable, reports and credential
@@ -51,10 +52,22 @@ unknown failures retain their original meanings.
 
 Text uses the terminal's soft wrapping, including its own Unicode width handling;
 it neither guesses display-cell widths nor truncates banners/evidence. Requested
-latency/confidence/evidence fields remain available. Coverage summaries and help/
-maintenance output retain their existing presentation and can still wrap.
+latency/confidence/evidence fields remain available. Scan headers, connection
+diagnostics, exposure, performance, coverage and final status also use field
+blocks. Help/maintenance and some discovery/status messages retain their
+existing presentation and can still wrap. Long remote values remain complete
+and can occupy multiple soft-wrapped screen rows.
 Streaming text uses per-result blocks with host context. JSONL/CSV rows are
-unchanged; JSON metrics optionally include `mobile: true` and resolved limits.
+unchanged; their stderr diagnostics use compact blocks when `--mobile` is set.
+JSON metrics optionally include `mobile: true` and resolved limits.
+
+`--stream` makes discovered open CONNECT results visible before the scan finishes;
+it does not turn silent ports into closed ports or certify coverage early.
+The final report does not repeat already streamed result blocks. Its rendering
+uses a fixed 4 KiB write buffer instead of constructing another complete text
+report in memory. Output may be partial if writing fails; failures are returned,
+including errors detected while flushing that buffer. Scan observations and
+diagnostics are still retained, so this is not a constant-memory scan.
 
 The UDP result queue now holds at most the active worker count, rather than one
 slot per requested port. Completed results are drained while probes run, then
@@ -94,6 +107,22 @@ Those are allocations for queue storage only, not Android memory, total scan
 allocations, peak RSS or battery measurements. The deterministic full-range fake
 probe test preserves all 65,535 observations across worker counts and uncertainty
 states without opening network connections.
+
+### Report Rendering Microbenchmark
+
+```bash
+go test ./pkg/app -run '^$' -bench '^BenchmarkMobileReportRendering$' \
+  -benchmem -benchtime=1x -count=3
+```
+
+On November 24, 2026, Linux/amd64 with Go 1.26.10 measured approximately 1.15 MB
+allocated per rendering with the bounded writer versus 3.24 MB with the same
+renderer additionally accumulating a complete report in `bytes.Buffer`. The
+fixture uses 4096 synthetic results with 128-character versions; its bounded
+destination is `io.Discard`, not a phone terminal or filesystem. These are total
+allocation bytes per rendering, not peak RSS, entire scan memory, device speed
+or battery measurements. Timing varied across the three single-iteration runs;
+no scan-speed improvement is claimed from this microbenchmark.
 
 ## Physical-Device Acceptance Still Required
 

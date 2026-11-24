@@ -720,12 +720,16 @@ profiles keep their stricter worker/rate limits and longer timeouts.
 # From a development checkout containing the new flag; not the v2.6.0 binary.
 go build -o ./gomap .
 ./gomap --mobile -s -p 22,80,443 10.0.11.6
+./gomap --mobile --stream -s -p 22,80,443 10.0.11.6
 ./gomap --mobile -s --format json --out scan.json 10.0.11.6
 ```
 
 Compact text uses one port block with separate fields, relying on the terminal's
-soft wrapping instead of wide tables. It does not truncate evidence. JSONL/CSV
-records are unchanged; JSON metrics add `mobile: true` only when selected and
+soft wrapping instead of wide tables, including scan headers, diagnostics,
+exposure, coverage and performance summaries. A bounded write buffer avoids a
+second complete text-report allocation; scan observations remain in memory.
+It does not truncate evidence. JSONL/CSV records are unchanged, with compact
+stderr summaries; JSON metrics add `mobile: true` only when selected and
 record resolved limits. Explicit `--workers`, `--timeout`, `--global-rate`
 and host overrides retain their meanings; `--global-rate=0` explicitly removes
 the mobile global cap. No ports/hosts or detection modes are silently omitted.

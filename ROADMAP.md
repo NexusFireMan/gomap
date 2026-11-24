@@ -17,7 +17,7 @@ GoMap's roadmap focuses on improving reliability, test coverage, documentation, 
 - [x] Raise the enforced total statement coverage floor past 25% to 40%, consistently in local checks and CI.
 - [x] Raise the enforced total statement coverage floor to 60% with sufficient headroom and meaningful tests.
 - Integrated v2.5.0 validation reached 59.3% total coverage. Parser regressions do not imply complete installer/updater or CLI entry-point coverage; those remain follow-up work.
-- Development validation including opt-in timeout recovery and the mobile profile reaches 72.7% total statement coverage; the enforced floor is 60%.
+- Development validation including opt-in timeout recovery and compact mobile reports reaches 73.1% total statement coverage; the enforced floor is 60%.
 
 ## Detection and Scan Reliability
 
@@ -76,6 +76,7 @@ GoMap's roadmap focuses on improving reliability, test coverage, documentation, 
 ## Android And Termux
 
 - [x] Add opt-in `--mobile` scan defaults and compact evidence-preserving text without changing desktop defaults; retain explicit performance overrides and structured row schemas.
+- [x] Extend compact mobile output to scan headers, diagnostics, exposure, coverage and performance; bound final text rendering to a 4 KiB write buffer, propagate flush errors and cover schema/streaming regressions. Host-only allocation measurements are not device performance certification.
 - [x] Bound the UDP result queue by worker count and cover full-range/deduplication/state/concurrency behavior with deterministic fake probes.
 - [ ] Validate the development profile on physical Termux devices without root: DNS, Wi-Fi/VPN, TCP/UDP states, narrow text, interruption, background/power behavior and private output paths.
 - [ ] Measure resource use, sustained throughput and thermal/battery behavior on representative devices before claiming an optimized device-specific budget or enabling automatic selection.
