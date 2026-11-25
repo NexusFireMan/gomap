@@ -17,7 +17,7 @@ GoMap's roadmap focuses on improving reliability, test coverage, documentation, 
 - [x] Raise the enforced total statement coverage floor past 25% to 40%, consistently in local checks and CI.
 - [x] Raise the enforced total statement coverage floor to 60% with sufficient headroom and meaningful tests.
 - Integrated v2.5.0 validation reached 59.3% total coverage. Parser regressions do not imply complete installer/updater or CLI entry-point coverage; those remain follow-up work.
-- Development validation including opt-in timeout recovery and the mobile profile reaches 72.7% total statement coverage; the enforced floor is 60%.
+- Development validation including opt-in timeout recovery, the mobile profile and the Android CONNECT/CIDR/service/profile bridge reaches 74.2% total statement coverage; the enforced floor is 60%.
 
 ## Detection and Scan Reliability
 
@@ -80,7 +80,14 @@ GoMap's roadmap focuses on improving reliability, test coverage, documentation, 
 - [ ] Validate the development profile on physical Termux devices without root: DNS, Wi-Fi/VPN, TCP/UDP states, narrow text, interruption, background/power behavior and private output paths.
 - [ ] Measure resource use, sustained throughput and thermal/battery behavior on representative devices before claiming an optimized device-specific budget or enabling automatic selection.
 - [ ] Add Android execution CI and reviewed release artifacts/checksums/updater behavior after interoperability validation; cross-compilation alone is not runtime support.
-- [ ] Define a separate APK architecture and permission/lifecycle/storage model while reusing native scan logic. No dates or privileged-feature support are promised.
+- [x] Define an initial APK architecture and permission/lifecycle/storage contract; add a cancellation-aware, bounded CONNECT bridge reusing native primitives, deterministic negative/lifecycle fixtures and separately pinned binding tools. See the [Android guide](docs/ANDROID.md); the bridge alone is not runtime certification.
+- [x] Build a development ARM64/x86_64 AAR with real SDK/NDK, minimum Android 12/API 31 and no maximum SDK; add repeatable builds and deterministic ZIP/XML/ELF compatibility checks, including 16 KB LOAD alignment. This is static validation, not an APK or runtime matrix completion.
+- [x] Implement a minimal Kotlin/Compose development APK with minimum API 31/target API 37, explicit authorization, Start/Stop, state filters, partial coverage and private-by-default JSON export. Resolve the SDK package as `platforms;android-37.0`; add Android build/JVM-test/lint CI, compiled loopback instrumentation and native APK alignment checks. Host UI fixtures cover narrow screens and 200% text; they do not execute JNI on Android.
+- [x] Extend the APK with bounded native service/banner detection and TCP IP/CIDR host discovery, separate host/port coverage and views, host-aware JSON rows, shared attempt pacing and cancelable TCP/TLS reads. Cover deterministic scope/state/identity/cleanup cases without external hosts; initial 0.2-dev operation is user-reported successful on Pixel 8 Pro/GrapheneOS/Android 17, not completion of the broader runtime matrix.
+- [x] Add Custom/Common (1000)/All (65535) port profiles, editable one-shot active-network IP autofill, larger bounded scope, full-range indexed/coalesced UI data and streaming JSON export. Validate exact membership, 65535-row delivery/export and explicit safety failure without live targets; physical full-range resource and network/autofill validation remain pending.
+- [x] Apply the Android port-scan budget to responding hosts after CIDR discovery; cover sparse, empty and over-budget responding sets without network access, preserving skipped scope as unreported.
+- Record user-reported initial CONNECT/UI lifecycle/export success on Pixel 8 Pro/GrapheneOS/Android 17; this does not complete the multi-device/runtime acceptance matrix.
+- [ ] Execute the Android 12-17 runtime matrix on hardware/emulators: JNI loopback, permission denial/grant without automatic scans, lifecycle cancellation/rotation, document export, Wi-Fi/VPN changes and RSS/FD stability. Review pinned dependency update advisories, complete the distribution/license inventory and release signing before publishing an Android release.
 
 ## Documentation and Release Workflow
 

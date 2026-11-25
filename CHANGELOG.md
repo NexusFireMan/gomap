@@ -8,6 +8,13 @@ Note: this changelog is maintained from this point forward in the project histor
 
 ### Added
 
+- Add Android Custom/Common (1000)/All (65535) port profiles and best-effort initial local-IP autofill without external IP queries, automatic scans or overwriting edits. Preserve manual input/consent and frozen profile metadata. Raise survey scope to 65535 host-port pairs with explicit open-result safety failure, adaptive worker sharing, indexed/coalesced large lists and streaming JSON export; retain legacy bridge and CLI defaults. Add deterministic full-range/profile/address/export/UI regressions.
+
+- Extend the development Android APK with bounded IP/CIDR TCP host discovery, responding/no-response/unknown host evidence, separate discovery coverage, host/port views and optional Go-native services/banners with per-port budgets. Share pacing across hosts/phases, preserve host identity in rows/exports and leave skipped host-port pairs unreported. Retain the original connection-only bridge contract and CLI defaults; add deterministic discovery/parser/lifecycle/UI regressions. Record user-reported initial Pixel 8 Pro/GrapheneOS/Android 17 validation separately from the new features.
+
+- Add an experimental Android CONNECT library foundation: cancellable native sessions, bounded JSON events with explicit partial coverage, lifecycle/negative fixtures, separately pinned binding tools and a repeatable Android 12/API 31 ARM64/x86_64 AAR build with static SDK/ABI/16 KB ELF checks. No Android runtime certification, privileged support or CLI behavior change is included.
+- Add a native Kotlin/Compose development APK (minimum API 31, target API 37): explicit authorization and Start/Stop, bounded background JNI consumption, state filters, partial coverage, foreground cancellation, English/Spanish resources and explicit JSON document export without scan-history persistence. Add deterministic controller/protocol/UI tests, narrow/large-font host screenshots, compiled loopback instrumentation and a separate Android build workflow. Physical JNI, permission/lifecycle and OS-matrix validation remain pending; debug artifacts are not public releases.
+
 - Add experimental opt-in `--mobile` scan defaults and compact text blocks for Termux/narrow terminals. Honor explicit global-rate disabling and manual settings, keep desktop defaults and structured row schemas unchanged, and record the selected profile in optional JSON metadata. Physical Android validation and packaging remain pending.
 
 - Add a static Astro/Starlight project portal alongside signed APT on GitHub Pages, with README-derived reference pages, local search and responsive documentation. Validate composition without altering package/key/metadata paths; keep website builds separate from signing credentials.
@@ -17,6 +24,10 @@ Note: this changelog is maintained from this point forward in the project histor
 - Bound the UDP result channel by active workers and drain results during production, rather than buffering the whole requested port range; preserve sorted observations, uncertain states and duplicate-port handling.
 
 ### Fixed
+
+- Hide closed and unknown ports from the Android port list: default to open plus filtered, with an open-only filter. Preserve all native observations, coverage counts and JSON export evidence.
+
+- Apply the Android survey host-port budget after CIDR discovery instead of rejecting the entire candidate network. Scan only responding hosts when they fit; otherwise stop before port scanning with an explicit scope error. Preserve silent/skipped pairs as unreported, bounded delivery and shared rate/concurrency limits; add deterministic sparse/dense/empty network regressions.
 
 ## [2.6.0] - 2026-11-04
 

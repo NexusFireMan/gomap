@@ -732,8 +732,24 @@ the mobile global cap. No ports/hosts or detection modes are silently omitted.
 
 This is a resource-conscious starting point, not a claim of lower battery use,
 faster full scans or certified Android support. Physical Termux validation,
-Android distribution/updating and an APK remain separate tasks. See the
+Android distribution/updating remain separate tasks. See the
 [Termux setup, limits and test checklist](docs/TERMUX.md).
+
+The separate [native Android prototype](docs/ANDROID.md) builds a Kotlin/Compose
+development APK with a Go CONNECT bridge, native service/banner detection,
+bounded IP/CIDR host discovery, explicit authorization, Start/Stop, host/port
+filtering, separate coverage and user-requested JSON export. It uses minimum
+Android 12/API 31, target API 37 and ARM64/x86_64 native libraries. Host tests and
+static artifact checks cover the development build. The CONNECT/UI and initial
+CIDR/service flows have user-reported validation on Pixel 8 Pro/GrapheneOS/Android 17;
+new profile/autofill/full-range device validation and public distribution remain pending. This is not a
+mobile equivalent of every CLI mode.
+The port dropdown offers Custom, Common (1000 curated ports) and All (1-65535),
+with a 65535 host-port scan cap applied to responding hosts after CIDR discovery
+and explicit resource-limit failures. Initial
+target autofill reads the phone's active-network local address only; it remains
+editable and never starts a scan. Full-range physical resource validation remains
+pending; see the Android guide for bounds and foreground-only behavior.
 
 ## Responsible Use
 

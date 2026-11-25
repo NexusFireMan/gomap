@@ -1,0 +1,69 @@
+name: Android development APK
+
+on:
+  pull_request:
+    branches: [main, dev]
+  push:
+    branches: [main, dev]
+
+permissions:
+  contents: read
+
+jobs:
+  android:
+    name: Android Build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            android/bindings/go.sum
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+          cache-dependency-path: |
+            android/*.gradle.kts
+            android/gradle/wrapper/gradle-wrapper.properties
+      - name: Install explicit SDK and NDK versions
+        run: |
+          cli="$RUNNER_TEMP/android-cli"
+          mkdir -p "$cli"
+          curl -fL --retry 3 --retry-all-errors \
+            https://dl.google.com/android/repository/commandlinetools-linux-15859902_latest.zip -o "$cli/tools.zip"
+          printf '%s  %s\n' '4e4c464f145a7512b57d088ac6c278c03c9eea610886b35a5e0804e74eedf583' "$cli/tools.zip" | sha256sum --check -
+          unzip -q "$cli/tools.zip" -d "$cli"
+          # apkanalyzer resolves the SDK from cmdline-tools/<version>, not an
+          # arbitrary extraction directory, even when sdkmanager has --sdk_root.
+          tools="$ANDROID_HOME/cmdline-tools/gomap-pinned"
+          mkdir -p "$ANDROID_HOME/cmdline-tools"
+          mv "$cli/cmdline-tools" "$tools"
+          echo "ANDROID_CMDLINE_TOOLS=$tools" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/30.0.16248370" >> "$GITHUB_ENV"
+          # GitHub-hosted Android SDK installations provide accepted SDK licenses.
+          # Do not pipe automatic acceptance into a new license prompt.
+          "$tools/bin/sdkmanager" --sdk_root="$ANDROID_HOME" \
+            "platforms;android-37.0" "build-tools;36.0.0" "ndk;30.0.16248370"
+      - name: Build and verify development APK
+        run: bash android/build-apk.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gomap-android-debug
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 7
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: android-test-diagnostics
+          path: |
+            android/app/build/reports/
+            android/app/build/test-results/
+          retention-days: 7

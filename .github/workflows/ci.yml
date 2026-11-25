@@ -106,6 +106,33 @@ jobs:
       - name: Race tests
         run: go test -race ./...
 
+      - name: Setup Java for binding signature checks
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Verify isolated mobile tools and generate Java bindings
+        working-directory: android/bindings
+        run: |
+          go mod verify
+          go test -race ./...
+          go vet ./...
+          go test github.com/NexusFireMan/gomap/v2/mobile github.com/NexusFireMan/gomap/v2/pkg/scanner
+          go tool gobind -lang=java -javapkg=com.nexusfireman.gomap \
+            -outdir="${RUNNER_TEMP}/gomap-bindings" github.com/NexusFireMan/gomap/v2/mobile
+
+      - name: Compile host-only Java signatures (not an Android runtime test)
+        run: |
+          generated="${RUNNER_TEMP}/gomap-bindings/java"
+          javac -d "${RUNNER_TEMP}/gomap-binding-classes" \
+            -sourcepath "$generated:mobile/testdata/java" \
+            "$generated/com/nexusfireman/gomap/mobile/Mobile.java" \
+            "$generated/com/nexusfireman/gomap/mobile/Session.java"
+
+      - name: Cross-compile mobile package (not Android execution)
+        run: GOOS=android GOARCH=arm64 CGO_ENABLED=0 go build ./mobile
+
       - name: Coverage profile
         run: go test -covermode=atomic -coverprofile=coverage.out ./...
 
