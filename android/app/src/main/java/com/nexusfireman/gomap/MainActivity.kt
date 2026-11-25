@@ -132,7 +132,7 @@ fun ScanScreen(scan: ScanViewModel) {
         // Permission grants never start scans; a new explicit Start action is required.
         scope.launch { snackbar.showSnackbar(context.getString(if (granted) R.string.permission_granted else R.string.permission_denied)) }
     }
-    val shown = remember(state.observations, onlyOpen) { if (onlyOpen) state.observations.filter { it.state == "open" } else state.observations }
+    val shown = remember(state.observations, onlyOpen) { visiblePortResults(state.observations, onlyOpen) }
     val showHosts = state.scannedDiscoveryOnly == true || hostView
     val shownHosts = remember(state.hosts, respondingOnly) { if (respondingOnly) state.hosts.filter { it.state == "responding" } else state.hosts }
     Scaffold(

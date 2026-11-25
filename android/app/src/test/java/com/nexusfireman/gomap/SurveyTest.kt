@@ -30,6 +30,22 @@ internal fun hostFixture(): FixtureSession = FixtureSession(
 )
 
 class SurveyTest {
+    @Test fun portListHidesClosedWithoutDroppingCoverageOrExportEvidence() {
+        val rows = listOf(
+            Observation(21, "closed", false),
+            Observation(22, "open", true),
+            Observation(23, "filtered", false),
+            Observation(24, "unknown", false),
+        )
+        assertEquals(listOf(22, 23), visiblePortResults(rows, false).map { it.port })
+        assertEquals(listOf(22), visiblePortResults(rows, true).map { it.port })
+        assertTrue(visiblePortResults(emptyList(), false).isEmpty())
+        val coverage = CoverageSummary(4, 4, 1, 1, 1, 1, 0, false, 1)
+        assertEquals(coverage, parseSummary(surveySummary(coverage), rows).first)
+        val report = Json.parseToJsonElement(ScanState(scannedHost = "127.0.0.1", scannedPorts = "21-24", observations = rows, summary = coverage).reportJson()).jsonObject
+        assertEquals(4, report.getValue("results").jsonArray.size)
+    }
+
     @Test fun undiscoveredScopeCanExceedDeliveryBudgetWithoutInventingStates() {
         val coverage = CoverageSummary(254000, 1, 0, 1, 0, 0, 253999, false, 1)
         val rows = listOf(Observation(443, "closed", false))

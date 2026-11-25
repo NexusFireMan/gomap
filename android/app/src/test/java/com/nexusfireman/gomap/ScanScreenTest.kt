@@ -31,6 +31,26 @@ class ScanScreenTest {
     private val vm = ScanViewModel(ScanBackend { _, _ -> calls.incrementAndGet(); finishedFixture() })
     @After fun cleanup() { vm.dispose() }
 
+    @Test fun defaultPortViewIncludesFilteredAndExcludesClosedRows() {
+        val rows = listOf(Observation(22221, "closed", false), Observation(22222, "open", true), Observation(22223, "filtered", false))
+        val model = ScanViewModel(ScanBackend { _, _ -> FixtureSession(
+            rows.map { surveyResult("127.0.0.1", it) },
+            surveySummary(CoverageSummary(3, 3, 1, 1, 1, 0, 0, false, 1)),
+        ) })
+        try {
+            compose.setContent { GoMapTheme { ScanScreen(model) } }
+            compose.onNodeWithText("Target IP / CIDR").performTextInput("127.0.0.1")
+            compose.onNodeWithTag("authorization").performClick()
+            compose.onNodeWithText("Start").performClick()
+            compose.waitUntil(5000) { model.state.value.phase == ScanPhase.COMPLETED }
+            compose.onNodeWithText("Open + filtered").performScrollTo().assertIsSelected()
+            compose.onNodeWithTag("scan-content").performScrollToNode(hasText("22223"))
+            compose.onNodeWithText("22223").assertIsDisplayed()
+            compose.onNodeWithText("22221").assertDoesNotExist()
+            screenshot("phone-open-filtered.png")
+        } finally { model.dispose() }
+    }
+
     @Test fun authorizationGatesStartAndResultsAreUsableAtPhoneWidth() {
         compose.setContent { GoMapTheme { ScanScreen(vm) } }
         compose.onNodeWithText("Start").assertIsNotEnabled()

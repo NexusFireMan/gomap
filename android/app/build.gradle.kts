@@ -13,8 +13,8 @@ android {
         applicationId = "com.nexusfireman.gomap.dev"
         minSdk = 31
         targetSdk = 37
-        versionCode = 4
-        versionName = "0.3.1-dev"
+        versionCode = 5
+        versionName = "0.3.2-dev"
         ndk { abiFilters += setOf("arm64-v8a", "x86_64") }
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

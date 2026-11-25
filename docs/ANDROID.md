@@ -93,6 +93,9 @@ The app now calls `StartSurvey(target, ports, services, discoverOnly)`:
   error rather than silently omitting rows. Large lists use an ordered endpoint
   index and coalesced UI snapshots. JSON document export encodes directly to a
   buffered output stream instead of building one giant report string.
+- The port list defaults to open plus filtered, with an open-only filter; closed
+  and unknown rows are hidden from this list but retained in coverage and JSON
+  export. Host-discovery filters remain independent.
 
 Full-range scans can take minutes at the unchanged 100-starts/s budget and must
 remain in the foreground. Queue bounds, synthetic 65535-row delivery/export tests

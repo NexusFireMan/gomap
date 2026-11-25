@@ -26,7 +26,7 @@
     <string name="export">Export JSON</string>
     <string name="about">About GoMap</string>
     <string name="close">Close</string>
-    <string name="all_results">All</string>
+    <string name="all_results">Open + filtered</string>
     <string name="open_results">Open</string>
     <string name="results">Results</string>
     <plurals name="observed">
