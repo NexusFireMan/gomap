@@ -33,8 +33,8 @@ func TestSurveyScopeBounds(t *testing.T) {
 			t.Fatalf("accepted %q", target)
 		}
 	}
-	if _, err := planSurvey("10.0.11.0/24", "1-259", false, false); err == nil {
-		t.Fatal("accepted excessive host-port product")
+	if _, err := planSurvey("10.0.11.0/24", "1-259", false, false); err != nil {
+		t.Fatal("rejected scope before discovery", err)
 	}
 	p, err := planSurvey("10.0.11.7/24", "invalid ports ignored in discovery mode", true, true)
 	if err != nil || len(p.hosts) != 254 || len(p.ports) != 0 || p.target != "10.0.11.0/24" {

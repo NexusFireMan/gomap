@@ -30,6 +30,15 @@ internal fun hostFixture(): FixtureSession = FixtureSession(
 )
 
 class SurveyTest {
+    @Test fun undiscoveredScopeCanExceedDeliveryBudgetWithoutInventingStates() {
+        val coverage = CoverageSummary(254000, 1, 0, 1, 0, 0, 253999, false, 1)
+        val rows = listOf(Observation(443, "closed", false))
+        assertEquals(coverage, parseSummary(surveySummary(coverage), rows).first)
+        assertThrows(Exception::class.java) {
+            parseSummary(surveySummary(coverage.copy(requested = 256 * 65535 + 1, unreported = 256 * 65535)), rows)
+        }
+    }
+
     private fun finished(vm: ScanViewModel): ScanState = runBlocking { withTimeout(5000) { vm.state.first { !it.running && it.phase != ScanPhase.IDLE } } }
 
     @Test fun versionTwoRetainsHostIdentityAndRejectsContradictions() {

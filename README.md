@@ -745,7 +745,8 @@ CIDR/service flows have user-reported validation on Pixel 8 Pro/GrapheneOS/Andro
 new profile/autofill/full-range device validation and public distribution remain pending. This is not a
 mobile equivalent of every CLI mode.
 The port dropdown offers Custom, Common (1000 curated ports) and All (1-65535),
-with a 65535 host-port scope cap and explicit resource-limit failures. Initial
+with a 65535 host-port scan cap applied to responding hosts after CIDR discovery
+and explicit resource-limit failures. Initial
 target autofill reads the phone's active-network local address only; it remains
 editable and never starts a scan. Full-range physical resource validation remains
 pending; see the Android guide for bounds and foreground-only behavior.

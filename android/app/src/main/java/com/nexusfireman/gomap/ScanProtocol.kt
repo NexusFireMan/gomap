@@ -99,7 +99,8 @@ internal fun parseSummary(text: String, delivered: Collection<Observation>): Pai
     val event = wireJson.decodeFromString<WireEvent>(text)
     require(event.schemaVersion in 1..2 && event.type == "summary") { "Missing native summary" }
     val s = requireNotNull(event.summary)
-    require(listOf(s.requested, s.completed, s.open, s.closed, s.filtered, s.unknown, s.unreported).all { it in 0..65535 } &&
+    require(listOf(s.requested, s.unreported).all { it in 0..(256 * 65535) } &&
+        listOf(s.completed, s.open, s.closed, s.filtered, s.unknown).all { it in 0..65535 } &&
         s.completed == delivered.size && s.requested == s.completed + s.unreported &&
         s.completed == s.open + s.closed + s.filtered + s.unknown && s.durationMs >= 0) { "Native coverage does not reconcile" }
     require(s.open == delivered.count { it.state == "open" } && s.closed == delivered.count { it.state == "closed" } &&

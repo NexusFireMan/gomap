@@ -25,6 +25,8 @@ Note: this changelog is maintained from this point forward in the project histor
 
 ### Fixed
 
+- Apply the Android survey host-port budget after CIDR discovery instead of rejecting the entire candidate network. Scan only responding hosts when they fit; otherwise stop before port scanning with an explicit scope error. Preserve silent/skipped pairs as unreported, bounded delivery and shared rate/concurrency limits; add deterministic sparse/dense/empty network regressions.
+
 ## [2.6.0] - 2026-11-04
 
 ### Added

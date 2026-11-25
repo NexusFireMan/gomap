@@ -19,6 +19,7 @@ const maxSurveyPairs = 65535
 const maxSurveyOpenResults = 10000
 
 var errSurveyResultLimit = errors.New("mobile open-result limit reached")
+var errSurveyScopeLimit = errors.New("responding hosts exceed the mobile host-port limit")
 
 func surveyPorts(spec string) ([]int, error) {
 	if spec == "@common1000" {
@@ -114,9 +115,6 @@ func planSurvey(target, portSpec string, services, discoverOnly bool) (surveyPla
 	if err != nil {
 		return plan, err
 	}
-	if len(plan.hosts)*len(plan.ports) > maxSurveyPairs {
-		return plan, errors.New("mobile scope is limited to 65535 host-port pairs; use one IP for all ports or narrow the CIDR")
-	}
 	return plan, nil
 }
 
@@ -203,6 +201,9 @@ func startSurvey(plan surveyPlan, run connectRunner) *Session {
 			discovery.Unreported = discovery.Requested - discovery.Completed
 		}
 		coverage := scanner.ConnectSummary{Requested: len(plan.hosts) * len(plan.ports)}
+		if runErr == nil && !plan.discoverOnly && len(active)*len(plan.ports) > maxSurveyPairs {
+			runErr = errSurveyScopeLimit
+		}
 		if runErr == nil && !plan.discoverOnly {
 			var openMu sync.Mutex
 			openResults := 0
@@ -245,6 +246,9 @@ func startSurvey(plan surveyPlan, run connectRunner) *Session {
 			code = "scan_failed"
 			if errors.Is(runErr, errSurveyResultLimit) {
 				code = "result_limit"
+			}
+			if errors.Is(runErr, errSurveyScopeLimit) {
+				code = "scope_limit"
 			}
 			if errors.Is(runErr, context.Canceled) {
 				code = "cancelled"

@@ -182,7 +182,11 @@ class ScanViewModel(
                 discovery = parseDiscovery(text, hosts.values)
                 summary = nativeSummary
                 if (nativeError == "cancelled") run.cancelled.set(true)
-                if (nativeError.isNotEmpty() && nativeError != "cancelled") error = if (nativeError == "result_limit") "Open-result safety limit reached; scan incomplete" else "Native scan failed"
+                if (nativeError.isNotEmpty() && nativeError != "cancelled") error = when (nativeError) {
+                    "result_limit" -> "Open-result safety limit reached; scan incomplete"
+                    "scope_limit" -> "Responding hosts exceed 65535 host-port pairs; choose fewer ports or a smaller CIDR. No port scan started."
+                    else -> "Native scan failed"
+                }
             }
         } catch (e: Exception) {
             error = safeError(e.message)

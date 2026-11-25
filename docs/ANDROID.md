@@ -55,17 +55,18 @@ connection timeout, without service negotiation. It retains schema 1 compatibili
 The app now calls `StartSurvey(target, ports, services, discoverOnly)`:
 
 - Accept one literal IP or CIDR, at most 256 addresses (IPv4 /24 or smaller,
-  IPv6 /120 or smaller), and at most 65535 requested host-port pairs. IPv4 network
-  and broadcast addresses are omitted except on /31 and /32. Reject larger
-  scopes before any connections; do not silently truncate.
+  IPv6 /120 or smaller). IPv4 network and broadcast addresses are omitted except
+  on /31 and /32. Invalid address scopes are rejected before any connections.
 - Port profile dropdown: **Custom** keeps the existing manual input and remains
   the default; **Common (1000)** uses `@common1000`; **All (65535)** uses
   `1-65535`. The common profile preserves the CLI's current 996 curated entries
   and adds TCP 1883, 5672, 6379 and 11211. It is not the range 1-1000 or a claim
   to reproduce Nmap's ranking. CLI defaults/list membership remain unchanged.
-- All ports fit on one IP; a common-port CIDR can use, for example, an IPv4 /26.
-  A /24 times 1000 ports exceeds the mobile pair budget and is rejected before
-  any probes. Discovery-only /24 remains supported. Changing a profile resets
+- Apply the 65535 host-port scan budget **after discovery**, to responding hosts
+  only: a /24 with five responding hosts and Common scans 5000 pairs. If the
+  responding set still exceeds the budget (66 hosts with Common, or two with
+  All), return `scope_limit` before any port scan; never silently trim hosts.
+  Discovery-only /24 remains supported. Changing a profile resets
   authorization and never scans automatically; switching back restores manual input.
 - Port scan defaults to optional services enabled; the switch allows connection-
   only scans. Native parsers/probes reuse GoMap, with a four-second service budget
@@ -84,7 +85,9 @@ The app now calls `StartSurvey(target, ports, services, discoverOnly)`:
   connection timeout. Discovery, primary connections and additional service
   sockets share **one 100 starts/s budget**, not a separate budget per host.
 - Keep undiscovered/unscanned host-port pairs **unreported**, not closed or
-  timeout-filtered. Host coverage and port coverage are separate ledgers.
+  timeout-filtered. Requested coverage retains the original candidate scope
+  (up to 256 times 65535); delivered observations stay capped at 65535.
+  Host coverage and port coverage are separate ledgers.
 - Retain at most 65535 observations; an explicit safety failure stops scans
   exceeding 10000 open observations, preserving partial coverage and an exported
   error rather than silently omitting rows. Large lists use an ordered endpoint

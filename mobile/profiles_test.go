@@ -3,10 +3,57 @@ package mobile
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"sync/atomic"
 	"testing"
 
 	"github.com/NexusFireMan/gomap/v2/pkg/scanner"
 )
+
+func TestSurveyBudgetAfterDiscovery(t *testing.T) {
+	for _, responding := range []int{0, 5, 65, 66} {
+		t.Run(fmt.Sprint(responding), func(t *testing.T) {
+			plan, err := planSurvey("10.0.11.0/24", "@common1000", false, false)
+			if err != nil {
+				t.Fatal(err)
+			}
+			active := make(map[string]bool)
+			for _, host := range plan.hosts[:responding] {
+				active[host] = true
+			}
+			var discoveries, scans atomic.Int32
+			_, final := readSurvey(t, startSurvey(plan, func(_ context.Context, host string, ports []int, opts scanner.ConnectOptions, emit func(scanner.ScanResult) error) (scanner.ConnectSummary, error) {
+				if opts.Timeout != 0 {
+					discoveries.Add(1)
+					if active[host] {
+						return scanner.ConnectSummary{}, emit(scanner.ScanResult{Port: 443, State: "closed"})
+					}
+					return scanner.ConnectSummary{}, nil
+				}
+				if discoveries.Load() != 254 || !active[host] {
+					t.Error("scan started before discovery finished or on a silent host")
+				}
+				scans.Add(1)
+				summary := scanner.ConnectSummary{Requested: len(ports)}
+				for _, port := range ports {
+					if err := emit(scanner.ScanResult{Port: port, State: "closed"}); err != nil {
+						return summary, err
+					}
+					summary.Completed++
+					summary.Closed++
+				}
+				return summary, nil
+			}))
+			wantScans, wantError := responding, ""
+			if responding > 65 {
+				wantScans, wantError = 0, "scope_limit"
+			}
+			if int(scans.Load()) != wantScans || final.Error != wantError || final.Discovery.Responding != responding || final.Summary.Requested != 254000 || final.Summary.Completed != wantScans*1000 || final.Summary.Unreported != 254000-wantScans*1000 {
+				t.Fatalf("scans=%d summary=%+v discovery=%+v error=%s", scans.Load(), final.Summary, final.Discovery, final.Error)
+			}
+		})
+	}
+}
 
 func TestSurveyPortProfiles(t *testing.T) {
 	common, err := surveyPorts("@common1000")
@@ -31,8 +78,8 @@ func TestSurveyPortProfiles(t *testing.T) {
 			t.Fatal(spec, len(p.ports), err)
 		}
 	}
-	if _, err := planSurvey("10.0.11.0/24", "@common1000", false, false); err == nil {
-		t.Fatal("oversized CIDR product accepted")
+	if _, err := planSurvey("10.0.11.0/24", "@common1000", false, false); err != nil {
+		t.Fatal("CIDR rejected before discovery", err)
 	}
 	if _, err := planSurvey("10.0.11.0/26", "@common1000", false, false); err != nil {
 		t.Fatal("bounded common CIDR rejected", err)
