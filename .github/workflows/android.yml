@@ -36,7 +36,8 @@ jobs:
         run: |
           cli="$RUNNER_TEMP/android-cli"
           mkdir -p "$cli"
-          curl -fL --retry 3 https://dl.google.com/android/repository/commandlinetools-linux-15859902_latest.zip -o "$cli/tools.zip"
+          curl -fL --retry 3 --retry-all-errors \
+            https://dl.google.com/android/repository/commandlinetools-linux-15859902_latest.zip -o "$cli/tools.zip"
           printf '%s  %s\n' '4e4c464f145a7512b57d088ac6c278c03c9eea610886b35a5e0804e74eedf583' "$cli/tools.zip" | sha256sum --check -
           unzip -q "$cli/tools.zip" -d "$cli"
           # apkanalyzer resolves the SDK from cmdline-tools/<version>, not an
