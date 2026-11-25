@@ -15,6 +15,10 @@
     <string name="host_coverage_counts">Comprobados: %1$d/%2$d\nResponden: %3$d · sin respuesta: %4$d\nDesconocidos: %5$d · sin comprobar: %6$d</string>
     <string name="confidence">Confianza: %1$s</string>
     <string name="ports">Puertos</string>
+    <string name="port_profile">Perfil de puertos</string>
+    <string name="ports_custom">Personalizados</string>
+    <string name="ports_common">Comunes (1000)</string>
+    <string name="ports_all">Todos (65535)</string>
     <string name="authorization">Tengo autorización para escanear este objetivo</string>
     <string name="start">Iniciar</string>
     <string name="stop">Detener</string>

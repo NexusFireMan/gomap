@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/netip"
 	"strings"
 
@@ -56,6 +57,10 @@ func StartConnect(host, portSpec string) (*Session, error) {
 }
 
 func parseSessionPorts(spec string) ([]int, error) {
+	return parseBoundedPorts(spec, 4096)
+}
+
+func parseBoundedPorts(spec string, limit int) ([]int, error) {
 	parts := strings.Split(spec, ",")
 	if len(parts) > 256 {
 		return nil, errors.New("prototype supports at most 256 port-list entries")
@@ -72,8 +77,8 @@ func parseSessionPorts(spec string) ([]int, error) {
 			if seen[port] {
 				continue
 			}
-			if len(ports) == 4096 {
-				return nil, errors.New("prototype supports at most 4096 unique ports per session")
+			if len(ports) == limit {
+				return nil, fmt.Errorf("supports at most %d unique ports per session", limit)
 			}
 			seen[port] = true
 			ports = append(ports, port)

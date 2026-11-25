@@ -15,6 +15,10 @@
     <string name="host_coverage_counts">Checked: %1$d/%2$d\nResponding: %3$d · no response: %4$d\nUnknown: %5$d · unreported: %6$d</string>
     <string name="confidence">Confidence: %1$s</string>
     <string name="ports">Ports</string>
+    <string name="port_profile">Port profile</string>
+    <string name="ports_custom">Custom</string>
+    <string name="ports_common">Common (1000)</string>
+    <string name="ports_all">All (65535)</string>
     <string name="authorization">I am authorized to scan this target</string>
     <string name="start">Start</string>
     <string name="stop">Stop</string>

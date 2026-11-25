@@ -45,8 +45,9 @@ class ScanScreenTest {
         compose.waitUntil(5000) { vm.state.value.phase == ScanPhase.COMPLETED }
         compose.onNodeWithText("Completed").assertIsDisplayed()
         compose.onNodeWithText("Results").performScrollTo()
-        compose.onNode(hasText("Open") and hasClickAction()).performClick()
-        compose.onNodeWithText("443").performScrollTo().assertIsDisplayed()
+        compose.onNode(hasText("Open") and hasClickAction()).performScrollTo().assertIsDisplayed().performClick().assertIsSelected()
+        compose.onNodeWithTag("scan-content").performScrollToNode(hasText("443"))
+        compose.onNodeWithText("443").assertIsDisplayed()
         compose.onNodeWithText("22").assertDoesNotExist()
         screenshot("phone-results.png")
         assertEquals(1, calls.get())
@@ -99,10 +100,31 @@ class ScanScreenTest {
             compose.onNodeWithTag("authorization").performClick()
             compose.onNodeWithText("Start").performClick()
             compose.waitUntil(5000) { bannerModel.state.value.phase == ScanPhase.COMPLETED }
-            compose.onNodeWithText("OpenSSH 9.9").performScrollTo().assertIsDisplayed()
-            compose.onNodeWithText("SSH-2.0-OpenSSH_9.9").performScrollTo().assertIsDisplayed()
+            compose.onNodeWithTag("scan-content").performScrollToNode(hasText("OpenSSH 9.9"))
+            compose.onNodeWithText("OpenSSH 9.9").assertIsDisplayed()
+            compose.onNodeWithTag("scan-content").performScrollToNode(hasText("SSH-2.0-OpenSSH_9.9"))
+            compose.onNodeWithText("SSH-2.0-OpenSSH_9.9").assertIsDisplayed()
             screenshot("phone-services.png")
         } finally { bannerModel.dispose() }
+    }
+
+    @Test fun portDropdownPreservesManualPortsAndOffersBothProfiles() {
+        vm.initializeHost("10.0.11.5")
+        compose.setContent { GoMapTheme { ScanScreen(vm) } }
+        compose.onNodeWithText("Ports").performTextClearance()
+        compose.onNodeWithText("Ports").performTextInput("2222,8080")
+        compose.onNodeWithTag("port-preset").performClick()
+        compose.onNodeWithText("All (65535)").performClick()
+        assertEquals(PortPreset.ALL, vm.state.value.portPreset)
+        compose.onNodeWithText("Ports").assertDoesNotExist()
+        compose.onNodeWithTag("port-preset").performClick()
+        compose.onNodeWithText("Common (1000)").performClick()
+        assertEquals("@common1000", vm.state.value.effectivePorts)
+        screenshot("phone-port-profiles.png")
+        compose.onNodeWithTag("port-preset").performClick()
+        compose.onNodeWithText("Custom").performClick()
+        compose.onNodeWithText("Ports").assertTextContains("2222,8080")
+        assertEquals(0, calls.get())
     }
 
     @Test fun toolbarStopRemainsReachableWhileBrowsingStreamedPorts() {

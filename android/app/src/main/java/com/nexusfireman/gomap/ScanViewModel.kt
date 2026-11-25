@@ -16,6 +16,8 @@ enum class ScanPhase { IDLE, RUNNING, STOPPING, COMPLETED, CANCELLED, FAILED }
 data class ScanState(
     val host: String = "",
     val ports: String = "22,80,443",
+    val portPreset: PortPreset = PortPreset.CUSTOM,
+    val scannedPortPreset: PortPreset? = null,
     val authorized: Boolean = false,
     val services: Boolean = true,
     val discoveryOnly: Boolean = false,
@@ -31,6 +33,7 @@ data class ScanState(
     val error: String? = null,
 ) {
     val running: Boolean get() = phase == ScanPhase.RUNNING || phase == ScanPhase.STOPPING
+    val effectivePorts: String get() = portPreset.specification(ports)
 }
 
 interface ScanSession {
@@ -79,12 +82,22 @@ class ScanViewModel(
     private val gate = Any()
     private var active: RunControl? = null
     private var disposed = false
+    private var initialAddressHandled = false
+    private var hostEdited = false
     private var pendingExport: ScanState? = null
     private val mutableState = MutableStateFlow(ScanState())
     val state: StateFlow<ScanState> = mutableState.asStateFlow()
 
-    fun setHost(value: String) = edit { it.copy(host = value, authorized = it.authorized && value == it.host) }
+    fun setHost(value: String) = edit { hostEdited = true; it.copy(host = value, authorized = it.authorized && value == it.host) }
+    fun initializeHost(value: String?) = synchronized(gate) {
+        if (initialAddressHandled || disposed) return@synchronized
+        initialAddressHandled = true
+        if (!hostEdited && active == null && mutableState.value.host.isEmpty() && value != null) {
+            mutableState.update { it.copy(host = value, authorized = false) }
+        }
+    }
     fun setPorts(value: String) = edit { it.copy(ports = value, authorized = it.authorized && value == it.ports) }
+    fun setPortPreset(value: PortPreset) = edit { it.copy(portPreset = value, authorized = it.authorized && value == it.portPreset) }
     fun setAuthorized(value: Boolean) = edit { it.copy(authorized = value) }
     fun setServices(value: Boolean) = edit { it.copy(services = value, authorized = it.authorized && value == it.services) }
     fun setDiscoveryOnly(value: Boolean) = edit { it.copy(discoveryOnly = value, authorized = it.authorized && value == it.discoveryOnly) }
@@ -92,7 +105,7 @@ class ScanViewModel(
         if (active == null && !disposed) mutableState.update(transform)
     }
 
-    fun clear() = edit { pendingExport = null; it.copy(phase = ScanPhase.IDLE, scannedHost = null, scannedPorts = null, scannedServices = null, scannedDiscoveryOnly = null, observations = emptyList(), hosts = emptyList(), discovery = null, summary = null, error = null) }
+    fun clear() = edit { pendingExport = null; it.copy(phase = ScanPhase.IDLE, scannedHost = null, scannedPorts = null, scannedPortPreset = null, scannedServices = null, scannedDiscoveryOnly = null, observations = emptyList(), hosts = emptyList(), discovery = null, summary = null, error = null) }
 
     fun prepareExport(): Boolean = synchronized(gate) {
         val snapshot = mutableState.value
@@ -104,11 +117,11 @@ class ScanViewModel(
 
     fun start() = synchronized(gate) {
         val input = mutableState.value
-        if (disposed || active != null || !input.authorized || input.host.isBlank() || (!input.discoveryOnly && input.ports.isBlank())) return@synchronized
+        if (disposed || active != null || !input.authorized || input.host.isBlank() || (!input.discoveryOnly && input.effectivePorts.isBlank())) return@synchronized
         val run = RunControl()
         active = run
-        mutableState.value = input.copy(phase = ScanPhase.RUNNING, scannedHost = input.host.trim(), scannedPorts = if (input.discoveryOnly) "" else input.ports.trim(), scannedServices = input.services && !input.discoveryOnly, scannedDiscoveryOnly = input.discoveryOnly, observations = emptyList(), hosts = emptyList(), discovery = null, summary = null, error = null)
-        try { executor.execute { execute(run, input.host.trim(), input.ports.trim(), input.services, input.discoveryOnly) } }
+        mutableState.value = input.copy(phase = ScanPhase.RUNNING, scannedHost = input.host.trim(), scannedPorts = if (input.discoveryOnly) "" else input.effectivePorts, scannedPortPreset = input.portPreset, scannedServices = input.services && !input.discoveryOnly, scannedDiscoveryOnly = input.discoveryOnly, observations = emptyList(), hosts = emptyList(), discovery = null, summary = null, error = null)
+        try { executor.execute { execute(run, input.host.trim(), input.effectivePorts, input.services, input.discoveryOnly) } }
         catch (_: RejectedExecutionException) {
             run.cancel()
             active = null
@@ -124,7 +137,8 @@ class ScanViewModel(
     }
 
     private fun execute(run: RunControl, host: String, ports: String, services: Boolean, discoveryOnly: Boolean) {
-        val rows = linkedMapOf<String, Observation>()
+        val rows = sortedMapOf<EndpointKey, Observation>()
+        val canonicalHosts = mutableMapOf<String, String>()
         val hosts = linkedMapOf<String, HostObservation>()
         var summary: CoverageSummary? = null
         var discovery: DiscoverySummary? = null
@@ -141,9 +155,10 @@ class ScanViewModel(
                     when (nativeEventType(text)) {
                         "result" -> {
                             val row = parseObservation(text)
-                            val key = "${row.host}/${row.port}"
-                            require(rows.size < 4096 && !rows.containsKey(key)) { "Duplicate or oversized native result set" }
-                            rows[key] = row
+                            val hostIdentity = canonicalHosts.getOrPut(row.host) { row.host }
+                            val key = EndpointKey(hostIdentity, row.port)
+                            require(rows.size < 65535 && !rows.containsKey(key)) { "Duplicate or oversized native result set" }
+                            rows[key] = row.copy(host = hostIdentity)
                         }
                         "host" -> {
                             val observed = parseHost(text)
@@ -154,8 +169,8 @@ class ScanViewModel(
                     }
                     pending++
                     val now = System.nanoTime()
-                    if (pending >= 16 || now - lastPublish >= 100_000_000L) {
-                        val snapshot = sortedRows(rows.values)
+                    if (pending >= maxOf(32, rows.size / 20) || now - lastPublish >= 250_000_000L) {
+                        val snapshot = rows.values.toList()
                         val hostSnapshot = hosts.values.sortedBy { it.address }
                         mutableState.update { it.copy(observations = snapshot, hosts = hostSnapshot) }
                         pending = 0
@@ -167,7 +182,7 @@ class ScanViewModel(
                 discovery = parseDiscovery(text, hosts.values)
                 summary = nativeSummary
                 if (nativeError == "cancelled") run.cancelled.set(true)
-                if (nativeError.isNotEmpty() && nativeError != "cancelled") error = "Native scan failed"
+                if (nativeError.isNotEmpty() && nativeError != "cancelled") error = if (nativeError == "result_limit") "Open-result safety limit reached; scan incomplete" else "Native scan failed"
             }
         } catch (e: Exception) {
             error = safeError(e.message)
@@ -187,7 +202,7 @@ class ScanViewModel(
                         summary != null -> ScanPhase.COMPLETED
                         else -> ScanPhase.FAILED
                     }
-                    mutableState.update { it.copy(phase = phase, observations = sortedRows(rows.values), hosts = hosts.values.sortedBy { it.address }, discovery = discovery, summary = summary, error = error) }
+                    mutableState.update { it.copy(phase = phase, observations = rows.values.toList(), hosts = hosts.values.sortedBy { it.address }, discovery = discovery, summary = summary, error = error) }
                     active = null
                 }
             }
@@ -201,7 +216,9 @@ class ScanViewModel(
     override fun onCleared() = dispose()
 }
 
-private fun sortedRows(rows: Collection<Observation>): List<Observation> = rows.sortedWith(compareBy<Observation> { it.host }.thenBy { it.port })
+private data class EndpointKey(val host: String, val port: Int) : Comparable<EndpointKey> {
+    override fun compareTo(other: EndpointKey): Int = host.compareTo(other.host).takeIf { it != 0 } ?: port.compareTo(other.port)
+}
 
 private fun safeError(text: String?): String = text.orEmpty().filter {
     !it.isISOControl() && Character.getType(it) != Character.FORMAT.toInt()

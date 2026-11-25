@@ -4,6 +4,9 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.encodeToStream
+import kotlinx.serialization.ExperimentalSerializationApi
+import java.io.OutputStream
 
 internal val wireJson = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
@@ -96,7 +99,7 @@ internal fun parseSummary(text: String, delivered: Collection<Observation>): Pai
     val event = wireJson.decodeFromString<WireEvent>(text)
     require(event.schemaVersion in 1..2 && event.type == "summary") { "Missing native summary" }
     val s = requireNotNull(event.summary)
-    require(listOf(s.requested, s.completed, s.open, s.closed, s.filtered, s.unknown, s.unreported).all { it in 0..4096 } &&
+    require(listOf(s.requested, s.completed, s.open, s.closed, s.filtered, s.unknown, s.unreported).all { it in 0..65535 } &&
         s.completed == delivered.size && s.requested == s.completed + s.unreported &&
         s.completed == s.open + s.closed + s.filtered + s.unknown && s.durationMs >= 0) { "Native coverage does not reconcile" }
     require(s.open == delivered.count { it.state == "open" } && s.closed == delivered.count { it.state == "closed" } &&
@@ -110,7 +113,9 @@ private data class ExportReport(
     @SerialName("app_version") val appVersion: String,
     val target: String,
     val ports: String,
+    @SerialName("port_profile") val portProfile: String,
     val status: String,
+    val error: String?,
     val results: List<Observation>,
     val coverage: CoverageSummary?,
     val hosts: List<HostObservation>,
@@ -119,9 +124,16 @@ private data class ExportReport(
     @SerialName("discovery_only") val discoveryOnly: Boolean,
 )
 
-fun ScanState.reportJson(): String = wireJson.encodeToString(ExportReport(
+private fun ScanState.report(): ExportReport = ExportReport(
     appVersion = BuildConfig.VERSION_NAME, target = requireNotNull(scannedHost), ports = requireNotNull(scannedPorts),
     status = phase.name.lowercase(), results = observations, coverage = summary,
+    error = error,
     hosts = hosts, discovery = discovery, services = scannedServices ?: false,
     discoveryOnly = scannedDiscoveryOnly ?: false,
-))
+    portProfile = if (scannedDiscoveryOnly == true) "none" else scannedPortPreset?.name?.lowercase() ?: "custom",
+)
+
+fun ScanState.reportJson(): String = wireJson.encodeToString(report())
+
+@OptIn(ExperimentalSerializationApi::class)
+fun ScanState.writeReport(stream: OutputStream) = wireJson.encodeToStream(report(), stream)

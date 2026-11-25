@@ -15,6 +15,33 @@ import (
 )
 
 const surveySchema = 2
+const maxSurveyPairs = 65535
+const maxSurveyOpenResults = 10000
+
+var errSurveyResultLimit = errors.New("mobile open-result limit reached")
+
+func surveyPorts(spec string) ([]int, error) {
+	if spec == "@common1000" {
+		ports := scanner.GetTop1000Ports()
+		seen := make(map[int]bool, len(ports))
+		for _, port := range ports {
+			seen[port] = true
+		}
+		// Keep the CLI list unchanged; include four common application protocols
+		// absent from its current 996-entry curated TCP profile.
+		for _, port := range []int{1883, 5672, 6379, 11211} {
+			if !seen[port] {
+				ports = append(ports, port)
+				seen[port] = true
+			}
+		}
+		if len(ports) != 1000 {
+			return nil, errors.New("common port profile changed; review its membership")
+		}
+		return ports, nil
+	}
+	return parseBoundedPorts(spec, 65535)
+}
 
 // hostObservation is TCP reachability evidence, not an assertion that silence
 // means a host is down. A refusal also establishes a responding endpoint.
@@ -80,12 +107,15 @@ func planSurvey(target, portSpec string, services, discoverOnly bool) (surveyPla
 		return plan, errors.New("an explicit port list of at most 8192 characters is required")
 	}
 	var err error
-	plan.ports, err = parseSessionPorts(portSpec)
+	if portSpec == "-" {
+		portSpec = "1-65535"
+	}
+	plan.ports, err = surveyPorts(portSpec)
 	if err != nil {
 		return plan, err
 	}
-	if len(plan.hosts)*len(plan.ports) > 4096 {
-		return plan, errors.New("mobile scope is limited to 4096 host-port pairs; narrow the CIDR or port list")
+	if len(plan.hosts)*len(plan.ports) > maxSurveyPairs {
+		return plan, errors.New("mobile scope is limited to 65535 host-port pairs; use one IP for all ports or narrow the CIDR")
 	}
 	return plan, nil
 }
@@ -174,9 +204,22 @@ func startSurvey(plan surveyPlan, run connectRunner) *Session {
 		}
 		coverage := scanner.ConnectSummary{Requested: len(plan.hosts) * len(plan.ports)}
 		if runErr == nil && !plan.discoverOnly {
+			var openMu sync.Mutex
+			openResults := 0
+			hostWorkers := min(4, len(active))
+			portWorkers := 32 / max(1, hostWorkers)
 			summaries := make([]scanner.ConnectSummary, len(active))
-			runErr = surveyHosts(ctx, active, 4, func(ctx context.Context, index int, host string) error {
-				summary, err := run(ctx, host, plan.ports, scanner.ConnectOptions{Workers: 8, DetectServices: plan.services, AttemptLimiter: limiter}, func(result scanner.ScanResult) error {
+			runErr = surveyHosts(ctx, active, hostWorkers, func(ctx context.Context, index int, host string) error {
+				summary, err := run(ctx, host, plan.ports, scanner.ConnectOptions{Workers: portWorkers, DetectServices: plan.services, AttemptLimiter: limiter}, func(result scanner.ScanResult) error {
+					if result.IsOpen {
+						openMu.Lock()
+						if openResults == maxSurveyOpenResults {
+							openMu.Unlock()
+							return errSurveyResultLimit
+						}
+						openResults++
+						openMu.Unlock()
+					}
 					result.ServiceName = boundedText(result.ServiceName, 128)
 					result.Version = boundedText(result.Version, 512)
 					result.Hostname = boundedText(result.Hostname, 256)
@@ -200,6 +243,9 @@ func startSurvey(plan surveyPlan, run connectRunner) *Session {
 		code := ""
 		if runErr != nil {
 			code = "scan_failed"
+			if errors.Is(runErr, errSurveyResultLimit) {
+				code = "result_limit"
+			}
 			if errors.Is(runErr, context.Canceled) {
 				code = "cancelled"
 			}

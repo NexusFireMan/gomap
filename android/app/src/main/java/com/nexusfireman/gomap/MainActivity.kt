@@ -40,6 +40,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import go.Seq
 import kotlinx.coroutines.Dispatchers
@@ -73,6 +74,10 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent { GoMapTheme { ScanScreen(scan) } }
+        lifecycleScope.launch {
+            val address = withContext(Dispatchers.IO) { phoneAddress(applicationContext) }
+            scan.initializeHost(address)
+        }
     }
     override fun onStop() { scan.stop(); super.onStop() }
 }
@@ -109,6 +114,7 @@ fun ScanScreen(scan: ScanViewModel) {
     var hostView by remember { mutableStateOf(false) }
     var respondingOnly by remember { mutableStateOf(true) }
     var about by remember { mutableStateOf(false) }
+    var portMenu by remember { mutableStateOf(false) }
     val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         val snapshot = scan.takeExport()
         if (uri != null) scope.launch {
@@ -116,7 +122,7 @@ fun ScanScreen(scan: ScanViewModel) {
                 runCatching {
                     requireNotNull(snapshot) { "Report no longer available" }
                     val stream = requireNotNull(context.contentResolver.openOutputStream(uri))
-                    stream.bufferedWriter(Charsets.UTF_8).use { it.write(snapshot.reportJson()) }
+                    stream.buffered().use { snapshot.writeReport(it) }
                 }.isSuccess
             }
             snackbar.showSnackbar(context.getString(if (success) R.string.exported else R.string.export_failed))
@@ -156,7 +162,18 @@ fun ScanScreen(scan: ScanViewModel) {
                         label = { Text(stringResource(R.string.target)) }, placeholder = { Text("10.0.11.0/24") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, autoCorrectEnabled = false),
                         singleLine = true, modifier = Modifier.fillMaxWidth())
-                    if (!state.discoveryOnly) OutlinedTextField(value = state.ports, onValueChange = scan::setPorts, enabled = !state.running,
+                    if (!state.discoveryOnly) ExposedDropdownMenuBox(expanded = portMenu && !state.running, onExpandedChange = { if (!state.running) portMenu = it }) {
+                        OutlinedTextField(value = stringResource(portPresetLabel(state.portPreset)), onValueChange = {},
+                            readOnly = true, enabled = !state.running, label = { Text(stringResource(R.string.port_profile)) },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = portMenu) },
+                            modifier = Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable).testTag("port-preset"))
+                        ExposedDropdownMenu(expanded = portMenu && !state.running, onDismissRequest = { portMenu = false }) {
+                            PortPreset.entries.forEach { preset ->
+                                DropdownMenuItem(text = { Text(stringResource(portPresetLabel(preset))) }, onClick = { scan.setPortPreset(preset); portMenu = false })
+                            }
+                        }
+                    }
+                    if (!state.discoveryOnly && state.portPreset == PortPreset.CUSTOM) OutlinedTextField(value = state.ports, onValueChange = scan::setPorts, enabled = !state.running,
                         label = { Text(stringResource(R.string.ports)) },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii, autoCorrectEnabled = false),
                         singleLine = true, modifier = Modifier.fillMaxWidth())
@@ -172,7 +189,7 @@ fun ScanScreen(scan: ScanViewModel) {
                         Text(stringResource(R.string.authorization), modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
                     }
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(enabled = !state.running && state.authorized && state.host.isNotBlank() && (state.discoveryOnly || state.ports.isNotBlank()), onClick = {
+                        Button(enabled = !state.running && state.authorized && state.host.isNotBlank() && (state.discoveryOnly || state.effectivePorts.isNotBlank()), onClick = {
                             if (needsLocalNetworkPermission(Build.VERSION.SDK_INT, context.checkSelfPermission(LOCAL_NETWORK_PERMISSION) == PackageManager.PERMISSION_GRANTED)) permissionLauncher.launch(LOCAL_NETWORK_PERMISSION)
                             else scan.start()
                         }) { Icon(Icons.Default.PlayArrow, null); Spacer(Modifier.width(8.dp)); Text(stringResource(R.string.start)) }
@@ -280,6 +297,12 @@ private fun ActionIcon(label: Int, enabled: Boolean, icon: @Composable () -> Uni
 }
 
 internal fun needsLocalNetworkPermission(sdk: Int, granted: Boolean): Boolean = sdk >= 37 && !granted
+
+private fun portPresetLabel(preset: PortPreset): Int = when (preset) {
+    PortPreset.CUSTOM -> R.string.ports_custom
+    PortPreset.COMMON -> R.string.ports_common
+    PortPreset.ALL -> R.string.ports_all
+}
 
 private fun phaseLabel(phase: ScanPhase): Int = when (phase) {
     ScanPhase.IDLE -> R.string.idle

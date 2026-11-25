@@ -33,7 +33,7 @@ func TestSurveyScopeBounds(t *testing.T) {
 			t.Fatalf("accepted %q", target)
 		}
 	}
-	if _, err := planSurvey("10.0.11.0/24", "1-17", false, false); err == nil {
+	if _, err := planSurvey("10.0.11.0/24", "1-259", false, false); err == nil {
 		t.Fatal("accepted excessive host-port product")
 	}
 	p, err := planSurvey("10.0.11.7/24", "invalid ports ignored in discovery mode", true, true)

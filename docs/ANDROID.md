@@ -34,7 +34,7 @@ are packaged; 32-bit devices are not supported by this artifact.
 | Android 14 | 34 | Pending |
 | Android 15 | 35 | Pending, including 16 KB page-size behavior |
 | Android 16 | 36 | Pending |
-| Android 17 | 37 | Initial 0.1-dev flow user-tested on Pixel 8 Pro/GrapheneOS; new CIDR/services and full permission/resource matrix pending |
+| Android 17 | 37 | 0.1/0.2-dev user-reported success on Pixel 8 Pro/GrapheneOS; new profiles/autofill/full-range resource validation pending |
 
 This is an intended range, not certification from a successful build. The SDK
 package is **`platforms;android-37.0`**, not `platforms;android-37`. The earlier
@@ -55,9 +55,18 @@ connection timeout, without service negotiation. It retains schema 1 compatibili
 The app now calls `StartSurvey(target, ports, services, discoverOnly)`:
 
 - Accept one literal IP or CIDR, at most 256 addresses (IPv4 /24 or smaller,
-  IPv6 /120 or smaller), and at most 4096 requested host-port pairs. IPv4 network
+  IPv6 /120 or smaller), and at most 65535 requested host-port pairs. IPv4 network
   and broadcast addresses are omitted except on /31 and /32. Reject larger
   scopes before any connections; do not silently truncate.
+- Port profile dropdown: **Custom** keeps the existing manual input and remains
+  the default; **Common (1000)** uses `@common1000`; **All (65535)** uses
+  `1-65535`. The common profile preserves the CLI's current 996 curated entries
+  and adds TCP 1883, 5672, 6379 and 11211. It is not the range 1-1000 or a claim
+  to reproduce Nmap's ranking. CLI defaults/list membership remain unchanged.
+- All ports fit on one IP; a common-port CIDR can use, for example, an IPv4 /26.
+  A /24 times 1000 ports exceeds the mobile pair budget and is rejected before
+  any probes. Discovery-only /24 remains supported. Changing a profile resets
+  authorization and never scans automatically; switching back restores manual input.
 - Port scan defaults to optional services enabled; the switch allows connection-
   only scans. Native parsers/probes reuse GoMap, with a four-second service budget
   after each CONNECT, cancellation-aware TCP/TLS and retained open-state evidence even if
@@ -70,11 +79,21 @@ The app now calls `StartSurvey(target, ports, services, discoverOnly)`:
 - Silence is `no_response`, never confirmed offline. Unknown failures stay
   separate. Networks that drop the discovery probes can hide reachable hosts;
   scan an explicit IP (or /32 IPv4 / /128 IPv6 scope) to bypass pre-discovery.
-- Port scans use at most four hosts with eight workers each and a 750 ms
+- Port scans share up to 32 workers between at most four hosts (32 for one,
+  16 each for two, 10 each for three, eight each for four), with a 750 ms
   connection timeout. Discovery, primary connections and additional service
   sockets share **one 100 starts/s budget**, not a separate budget per host.
 - Keep undiscovered/unscanned host-port pairs **unreported**, not closed or
   timeout-filtered. Host coverage and port coverage are separate ledgers.
+- Retain at most 65535 observations; an explicit safety failure stops scans
+  exceeding 10000 open observations, preserving partial coverage and an exported
+  error rather than silently omitting rows. Large lists use an ordered endpoint
+  index and coalesced UI snapshots. JSON document export encodes directly to a
+  buffered output stream instead of building one giant report string.
+
+Full-range scans can take minutes at the unchanged 100-starts/s budget and must
+remain in the foreground. Queue bounds, synthetic 65535-row delivery/export tests
+and count reconciliation are not physical-device memory/battery certification.
 
 There are no retries, DNS, UDP, SYN, raw sockets, source rotation or interface
 changes in the APK. Port-map names remain hints, not confirmed versions.
@@ -121,7 +140,7 @@ runs. A ViewModel retains results across configuration changes. Leaving the
 foreground or disposing the owner cancels the run. There is no automatic resume,
 foreground service, wake lock or background scan. Process death loses RAM results.
 
-The manifest declares `INTERNET` and `ACCESS_LOCAL_NETWORK`, not root, location,
+The manifest declares `INTERNET`, `ACCESS_NETWORK_STATE` and `ACCESS_LOCAL_NETWORK`, not root, location,
 broad storage, a VPN service or interface-management privileges. On API 37+,
 Start requests local-network permission when missing. A grant never starts a scan:
 the user must press Start again. Denial leaves scanning stopped. This flow still
@@ -134,6 +153,16 @@ explicit action, with a frozen target/port/result snapshot. The selected documen
 provider determines where the exported file lives, including possible cloud
 storage. Editing target/ports resets authorization. Nothing scans on launch,
 network changes or permission grants.
+
+On startup the app reads the active network's local link addresses off the main
+thread, preferring a usable IPv4 address, then unscoped global/ULA IPv6. It fills
+the target only once while untouched. It does not fetch a public IP, read SSIDs
+or MAC addresses, infer a CIDR or start discovery. No active/allowed network
+leaves manual input available. A default VPN may supply its local VPN address;
+the field remains editable. Late results never overwrite typing, cleared input
+or a target retained across rotation. The implementation uses Android's
+[active network and link properties](https://developer.android.com/reference/android/net/ConnectivityManager#getLinkProperties(android.net.Network))
+and [local link addresses](https://developer.android.com/reference/android/net/LinkProperties#getLinkAddresses()).
 
 The first screen provides IP/CIDR input, port-scan/host-discovery modes, a
 services/banners switch, authorization, Start/Stop, ports/hosts views, all/open
@@ -173,7 +202,7 @@ bash android/build-apk.sh
 Override environment paths for other installations. The script builds the AAR,
 runs JVM tests/lint, assembles debug and instrumentation APKs, then checks the
 debug signature, minimum/target SDK, 16 KB ZIP alignment and native ELF alignment.
-The app ID is `com.nexusfireman.gomap.dev`, version `0.2.0-dev`; its local debug
+The app ID is `com.nexusfireman.gomap.dev`, version `0.3.0-dev`; its local debug
 key is not suitable for distribution. A differently signed existing install may
 require removal before reinstalling, losing its local state.
 
@@ -231,10 +260,18 @@ HTTP fixtures and blocked-read/TLS cleanup tests. Host UI fixtures also cover
 the host list, service/version/evidence view, equal-height large-font mode controls
 and a fixed toolbar Stop action while browsing streamed ports. No external hosts are required.
 
+Profile/autofill regressions additionally cover exact curated membership,
+65535 unique delivered observations, explicit open-result safety failure,
+frozen profile export, ordered full-range UI storage, streaming JSON, address
+selection and protection against delayed autofill overwriting edits. These use
+synthetic results and address fixtures, not external targets.
+
 The user reports that the initial 0.1-dev APK works on a **Pixel 8 Pro running
 GrapheneOS/Android 17**, including cancellation, rotation, background transition
 and JSON export. This is user-reported manual validation of that build, not an
-instrumentation run or certification of the new CIDR/service implementation.
+instrumentation run. The user subsequently reported successful operation of
+0.2-dev with the CIDR/service additions. New profiles/autofill/full-range behavior
+still requires physical validation; broader runtime gates remain open.
 
 The separate Android workflow runs JVM tests/lint and builds/checks both debug
 APKs; it does not execute instrumentation. Android lint has no errors; pinned
